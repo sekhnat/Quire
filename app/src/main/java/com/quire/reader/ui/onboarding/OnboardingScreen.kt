@@ -25,7 +25,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +43,7 @@ import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.QuireFonts
 import com.quire.reader.ui.BtnKind
+import com.quire.reader.ui.FolderPickerSheet
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.IconBtn
 import com.quire.reader.ui.Kicker
@@ -58,6 +62,7 @@ private fun fmt(n: Int) = NumberFormat.getIntegerInstance(Locale.US).format(n)
 
 @Composable
 fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
+  var pickingFolder by remember { mutableStateOf(false) }
   BackHandler(enabled = s.onboardStep == OnboardStep.Access || s.onboardStep == OnboardStep.Folders) {
     vm.setStep(if (s.onboardStep == OnboardStep.Folders) OnboardStep.Welcome else OnboardStep.Welcome)
   }
@@ -66,9 +71,10 @@ fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
     when (s.onboardStep) {
       OnboardStep.Welcome -> Welcome(vm)
       OnboardStep.Access -> Access(vm)
-      OnboardStep.Folders -> PickFolders(s, vm)
+      OnboardStep.Folders -> PickFolders(s, vm, onAddFolder = { pickingFolder = true })
       OnboardStep.Scan -> Scanning(s, vm)
     }
+    FolderPickerSheet(pickingFolder && s.onboardStep == OnboardStep.Folders, { pickingFolder = false }, vm::addPickedFolder)
   }
 }
 
@@ -114,8 +120,7 @@ private fun Access(vm: QuireViewModel) {
 }
 
 @Composable
-private fun PickFolders(s: UiState, vm: QuireViewModel) {
-  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) vm.addPickedFolder(StoragePaths.treeUriToPath(uri)) }
+private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit) {
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
     IconBtn(Ic.ArrowLeft, { vm.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -146,7 +151,7 @@ private fun PickFolders(s: UiState, vm: QuireViewModel) {
           }
         }
         Row(
-          Modifier.fillMaxWidth().clip(shape).border(1.dp, Nq.neutral700, shape).clickable { picker.launch(null) }.padding(12.dp),
+          Modifier.fillMaxWidth().clip(shape).border(1.dp, Nq.neutral700, shape).clickable(onClick = onAddFolder).padding(12.dp),
           horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
           Ph(Ic.Plus, 18.dp, Nq.accent)
