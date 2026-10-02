@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.quire.reader.data.ReadMode
 import com.quire.reader.reader.EpubHost
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.toEpubPreferences
@@ -134,6 +135,8 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
       EpubHost(
         session = session, preferences = epubPrefs, onTap = onTap,
         onSelectionAction = vm::onSelectionAction, onHighlightTapped = { vm.setActiveHighlight(it) },
+        continuousScroll = prefs.mode == ReadMode.Scroll,
+        onEdgeScroll = { forward -> if (!session.goToAdjacentResource(forward)) vm.toast(if (forward) "End of book" else "Start of book") },
         modifier = Modifier.fillMaxSize(),
       )
       if (bookmarked) Ph(Ic.BookmarkFill, 26.dp, Nq.accent, Modifier.align(Alignment.TopEnd).padding(end = 22.dp).offset(y = (-6).dp))
