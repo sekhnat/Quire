@@ -39,5 +39,12 @@ object StoragePaths {
 
   fun treeUriToPath(uri: Uri): String? = runCatching { docIdToPath(android.provider.DocumentsContract.getTreeDocumentId(uri)) }.getOrNull()
 
+
   fun isUsableDirectory(path: String): Boolean = File(path).let { it.isDirectory && it.canRead() }
+
+  /** Friendly name for a folder: the storage root shows as "Internal storage", not "0". */
+  fun displayName(path: String): String {
+    val file = File(path)
+    return if (file.absolutePath == PRIMARY_ROOT) "Internal storage" else file.name.ifEmpty { path }
+  }
 }

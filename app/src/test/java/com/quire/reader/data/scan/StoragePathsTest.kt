@@ -21,4 +21,14 @@ class StoragePathsTest {
     assertNull(StoragePaths.docIdToPath("primary:../../data"))
     assertNull(StoragePaths.docIdToPath("no-colon"))
   }
+
+  @Test fun `root displays as Internal storage`() {
+    assertEquals("Internal storage", StoragePaths.displayName("/storage/emulated/0"))
+    assertEquals("Internal storage", StoragePaths.displayName("/storage/emulated/0/"))
+  }
+
+  @Test fun `named folders keep their name`() {
+    assertEquals("Download", StoragePaths.displayName("/storage/emulated/0/Download"))
+    assertEquals("Calibre Library", StoragePaths.displayName("/storage/1A2B-3C4D/Calibre Library"))
+  }
 }

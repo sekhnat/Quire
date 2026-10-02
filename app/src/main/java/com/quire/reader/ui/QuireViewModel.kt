@@ -111,7 +111,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     if (path == null || !StoragePaths.isUsableDirectory(path)) { toast("Quire can't read that folder"); return }
     viewModelScope.launch(Dispatchers.IO) {
       val count = FolderDiscovery.countEpubs(File(path))
-      edit { copy(candidates = candidates.filter { it.path != path } + FolderCandidate(File(path).name, path, count), pickedFolders = pickedFolders + path) }
+      edit { copy(candidates = candidates.filter { it.path != path } + FolderCandidate(StoragePaths.displayName(path), path, count), pickedFolders = pickedFolders + path) }
     }
   }
 

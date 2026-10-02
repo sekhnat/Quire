@@ -33,7 +33,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,9 +50,9 @@ import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.ShelfDef
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import java.io.File
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.BtnKind
+import com.quire.reader.ui.FolderPickerSheet
 import com.quire.reader.ui.GridCover
 import com.quire.reader.ui.HeroCover
 import com.quire.reader.ui.Ic
@@ -99,6 +101,7 @@ internal fun navBottomPadding() = WindowInsets.navigationBars.asPaddingValues().
 
 @Composable
 fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+  var pickingFolder by remember { mutableStateOf(false) }
   BackHandler(enabled = s.scope != null) { vm.setScope(null) }
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -120,8 +123,9 @@ fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
         }
       }
     }
-    ImportSheet(s, lib, vm)
+    ImportSheet(s, lib, vm, onAddFolder = { pickingFolder = true })
     SortSheet(s, vm)
+    FolderPickerSheet(pickingFolder, { pickingFolder = false }, vm::addFolder)
   }
 }
 
@@ -304,8 +308,7 @@ private fun ShelfRow(shelf: ShelfDef, sort: SortKey, vm: QuireViewModel) {
 // ── sheets ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel) {
-  val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) vm.addFolder(StoragePaths.treeUriToPath(uri)) }
+private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel, onAddFolder: () -> Unit) {
   val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris) }
   SheetHost(s.importOpen, { vm.openImport(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 30.dp)) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 14.dp)) {
@@ -318,7 +321,7 @@ private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel) {
           Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Ph(Ic.FolderSimple, 18.dp, Nq.neutral400)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-              QText(File(f.path).name.ifEmpty { f.path }, 13.5f, maxLines = 1)
+              QText(StoragePaths.displayName(f.path), 13.5f, maxLines = 1)
               QText("${fmt(count)} ${if (count == 1) "book" else "books"} · ${syncedLabel(f.lastScanAt)}", 11f, color = Nq.neutral500, maxLines = 1)
             }
             IconBtn(Ic.X, { vm.removeFolder(f.id) }, tint = Nq.neutral500, size = 32.dp, iconSize = 16.dp)
@@ -327,7 +330,7 @@ private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel) {
       }
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         QButton("Rescan", vm::rescan, Modifier.weight(1f), icon = Ic.Refresh, size = 12.5f)
-        QButton("Add folder", { folderPicker.launch(null) }, Modifier.weight(1f), icon = Ic.FolderPlus, size = 12.5f)
+        QButton("Add folder", onAddFolder, Modifier.weight(1f), icon = Ic.FolderPlus, size = 12.5f)
       }
       QButton("Import EPUB files", { filePicker.launch(arrayOf("application/epub+zip", "application/octet-stream")) }, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FileDown, size = 13f, height = 42.dp)
     }
