@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Book Two</dc:title>
+    <dc:creator id="a1">First Author</dc:creator>
+    <dc:creator id="a2">Second Author</dc:creator>
+    <meta property="belongs-to-collection" id="c01">The Series</meta>
+    <meta refines="#c01" property="collection-type">series</meta>
+    <meta refines="#c01" property="group-position">2</meta>
+  </metadata>
+</package>

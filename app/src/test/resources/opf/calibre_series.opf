@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:identifier opf:scheme="calibre" id="calibre_id">2097</dc:identifier>
+    <dc:identifier opf:scheme="uuid" id="uuid_id">0b0c5b2e-aaaa-bbbb-cccc-1234567890ab</dc:identifier>
+    <dc:title>The Sign of the Four</dc:title>
+    <dc:creator opf:file-as="Doyle, Arthur Conan" opf:role="aut">Arthur Conan Doyle</dc:creator>
+    <dc:contributor opf:role="bkp">calibre (7.0.0) [https://calibre-ebook.com]</dc:contributor>
+    <dc:date>1890-02-01T00:00:00+00:00</dc:date>
+    <dc:description>&lt;div&gt;&lt;p&gt;A young woman receives a pearl &amp;amp; a note.&lt;/p&gt;&lt;p&gt;Holmes investigates.&lt;/p&gt;&lt;/div&gt;</dc:description>
+    <dc:language>eng</dc:language>
+    <dc:subject>Mystery</dc:subject>
+    <dc:subject>Classics</dc:subject>
+    <meta name="calibre:series" content="Sherlock Holmes"/>
+    <meta name="calibre:series_index" content="2.0"/>
+    <meta name="calibre:rating" content="8.0"/>
+    <meta name="calibre:timestamp" content="2021-05-04T10:20:30+00:00"/>
+    <meta name="calibre:title_sort" content="Sign of the Four, The"/>
+  </metadata>
+  <guide><reference type="cover" title="Cover" href="cover.jpg"/></guide>
+</package>

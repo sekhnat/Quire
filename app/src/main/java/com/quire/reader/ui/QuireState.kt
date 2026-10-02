@@ -1,0 +1,134 @@
+package com.quire.reader.ui
+
+import com.quire.reader.data.Book
+import com.quire.reader.data.BookStatus
+import com.quire.reader.data.scan.FolderCandidate
+import com.quire.reader.theme.ReaderTheme
+import java.time.LocalDate
+
+enum class Screen { Splash, Onboard, Library, Detail, Reader }
+enum class OnboardStep { Welcome, Access, Folders, Scan }
+enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Series("Series"), Tags("Tags") }
+enum class LibLayout { Grid, List, Shelves }
+enum class LibFilter(val label: String) { All("All"), Reading("In progress"), Unread("Unread"), Recent("Recently added"), Finished("Finished") }
+enum class Sheet { Display, Contents }
+enum class TocTab(val label: String) { Contents("Contents"), Bookmarks("Bookmarks"), Highlights("Highlights") }
+enum class ScopeKind(val label: String) { Author("Author"), Series("Series"), Tag("Tag") }
+data class Scope(val kind: ScopeKind, val value: String) {
+  val label get() = "${kind.label}: $value"
+}
+
+/**
+ * Sort keys. Each key's value is "bigger = first" in the default (descending) order: most recently opened,
+ * newest added, newest published, largest, longest.
+ */
+enum class SortKey(val label: String, val desc: String, val asc: String, val icon: Int) {
+  Opened("Recently opened", "Most recent first", "Oldest first", com.quire.reader.R.drawable.ph_clock_counter_clockwise),
+  Added("Last added", "Newest first", "Oldest first", com.quire.reader.R.drawable.ph_tray_arrow_down),
+  Year("Publication date", "Newest first", "Oldest first", com.quire.reader.R.drawable.ph_calendar_blank),
+  Size("File size", "Largest first", "Smallest first", com.quire.reader.R.drawable.ph_hard_drives),
+  Pages("Page count", "Longest first", "Shortest first", com.quire.reader.R.drawable.ph_files);
+
+  fun value(b: Book): Double = when (this) {
+    Opened -> b.lastOpened.toDouble()
+    Added -> b.addedAt.toDouble()
+    Year -> (b.year ?: 0).toDouble()
+    Size -> b.sizeBytes.toDouble()
+    Pages -> b.pages.toDouble()
+  }
+}
+
+data class UiState(
+  val screen: Screen = Screen.Splash,
+
+  // onboarding
+  val onboardStep: OnboardStep = OnboardStep.Welcome,
+  val hasAccess: Boolean = false,
+  val candidates: List<FolderCandidate> = emptyList(),
+  val discovering: Boolean = false,
+  val pickedFolders: Set<String> = emptySet(),
+  val useCalibre: Boolean = true,
+  val watchFolders: Boolean = true,
+
+  // library
+  val view: LibView = LibView.Books,
+  val filter: LibFilter = LibFilter.All,
+  val sort: SortKey = SortKey.Opened,
+  val sortAscending: Boolean = false,
+  val sortOpen: Boolean = false,
+  val scope: Scope? = null,
+  val query: String = "",
+  val searchOpen: Boolean = false,
+  val layout: LibLayout = LibLayout.Grid,
+  val importOpen: Boolean = false,
+
+  // detail
+  val bookId: Long = 0,
+  val editOpen: Boolean = false,
+
+  // reader overlays (the reading settings themselves live in ReaderPrefs)
+  val chrome: Boolean = false,
+  val sheet: Sheet? = null,
+  val tocTab: TocTab = TocTab.Contents,
+  val showZones: Boolean = false,
+  val textSearchOpen: Boolean = false,
+  val textQuery: String = "",
+  val brightness: Int = 100,
+  /** Highlight whose actions (note, remove, copy) are showing after tapping it. */
+  val activeHighlight: Long? = null,
+  /** Highlight being given a note. */
+  val noteFor: Long? = null,
+
+  val toast: String? = null,
+) {
+  val readerOverlayOpen get() = sheet != null || textSearchOpen || showZones || chrome || activeHighlight != null || noteFor != null
+}
+
+fun statusLabel(b: Book) = when {
+  !b.readable -> "Can't open"
+  b.status == BookStatus.Reading -> "${b.pct}%"
+  b.status == BookStatus.Finished -> "Finished"
+  b.isNew -> "New"
+  else -> "Unread"
+}
+
+/** The caption under a cover: the active sort's metadata if there is one, otherwise reading status. */
+fun cardStatus(b: Book, sort: SortKey): String = when (sort) {
+  SortKey.Added -> "Added " + b.addedLabel.replace(", ${LocalDate.now().year}", "")
+  SortKey.Year -> b.year?.toString() ?: "No date"
+  SortKey.Size -> b.sizeLabel
+  SortKey.Pages -> "${b.pages} pages"
+  SortKey.Opened -> statusLabel(b)
+}
+
+/** Books for the library list after sort, scope, filter and search have been applied. */
+fun visibleBooks(s: UiState, all: List<Book>): List<Book> {
+  val order = compareBy<Book> { s.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
+  var list = all.sortedWith(if (s.sortAscending) order else order.reversed())
+  s.scope?.let { sc ->
+    list = list.filter {
+      when (sc.kind) {
+        ScopeKind.Author -> it.primaryAuthor == sc.value
+        ScopeKind.Series -> it.series == sc.value
+        ScopeKind.Tag -> sc.value in it.tags
+      }
+    }
+    if (sc.kind == ScopeKind.Series && s.sort == SortKey.Opened) list = list.sortedBy { it.seriesNo ?: Double.MAX_VALUE }
+  }
+  if (s.scope == null) {
+    list = list.filter {
+      when (s.filter) {
+        LibFilter.All -> true
+        LibFilter.Recent -> it.isNew
+        LibFilter.Reading -> it.status == BookStatus.Reading
+        LibFilter.Unread -> it.status == BookStatus.Unread
+        LibFilter.Finished -> it.status == BookStatus.Finished
+      }
+    }
+  }
+  if (s.query.isNotBlank()) {
+    val q = s.query.lowercase()
+    list = list.filter { (it.title + " " + it.author + " " + (it.series ?: "") + " " + it.tags.joinToString(" ")).lowercase().contains(q) }
+  }
+  return list
+}
