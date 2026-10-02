@@ -129,6 +129,21 @@ class ReaderSession(
     go(positions[(p.coerceIn(0f, 1f) * (positions.size - 1)).toInt()])
   }
 
+  /**
+   * Moves to the next chapter's start, or the previous chapter's end, for continuous scrolling.
+   * Returns false at the first/last chapter.
+   */
+  fun goToAdjacentResource(forward: Boolean): Boolean {
+    val here = _current.value ?: return false
+    val order = publication.readingOrder
+    val index = order.indexOfFirst { it.url().removeFragment().toString() == here.href.removeFragment().toString() }
+    val target = order.getOrNull(index + if (forward) 1 else -1) ?: return false
+    val locator = publication.locatorFromLink(target) ?: return false
+    // Arriving from below, land at the bottom of the previous chapter so the text carries on upwards.
+    go(if (forward) locator else locator.copyWithLocations(progression = 0.999))
+    return true
+  }
+
   fun firstPage() = goToProgress(0f)
   fun lastPage() = goToProgress(1f)
 

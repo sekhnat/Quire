@@ -4,6 +4,7 @@ import android.content.Intent
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
+import android.view.ViewGroup
 import android.view.View
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
@@ -59,6 +60,9 @@ fun EpubHost(
   onTap: (xFraction: Float) -> Unit,
   onSelectionAction: (SelectionAction) -> Unit,
   onHighlightTapped: (id: Long) -> Unit,
+  /** In scroll mode, scrolling past the end/start of a chapter calls this (true = forward). */
+  continuousScroll: Boolean,
+  onEdgeScroll: (forward: Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val activity = LocalActivity.current as FragmentActivity
@@ -67,6 +71,7 @@ fun EpubHost(
   val tap by rememberUpdatedState(onTap)
   val selection by rememberUpdatedState(onSelectionAction)
   val tapped by rememberUpdatedState(onHighlightTapped)
+  val edge by rememberUpdatedState(onEdgeScroll)
   var lastPrefs = remember(session) { arrayOfNulls<EpubPreferences>(1) }
 
   DisposableEffect(session) {
@@ -79,8 +84,10 @@ fun EpubHost(
 
   AndroidView(
     modifier = modifier,
-    factory = { ctx -> FragmentContainerView(ctx).apply { id = containerId } },
+    factory = { ctx -> EdgeScrollLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT) } },
     update = { container ->
+      container.continuous = continuousScroll
+      container.onEdgeScroll = { edge(it) }
       val fm = activity.supportFragmentManager
       if (fm.findFragmentByTag(tag) == null) {
         val factory = EpubNavigatorFactory(session.publication)
@@ -94,6 +101,8 @@ fun EpubHost(
           },
           configuration = EpubNavigatorFragment.Configuration {
             selectionActionModeCallback = SelectionMenu { selection(it) }
+            // Chapters change by scrolling (see EdgeScrollLayout), so accidental sideways swipes must not.
+            disablePageTurnsWhileScrolling = true
             servedAssets = listOf("fonts/.*")
             decorationTemplates = HtmlDecorationTemplates.defaultTemplates()
             ReaderFontList.forEach { font ->
