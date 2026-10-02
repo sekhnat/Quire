@@ -12,6 +12,8 @@ import com.quire.reader.reader.SelectionAction
 import com.quire.reader.reader.TocEntry
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
@@ -48,6 +50,16 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryData.Empty)
 
   val scan = repo.scanner.progress
+
+  /** The reading settings new books start with (edited in Settings). */
+  val defaults: StateFlow<ReaderPrefs> = repo.readerDefaults.stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
+  val useCalibreSetting: StateFlow<Boolean> = repo.useCalibre.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+  val watchSetting: StateFlow<Boolean> = repo.watchNewBooks.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+  private val openBookId = MutableStateFlow(0L)
+  /** Whether the open book has its own reading settings instead of the defaults. */
+  val hasBookOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookOverride(id) }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
   private var toastJob: Job? = null
   private var scanJob: Job? = null
@@ -231,6 +243,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   /** Opens a book in the reader. [restart] ignores the saved position (the "Read again" button). */
   fun read(id: Long, restart: Boolean = false) {
     closeReaderSession()
+    openBookId.value = id
     edit { copy(screen = Screen.Reader, bookId = id, chrome = false, sheet = null, textSearchOpen = false, textQuery = "", activeHighlight = null, noteFor = null, showZones = false) }
     _reader.value = ReaderLoad.Loading
     viewModelScope.launch {
@@ -317,6 +330,23 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     _prefs.value = next
     viewModelScope.launch { repo.setBookPrefs(id, next) }
   }
+
+  fun resetBookPrefs() {
+    val id = session()?.book?.id ?: return
+    viewModelScope.launch { repo.clearBookPrefs(id); toast("Using your default settings") }
+  }
+
+  // settings screen
+
+  fun openSettings() = edit { copy(screen = Screen.Settings) }
+  fun closeSettings() = edit { copy(screen = Screen.Library) }
+  fun updateDefaults(change: (ReaderPrefs) -> ReaderPrefs) {
+    val next = change(defaults.value)
+    viewModelScope.launch { repo.setReaderDefaults(next) }
+  }
+  fun resetAllBookPrefs() = viewModelScope.launch { repo.clearAllBookPrefs(); toast("Every book now uses your defaults") }
+  fun setUseCalibreSetting(v: Boolean) = viewModelScope.launch { repo.setUseCalibre(v); toast("Takes effect on the next full rescan") }
+  fun setWatchSetting(v: Boolean) = viewModelScope.launch { repo.setWatchNewBooks(v) }
 
   fun useForAllBooks() {
     val id = session()?.book?.id ?: return

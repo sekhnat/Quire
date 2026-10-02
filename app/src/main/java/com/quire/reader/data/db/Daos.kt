@@ -105,6 +105,7 @@ abstract class BookDao {
 @Dao
 abstract class StateDao {
   @Query("SELECT * FROM book_state WHERE bookId = :bookId") abstract suspend fun get(bookId: Long): BookStateEntity?
+  @Query("UPDATE book_state SET prefsJson = NULL WHERE prefsJson IS NOT NULL") abstract suspend fun clearAllPrefs(): Int
   @Query("SELECT * FROM book_state WHERE bookId = :bookId") abstract fun observe(bookId: Long): Flow<BookStateEntity?>
   @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun put(state: BookStateEntity)
 

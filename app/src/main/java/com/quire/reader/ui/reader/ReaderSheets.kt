@@ -87,7 +87,7 @@ import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
 // ── display settings ────────────────────────────────────────────────────────
 
 @Composable
-internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, vm: QuireViewModel) {
+internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, hasOverride: Boolean, vm: QuireViewModel) {
   val maxH = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
   SheetHost(s.sheet == Sheet.Display, { vm.openSheet(null) }, Modifier.heightIn(max = maxH), backdrop = 0.5f) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -97,11 +97,27 @@ internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, vm: QuireViewModel) {
         Ph(Ic.Sun, 20.dp, Nq.neutral200)
       }
 
+      ReadingControls(prefs) { change -> vm.updatePrefs(change) }
+
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        QButton("Tap zones", { vm.showZones(true) }, Modifier.weight(1f), icon = Ic.HandTap, size = 12.5f)
+        QButton("Make default", vm::useForAllBooks, Modifier.weight(1f), BtnKind.Primary, icon = Ic.CheckCircle, size = 12.5f)
+      }
+      if (hasOverride) QButton("Back to my defaults", vm::resetBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
+      QText(if (hasOverride) "This book has its own settings" else "Changes here apply to this book only. Set your defaults in Settings.", 11f, Modifier.fillMaxWidth(), color = Nq.neutral500, align = TextAlign.Center)
+    }
+  }
+}
+
+/** The reading settings, shared by the reader's Display sheet and the Settings screen. */
+@Composable
+internal fun ReadingControls(prefs: ReaderPrefs, onChange: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ReaderTheme.entries.forEach { t ->
           val on = prefs.theme == t
           val shape = RoundedCornerShape(8.dp)
-          Column(Modifier.weight(1f).clickable { vm.updatePrefs { it.copy(theme = t) } }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Column(Modifier.weight(1f).clickable { onChange { it.copy(theme = t) } }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(
               Modifier.fillMaxWidth().height(50.dp).clip(shape).background(t.bg).border(if (on) 2.dp else 1.dp, if (on) Nq.accent else Nq.neutral800, shape),
               contentAlignment = Alignment.Center,
@@ -115,7 +131,7 @@ internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, vm: QuireViewModel) {
         rowItemsIndexed(ReaderFontList) { i, font ->
           val on = prefs.font == i
           val shape = RoundedCornerShape(8.dp)
-          Box(Modifier.clip(shape).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { vm.updatePrefs { it.copy(font = i) } }.padding(horizontal = 14.dp, vertical = 9.dp)) {
+          Box(Modifier.clip(shape).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { onChange { it.copy(font = i) } }.padding(horizontal = 14.dp, vertical = 9.dp)) {
             QText(font.name, 15f, color = if (on) Nq.accent200 else Nq.neutral200, family = font.preview, maxLines = 1)
           }
         }
@@ -124,41 +140,35 @@ internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, vm: QuireViewModel) {
       SettingRow("Size") {
         val shape = RoundedCornerShape(8.dp)
         Row(Modifier.clip(shape).border(1.dp, Nq.neutral800, shape), verticalAlignment = Alignment.CenterVertically) {
-          Box(Modifier.size(36.dp).clickable { vm.updatePrefs { it.copy(fontSize = (it.fontSize - 1).coerceIn(ReaderPrefs.MIN_SIZE, ReaderPrefs.MAX_SIZE)) } }, contentAlignment = Alignment.Center) { QText("A", 13f) }
+          Box(Modifier.size(36.dp).clickable { onChange { it.copy(fontSize = (it.fontSize - 1).coerceIn(ReaderPrefs.MIN_SIZE, ReaderPrefs.MAX_SIZE)) } }, contentAlignment = Alignment.Center) { QText("A", 13f) }
           QText(prefs.fontSize.toString(), 13f, Modifier.width(40.dp), tabular = true, align = TextAlign.Center)
-          Box(Modifier.size(36.dp).clickable { vm.updatePrefs { it.copy(fontSize = (it.fontSize + 1).coerceIn(ReaderPrefs.MIN_SIZE, ReaderPrefs.MAX_SIZE)) } }, contentAlignment = Alignment.Center) { QText("A", 19f) }
+          Box(Modifier.size(36.dp).clickable { onChange { it.copy(fontSize = (it.fontSize + 1).coerceIn(ReaderPrefs.MIN_SIZE, ReaderPrefs.MAX_SIZE)) } }, contentAlignment = Alignment.Center) { QText("A", 19f) }
         }
       }
       SettingRow("Reading mode") {
         Segmented(listOf(
-          SegOption("Pages", prefs.mode == ReadMode.Paged, { vm.updatePrefs { it.copy(mode = ReadMode.Paged) } }, Ic.BookOpenText),
-          SegOption("Scroll", prefs.mode == ReadMode.Scroll, { vm.updatePrefs { it.copy(mode = ReadMode.Scroll) } }, Ic.Scroll),
+          SegOption("Pages", prefs.mode == ReadMode.Paged, { onChange { it.copy(mode = ReadMode.Paged) } }, Ic.BookOpenText),
+          SegOption("Scroll", prefs.mode == ReadMode.Scroll, { onChange { it.copy(mode = ReadMode.Scroll) } }, Ic.Scroll),
         ))
       }
       SettingRow("Line spacing") {
-        Segmented(listOf(1.4f to "1.4", 1.6f to "1.6", 1.85f to "1.8").map { (v, label) -> SegOption(label, prefs.lineHeight == v, { vm.updatePrefs { it.copy(lineHeight = v) } }) })
+        Segmented(listOf(1.4f to "1.4", 1.6f to "1.6", 1.85f to "1.8").map { (v, label) -> SegOption(label, prefs.lineHeight == v, { onChange { it.copy(lineHeight = v) } }) })
       }
       SettingRow("Margins") {
-        Segmented(listOf(16 to "S", 26 to "M", 40 to "L").map { (v, label) -> SegOption(label, prefs.margin == v, { vm.updatePrefs { it.copy(margin = v) } }) })
+        Segmented(listOf(16 to "S", 26 to "M", 40 to "L").map { (v, label) -> SegOption(label, prefs.margin == v, { onChange { it.copy(margin = v) } }) })
       }
       SettingRow("Alignment") {
         Segmented(listOf(
-          SegOption("", prefs.align == TextAlignPref.Left, { vm.updatePrefs { it.copy(align = TextAlignPref.Left) } }, Ic.AlignLeft),
-          SegOption("", prefs.align == TextAlignPref.Justify, { vm.updatePrefs { it.copy(align = TextAlignPref.Justify) } }, Ic.AlignJustify),
+          SegOption("", prefs.align == TextAlignPref.Left, { onChange { it.copy(align = TextAlignPref.Left) } }, Ic.AlignLeft),
+          SegOption("", prefs.align == TextAlignPref.Justify, { onChange { it.copy(align = TextAlignPref.Justify) } }, Ic.AlignJustify),
         ))
       }
 
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QButton("Tap zones", { vm.showZones(true) }, Modifier.weight(1f), icon = Ic.HandTap, size = 12.5f)
-        QButton("Use for all books", vm::useForAllBooks, Modifier.weight(1f), BtnKind.Primary, icon = Ic.CheckCircle, size = 12.5f)
-      }
-      QText("These settings apply to this book only", 11f, Modifier.fillMaxWidth(), color = Nq.neutral500, align = TextAlign.Center)
-    }
   }
 }
 
 @Composable
-private fun SettingRow(label: String, control: @Composable () -> Unit) {
+internal fun SettingRow(label: String, control: @Composable () -> Unit) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
     QText(label, 13f, color = Nq.neutral300)
     control()

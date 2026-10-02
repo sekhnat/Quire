@@ -23,6 +23,7 @@ import com.quire.reader.ui.detail.DetailScreen
 import com.quire.reader.ui.library.LibraryScreen
 import com.quire.reader.ui.onboarding.OnboardingScreen
 import com.quire.reader.ui.reader.ReaderScreen
+import com.quire.reader.ui.settings.SettingsScreen
 
 @Composable
 fun QuireApp(
@@ -43,6 +44,7 @@ fun QuireApp(
         Screen.Library -> LibraryScreen(s, lib, vm)
         Screen.Detail -> DetailScreen(s, lib, vm)
         Screen.Reader -> ReaderScreen(s, lib, vm)
+        Screen.Settings -> SettingsScreen(vm)
       }
     }
     Toast(s.toast, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 120.dp))

@@ -98,6 +98,7 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
   val bookmarks by vm.bookmarks.collectAsStateWithLifecycle()
   val highlights by vm.highlights.collectAsStateWithLifecycle()
   val search by vm.search.collectAsStateWithLifecycle()
+  val hasOverride by vm.hasBookOverride.collectAsStateWithLifecycle()
   val locator by session.current.collectAsStateWithLifecycle()
   val theme = prefs.theme
   val book = session.book
@@ -156,7 +157,7 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
 
     ReaderChrome(s, session, vm, bookmarked, locator?.locations?.totalProgression?.toFloat() ?: 0f)
     HighlightActions(s, vm, navBottom)
-    DisplaySheet(s, prefs, vm)
+    DisplaySheet(s, prefs, hasOverride, vm)
     ContentsSheet(s, session, bookmarks, highlights, vm)
     SearchOverlay(s, search, vm)
     NoteSheet(s, highlights, vm)

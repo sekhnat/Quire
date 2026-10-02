@@ -28,7 +28,7 @@ Quire is a quiet replacement for Librera and Moon+ Reader. It watches the folder
 - **Real EPUB rendering** through the [Readium toolkit](https://github.com/readium/kotlin-toolkit): images, tables, footnotes, internal links and publisher CSS all work.
 - **Tap zones.** Left edge back, right edge forward, middle for the controls.
 - **Pages or scroll.** In scroll mode chapters run into each other, so there's no sideways swipe to change chapter.
-- **Make it yours.** Five themes including **AMOLED Black** (true `#000000`), four fonts (Literata, Source Serif, Atkinson Hyperlegible, Inter), size, line spacing, margins, alignment, and a brightness dimmer. Settings are per book, or "Use for all books".
+- **Make it yours.** Five themes including **AMOLED Black** (true `#000000`), four fonts (Literata, Source Serif, Atkinson Hyperlegible, Inter), size, line spacing, margins, alignment, and a brightness dimmer. Set your **reading defaults** once in Settings (theme, font, size, spacing, margins, alignment, pages or scroll) with a live preview; any single book can override them, and "Back to my defaults" undoes that.
 - **Highlights, notes and bookmarks.** Select text to highlight it or attach a note; everything is listed in one place and tied to the page.
 - **Search the whole book.** Results stream in as they are found, and the matches are underlined on the page.
 - **Contents with real page numbers**, even for books that keep every chapter in one file.

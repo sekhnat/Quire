@@ -136,6 +136,20 @@ class LibraryRepository(
   fun readerPrefs(bookId: Long): Flow<ReaderPrefs> =
     combine(settings.readerDefaults, db.states().observe(bookId)) { defaults, state -> ReaderPrefs.fromJson(state?.prefsJson) ?: defaults }
 
+  fun hasBookOverride(bookId: Long): Flow<Boolean> = db.states().observe(bookId).map { ReaderPrefs.fromJson(it?.prefsJson) != null }
+
+  /** The settings every book without its own settings uses. */
+  val readerDefaults: Flow<ReaderPrefs> = settings.readerDefaults
+  suspend fun setReaderDefaults(prefs: ReaderPrefs) = settings.setReaderDefaults(prefs)
+
+  suspend fun clearBookPrefs(bookId: Long) = db.states().edit(bookId) { it.copy(prefsJson = null) }
+  suspend fun clearAllBookPrefs() = db.states().clearAllPrefs()
+
+  val useCalibre: Flow<Boolean> = settings.useCalibre
+  val watchNewBooks: Flow<Boolean> = settings.watchNewBooks
+  suspend fun setUseCalibre(v: Boolean) = settings.setUseCalibre(v)
+  suspend fun setWatchNewBooks(v: Boolean) = settings.setWatchNewBooks(v)
+
   suspend fun setBookPrefs(bookId: Long, prefs: ReaderPrefs) = db.states().edit(bookId) { it.copy(prefsJson = prefs.toJson()) }
 
   /** "Use for all books": these become the defaults and this book stops overriding them. */

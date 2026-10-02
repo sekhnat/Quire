@@ -6,7 +6,7 @@ import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.theme.ReaderTheme
 import java.time.LocalDate
 
-enum class Screen { Splash, Onboard, Library, Detail, Reader }
+enum class Screen { Splash, Onboard, Library, Detail, Reader, Settings }
 enum class OnboardStep { Welcome, Access, Folders, Scan }
 enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Series("Series"), Tags("Tags") }
 enum class LibLayout { Grid, List, Shelves }
