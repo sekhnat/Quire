@@ -131,6 +131,7 @@ object Ic {
   val Copy = R.drawable.ph_copy
   val BookBookmark = R.drawable.ph_book_bookmark
   val CheckBold = R.drawable.ph_check_bold
+  val Gear = R.drawable.ph_gear_six
 }
 
 @Composable

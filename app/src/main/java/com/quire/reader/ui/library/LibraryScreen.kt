@@ -141,6 +141,7 @@ private fun LibraryHeader(s: UiState, lib: LibraryData, vm: QuireViewModel) {
         vm::cycleLayout, tint = Nq.neutral300,
       )
       IconBtn(Ic.Plus, { vm.openImport(true) }, tint = Nq.accent)
+      IconBtn(Ic.Gear, vm::openSettings, tint = Nq.neutral300)
     }
   }
 }
