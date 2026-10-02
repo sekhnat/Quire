@@ -1,0 +1,79 @@
+package com.quire.reader.ui
+
+import com.quire.reader.data.Book
+import com.quire.reader.data.BookStatus
+import com.quire.reader.data.db.FolderEntity
+
+data class AuthorEntry(val name: String, val books: List<Book>)
+data class SeriesEntry(val name: String, val author: String, val books: List<Book>, val missing: List<Int>, val total: Int) {
+  val finished: Int get() = books.count { it.status == BookStatus.Finished }
+}
+data class ShelfDef(val title: String, val sub: String, val coverWidthDp: Int, val books: List<Book>, val filter: LibFilter? = null, val scope: Scope? = null)
+
+/**
+ * Everything the library screens derive from the book list, computed once per change rather than on
+ * every recomposition.
+ */
+class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val loaded: Boolean = true) {
+  val byId: Map<Long, Book> = books.associateBy { it.id }
+
+  val counts: Map<LibFilter, Int> by lazy {
+    mapOf(
+      LibFilter.All to books.size,
+      LibFilter.Reading to books.count { it.status == BookStatus.Reading },
+      LibFilter.Unread to books.count { it.status == BookStatus.Unread },
+      LibFilter.Recent to books.count { it.isNew },
+      LibFilter.Finished to books.count { it.status == BookStatus.Finished },
+    )
+  }
+
+  /** Authors grouped by the first letter of their sort name; anything that isn't A–Z goes under '#'. */
+  val authorGroups: List<Pair<Char, List<AuthorEntry>>> by lazy {
+    books.groupBy { it.primaryAuthor }
+      .map { (name, bs) -> AuthorEntry(name, bs.sortedBy { it.sortTitle }) }
+      .sortedBy { it.books.first().authorSort }
+      .groupBy { e -> e.books.first().authorSort.firstOrNull()?.uppercaseChar()?.takeIf { it in 'A'..'Z' } ?: '#' }
+      .toSortedMap(compareBy<Char> { if (it == '#') '￿' else it })
+      .map { it.key to it.value }
+  }
+
+  val series: List<SeriesEntry> by lazy {
+    books.filter { it.series != null }.groupBy { it.series!! }.map { (name, bs) ->
+      val sorted = bs.sortedBy { it.seriesNo ?: Double.MAX_VALUE }
+      val owned = sorted.mapNotNull { it.seriesNo }.map { it.toInt() }.toSet()
+      val highest = owned.maxOrNull() ?: 0
+      SeriesEntry(name, sorted.first().author, sorted, (1..highest).filter { it !in owned }, maxOf(highest, sorted.size))
+    }.sortedBy { it.name.lowercase() }
+  }
+
+  val tags: List<Pair<String, Int>> by lazy {
+    books.flatMap { it.tags }.groupingBy { it }.eachCount().entries
+      .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
+      .map { it.key to it.value }
+  }
+
+  val ratedFive: Int by lazy { books.count { it.rating == 5 } }
+
+  /** The book "Continue reading" points at: the most recently opened one that is still in progress. */
+  val resume: Book? by lazy { books.filter { it.status == BookStatus.Reading }.maxByOrNull { it.lastOpened } }
+
+  val shelves: List<ShelfDef> by lazy {
+    buildList {
+      val reading = books.filter { it.status == BookStatus.Reading }.sortedByDescending { it.lastOpened }
+      if (reading.isNotEmpty()) add(ShelfDef("Continue reading", reading.size.toString(), 120, reading, filter = LibFilter.Reading))
+      val recent = books.filter { it.isNew }.sortedByDescending { it.addedAt }
+      if (recent.isNotEmpty()) add(ShelfDef("Recently added", "${recent.size} new", 96, recent, filter = LibFilter.Recent))
+      series.sortedByDescending { it.books.size }.take(2).forEach {
+        add(ShelfDef(it.name, "${it.books.size} of ${it.total}", 96, it.books, scope = Scope(ScopeKind.Series, it.name)))
+      }
+      tags.filter { it.second >= 3 }.take(2).forEach { (tag, n) ->
+        add(ShelfDef(tag, "Tag · $n", 96, books.filter { tag in it.tags }, scope = Scope(ScopeKind.Tag, tag)))
+      }
+    }
+  }
+
+  fun siblings(book: Book): List<Book> = if (book.series == null) emptyList() else books.filter { it.series == book.series }.sortedBy { it.seriesNo ?: Double.MAX_VALUE }
+  fun moreBy(book: Book): List<Book> = books.filter { it.primaryAuthor == book.primaryAuthor && it.id != book.id }.sortedBy { it.sortTitle }
+
+  companion object { val Empty = LibraryData(emptyList(), emptyList(), loaded = false) }
+}
