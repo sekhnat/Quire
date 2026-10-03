@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.ShelfDef
@@ -68,6 +69,7 @@ import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
 import com.quire.reader.ui.QuireViewModel
+import com.quire.reader.ui.SearchScope
 import com.quire.reader.ui.Segmented
 import com.quire.reader.ui.SegOption
 import com.quire.reader.ui.SheetHost
@@ -102,6 +104,7 @@ internal fun navBottomPadding() = WindowInsets.navigationBars.asPaddingValues().
 @Composable
 fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
   var pickingFolder by remember { mutableStateOf(false) }
+  val textMode = s.searchOpen && s.searchScope == SearchScope.Text
   BackHandler(enabled = s.scope != null) { vm.setScope(null) }
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -110,13 +113,27 @@ fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
         AnimatedVisibility(s.searchOpen) {
           val focus = remember { FocusRequester() }
           LaunchedEffect(Unit) { focus.requestFocus() }
-          QTextField(s.query, vm::setQuery, "Title, author, series, tag", leadingIcon = Ic.Search, focusRequester = focus)
+          Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (s.searchScope == SearchScope.Text) {
+              QTextField(s.textLibraryQuery, vm::setTextLibraryQuery, "Words or a “phrase” inside books", leadingIcon = Ic.Search, onClear = { vm.setTextLibraryQuery("") }, focusRequester = focus)
+            } else {
+              QTextField(s.query, vm::setQuery, "Title, author, series, tag", leadingIcon = Ic.Search, focusRequester = focus)
+            }
+            Segmented(
+              SearchScope.entries.map { SegOption(it.label, s.searchScope == it, { vm.setSearchScope(it) }) },
+              height = 32.dp, minWidth = 0.dp, size = 12f,
+            )
+          }
         }
         TabRow2(LibView.entries.map { it.label }, s.view.ordinal, { vm.setView(LibView.entries[it]) })
       }
       Box(Modifier.weight(1f)) {
         when (s.view) {
-          LibView.Books -> BooksView(s, lib, vm)
+          LibView.Books -> if (textMode) {
+            // Only observed while the text search is on screen, so the library does no search work otherwise.
+            val search by vm.textSearch.collectAsStateWithLifecycle()
+            TextSearchResults(s, lib, search, vm)
+          } else BooksView(s, lib, vm)
           LibView.Authors -> AuthorsView(lib, vm)
           LibView.Series -> SeriesView(lib, vm)
           LibView.Tags -> TagsView(lib, vm)
@@ -209,7 +226,7 @@ private fun BooksHeader(s: UiState, lib: LibraryData, vm: QuireViewModel, list: 
 }
 
 @Composable
-private fun FilterChips(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+internal fun FilterChips(s: UiState, lib: LibraryData, vm: QuireViewModel) {
   LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     items(LibFilter.entries) { f ->
       val on = s.filter == f

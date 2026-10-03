@@ -21,10 +21,16 @@ class SettingsStore(context: Context) {
   val onboardingDone: Flow<Boolean> = flow(ONBOARDING_DONE, false)
   val useCalibre: Flow<Boolean> = flow(USE_CALIBRE, true)
   val watchNewBooks: Flow<Boolean> = flow(WATCH_NEW, true)
+  /** Whether the library text index is kept up to date in the background. */
+  val indexingEnabled: Flow<Boolean> = flow(INDEXING_ENABLED, true)
+  /** Index only while the device is charging. */
+  val indexChargingOnly: Flow<Boolean> = flow(INDEX_CHARGING_ONLY, false)
 
   suspend fun setOnboardingDone(v: Boolean) = store.edit { it[ONBOARDING_DONE] = v }
   suspend fun setUseCalibre(v: Boolean) = store.edit { it[USE_CALIBRE] = v }
   suspend fun setWatchNewBooks(v: Boolean) = store.edit { it[WATCH_NEW] = v }
+  suspend fun setIndexingEnabled(v: Boolean) = store.edit { it[INDEXING_ENABLED] = v }
+  suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
 
   /** The reading settings new books start with. */
   val readerDefaults: Flow<ReaderPrefs> = store.data.map { ReaderPrefs.fromJson(it[READER_DEFAULTS]) ?: ReaderPrefs() }
@@ -38,6 +44,8 @@ class SettingsStore(context: Context) {
     val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     val USE_CALIBRE = booleanPreferencesKey("use_calibre")
     val WATCH_NEW = booleanPreferencesKey("watch_new_books")
+    val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")
+    val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     val BRIGHTNESS = intPreferencesKey("brightness")
   }

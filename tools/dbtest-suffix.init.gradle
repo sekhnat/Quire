@@ -1,0 +1,8 @@
+// Runs the instrumented tests under a separate application id so the user's installed com.quire.reader is never replaced, cleared or uninstalled.
+allprojects {
+  afterEvaluate {
+    if (plugins.hasPlugin("com.android.application")) {
+      android.buildTypes.debug.applicationIdSuffix = ".dbtest"
+    }
+  }
+}

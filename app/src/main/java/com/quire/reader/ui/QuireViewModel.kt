@@ -4,12 +4,22 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.quire.reader.QuireApplication
 import com.quire.reader.data.ReaderPrefs
+import com.quire.reader.data.db.IndexCoverage
+import com.quire.reader.data.index.FtsQuery
+import com.quire.reader.data.index.IndexActivity
+import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
+import com.quire.reader.reader.OpeningPosition
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.SearchHit
+import com.quire.reader.reader.STALE_TARGET_MESSAGE
 import com.quire.reader.reader.SelectionAction
+import com.quire.reader.reader.TargetOutcome
 import com.quire.reader.reader.TocEntry
+import com.quire.reader.reader.message
+import com.quire.reader.reader.openingPosition
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
@@ -31,6 +41,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,6 +66,28 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   val defaults: StateFlow<ReaderPrefs> = repo.readerDefaults.stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
   val useCalibreSetting: StateFlow<Boolean> = repo.useCalibre.stateIn(viewModelScope, SharingStarted.Eagerly, true)
   val watchSetting: StateFlow<Boolean> = repo.watchNewBooks.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+  val indexingEnabledSetting: StateFlow<Boolean> = repo.indexingEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+  val indexChargingOnlySetting: StateFlow<Boolean> = repo.indexChargingOnly.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  /** How much of the library is searchable and what the indexer is doing, for Settings. */
+  val indexCoverage: StateFlow<IndexCoverage?> = repo.indexCoverage.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+  val indexActivity: StateFlow<IndexActivity> = app.indexer.activity
+  val indexedTextBytes: StateFlow<Long> = repo.indexedTextBytes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+  private val _databaseBytes = MutableStateFlow<Long?>(null)
+  /** Disk used by the library database, or null until first measured. */
+  val databaseBytes: StateFlow<Long?> = _databaseBytes
+
+  /**
+   * The library's "Inside books" search: the status for the typed text and the active filters, with the index
+   * coverage and indexer activity that explain partial or missing results. Only runs while something observes it.
+   */
+  val textSearch: StateFlow<LibraryTextSearch> = combine(
+    textSearchStatus(_state.map(::textSearchInput), search = repo::searchText),
+    repo.indexCoverage,
+    app.indexer.activity,
+  ) { status, coverage, activity -> LibraryTextSearch(status, coverage, activity) }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryTextSearch())
 
   private val openBookId = MutableStateFlow(0L)
   /** Whether the open book has its own reading settings instead of the defaults. */
@@ -86,6 +119,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     edit { copy(hasAccess = granted) }
     // Coming back from the Settings screen with access granted moves on by itself.
     if (granted && _state.value.onboardStep == OnboardStep.Access) goToFolders()
+    if (granted) app.indexer.request()
   }
 
   fun setStep(step: OnboardStep) = edit { copy(onboardStep = step) }
@@ -138,8 +172,10 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     edit { copy(scope = scope, view = view, query = if (scope != null) "" else query, screen = screen ?: this.screen) }
   fun showFilter(f: LibFilter) = edit { copy(view = LibView.Books, filter = f, scope = null) }
   fun showShelf(filter: LibFilter? = null, scope: Scope? = null) = edit { copy(filter = filter ?: LibFilter.All, scope = scope, layout = LibLayout.Grid) }
-  fun toggleSearch() = edit { copy(searchOpen = !searchOpen, query = "") }
+  fun toggleSearch() = edit { copy(searchOpen = !searchOpen, query = "", textLibraryQuery = "") }
   fun setQuery(q: String) = edit { copy(query = q, view = LibView.Books) }
+  fun setSearchScope(scope: SearchScope) = edit { copy(searchScope = scope) }
+  fun setTextLibraryQuery(q: String) = edit { copy(textLibraryQuery = q, view = LibView.Books) }
   fun openImport(open: Boolean) = edit { copy(importOpen = open) }
   fun openSort(open: Boolean) = edit { copy(sortOpen = open) }
   fun setSortAscending(asc: Boolean) = edit { copy(sortAscending = asc) }
@@ -179,6 +215,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
    * so books copied in while Quire was in the background show up; only speaks up if something changed.
    */
   fun onForeground() {
+    app.indexer.request()
     val now = System.currentTimeMillis()
     if (now - lastForegroundScan < FOREGROUND_SCAN_GAP_MS) return
     lastForegroundScan = now
@@ -237,37 +274,76 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   private val _search = MutableStateFlow(SearchUi())
   val search: StateFlow<SearchUi> = _search
 
+  /** The reader overlay's library-search results while [UiState.bookSearch] is set. */
+  private val _bookSearch = MutableStateFlow(BookSearchUi())
+  val bookSearchUi: StateFlow<BookSearchUi> = _bookSearch
+
   private var readerJobs: Job? = null
   private var searchJob: Job? = null
+  private var bookSearchJob: Job? = null
+  private var targetJob: Job? = null
 
   /** Opens a book in the reader. [restart] ignores the saved position (the "Read again" button). */
-  fun read(id: Long, restart: Boolean = false) {
-    closeReaderSession()
+  fun read(id: Long, restart: Boolean = false) = startReading(id, restart, target = null, libraryQuery = null)
+
+  /**
+   * Opens a library text-search result: the book at the matched passage, underlined, in place of its saved position
+   * for this opening only. A result for a file that has changed since it was indexed is not opened; the book's index
+   * is refreshed instead.
+   */
+  fun openTextHit(target: IndexTarget) {
+    viewModelScope.launch {
+      if (!repo.isCurrent(target)) { staleTarget(); return@launch }
+      startReading(target.bookId, restart = false, target = target, libraryQuery = null)
+    }
+  }
+
+  /** "Show all in this book": opens the book at its saved position with the search overlay in library-search mode for [query]. */
+  fun openBookSearch(bookId: Long, query: String) = startReading(bookId, restart = false, target = null, libraryQuery = query)
+
+  private fun staleTarget() {
+    toast(STALE_TARGET_MESSAGE)
+    app.indexer.request()
+  }
+
+  private fun startReading(id: Long, restart: Boolean, target: IndexTarget?, libraryQuery: String?) {
+    // Before anything is loaded, so background indexing steps aside while the book opens.
+    app.indexer.setReaderBusy(true)
+    closeReaderSession(release = false)
     openBookId.value = id
-    edit { copy(screen = Screen.Reader, bookId = id, chrome = false, sheet = null, textSearchOpen = false, textQuery = "", activeHighlight = null, noteFor = null, showZones = false) }
+    edit { copy(screen = Screen.Reader, bookId = id, chrome = false, sheet = null, textSearchOpen = false, textQuery = "", bookSearch = null, activeHighlight = null, noteFor = null, showZones = false) }
     _reader.value = ReaderLoad.Loading
     viewModelScope.launch {
       val book = repo.book(id)
-      if (book == null) { _reader.value = ReaderLoad.Failed("This book is no longer in the library."); return@launch }
+      if (book == null) { _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
       val opened = app.publicationLoader.open(File(book.path))
       val publication = opened.getOrElse {
         repo.markUnreadable(id)
         _reader.value = ReaderLoad.Failed("This book can’t be opened. The file may be damaged or protected.")
+        releaseIndexer()
         return@launch
       }
       val positions = withContext(Dispatchers.IO) { runCatching { publication.positions() }.getOrDefault(emptyList()) }
       val saved = repo.readingState(id)
-      val initial = if (restart) null else ReaderSession.parseLocator(saved?.locatorJson)
+      val initial = when (openingPosition(restart, hasTarget = target != null)) {
+        OpeningPosition.Target -> target?.let { ReaderSession.targetLocator(it, positions) }
+        OpeningPosition.Saved -> ReaderSession.parseLocator(saved?.locatorJson)
+        OpeningPosition.Start -> null
+      }
       repo.markOpened(id)
       repo.updatePageCount(id, positions.size)
       val libraryBook = library.value.byId[id]
-      if (libraryBook == null) { publication.close(); _reader.value = ReaderLoad.Failed("This book is no longer in the library."); return@launch }
+      if (libraryBook == null) { publication.close(); _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
       val session = ReaderSession(libraryBook, publication, positions, initial)
       _reader.value = ReaderLoad.Ready(session)
       edit { copy(brightness = 100) }
       startReaderJobs(session)
+      if (target != null) targetJob = launch { reportOutcome(session.goToTarget(target)) }
+      if (libraryQuery != null) enterBookSearch(id, libraryQuery)
     }
   }
+
+  private fun reportOutcome(outcome: TargetOutcome) { outcome.message()?.let(::toast) }
 
   @OptIn(FlowPreview::class)
   private fun startReaderJobs(session: ReaderSession) {
@@ -296,11 +372,17 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   /** Leaves the reader, saving where it was. */
   fun closeReader() {
     closeReaderSession()
-    edit { copy(screen = Screen.Library, chrome = false, sheet = null, textSearchOpen = false, activeHighlight = null, noteFor = null) }
+    edit { copy(screen = Screen.Library, chrome = false, sheet = null, textSearchOpen = false, bookSearch = null, activeHighlight = null, noteFor = null) }
   }
 
-  private fun closeReaderSession() {
-    readerJobs?.cancel(); searchJob?.cancel()
+  /** Lets background indexing resume now that no reader is opening or open. */
+  private fun releaseIndexer() {
+    app.indexer.setReaderBusy(false)
+    app.indexer.request()
+  }
+
+  private fun closeReaderSession(release: Boolean = true) {
+    readerJobs?.cancel(); searchJob?.cancel(); bookSearchJob?.cancel(); targetJob?.cancel()
     (_reader.value as? ReaderLoad.Ready)?.session?.let { session ->
       val locator = session.current.value
       // Written outside viewModelScope's cancellation so the last page turn is never lost.
@@ -309,7 +391,9 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
     _reader.value = ReaderLoad.Idle
     _search.value = SearchUi()
+    _bookSearch.value = BookSearchUi()
     _highlights.value = emptyList(); _bookmarks.value = emptyList()
+    if (release) releaseIndexer()
   }
 
   override fun onCleared() { closeReaderSession(); super.onCleared() }
@@ -338,7 +422,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   // settings screen
 
-  fun openSettings() = edit { copy(screen = Screen.Settings) }
+  fun openSettings() { edit { copy(screen = Screen.Settings) }; refreshDatabaseBytes() }
   fun closeSettings() = edit { copy(screen = Screen.Library) }
   fun updateDefaults(change: (ReaderPrefs) -> ReaderPrefs) {
     val next = change(defaults.value)
@@ -347,6 +431,30 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun resetAllBookPrefs() = viewModelScope.launch { repo.clearAllBookPrefs(); toast("Every book now uses your defaults") }
   fun setUseCalibreSetting(v: Boolean) = viewModelScope.launch { repo.setUseCalibre(v); toast("Takes effect on the next full rescan") }
   fun setWatchSetting(v: Boolean) = viewModelScope.launch { repo.setWatchNewBooks(v) }
+  fun setIndexingEnabledSetting(v: Boolean) = viewModelScope.launch { repo.setIndexingEnabled(v) }
+  fun setIndexChargingOnlySetting(v: Boolean) = viewModelScope.launch { repo.setIndexChargingOnly(v) }
+
+  /** Measures the database on disk off the main thread. */
+  fun refreshDatabaseBytes() { viewModelScope.launch { _databaseBytes.value = repo.databaseBytes() } }
+
+  /** Clears the search index and indexes the library again under the current charging and reader rules. Books and reading state stay. */
+  fun rebuildIndex() {
+    // On the app's scope: the clear must finish and the run be requested even if this screen goes away meanwhile.
+    app.appScope.launch {
+      app.indexer.rebuild()
+      refreshDatabaseBytes()
+    }
+    toast("Rebuilding the search index")
+  }
+
+  /** Turns indexing off and deletes the search index. Books, metadata and reading state are untouched. */
+  fun deleteSearchIndex() {
+    app.appScope.launch {
+      app.indexer.deleteIndex()
+      refreshDatabaseBytes()
+    }
+    toast("Search index deleted")
+  }
 
   fun useForAllBooks() {
     val id = session()?.book?.id ?: return
@@ -417,8 +525,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   // search inside the book
 
   fun setTextSearch(open: Boolean) {
-    edit { copy(textSearchOpen = open, chrome = false) }
-    if (!open) { searchJob?.cancel(); _search.value = SearchUi(); viewModelScope.launch { session()?.applySearchHits(emptyList()) } }
+    edit { copy(textSearchOpen = open, chrome = false, bookSearch = if (open) bookSearch else null) }
+    if (!open) { searchJob?.cancel(); bookSearchJob?.cancel(); _search.value = SearchUi(); _bookSearch.value = BookSearchUi(); viewModelScope.launch { session()?.applySearchHits(emptyList()) } }
   }
 
   fun setTextQuery(q: String) {
@@ -440,6 +548,68 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     edit { copy(textSearchOpen = false, chrome = false) }
     session.go(hit.locator)
     viewModelScope.launch { session.applySearchHits(_search.value.hits) }
+  }
+
+  // search inside the book, library-search mode
+
+  private fun enterBookSearch(bookId: Long, query: String) {
+    edit { copy(textSearchOpen = true, chrome = false, bookSearch = BookSearchMode(bookId, query)) }
+    runBookSearch(bookId, query)
+  }
+
+  /** Leaves library-search mode; the overlay stays open as the ordinary in-book search. */
+  fun closeBookSearch() {
+    bookSearchJob?.cancel()
+    _bookSearch.value = BookSearchUi()
+    edit { copy(bookSearch = null) }
+    viewModelScope.launch { session()?.applySearchHits(emptyList()) }
+  }
+
+  /** Edits the library-search query. It keeps library semantics, and only this book, until the mode is closed. */
+  fun setBookSearchQuery(q: String) {
+    val mode = _state.value.bookSearch ?: return
+    edit { copy(bookSearch = mode.copy(query = q)) }
+    runBookSearch(mode.bookId, q)
+  }
+
+  private fun runBookSearch(bookId: Long, text: String) {
+    bookSearchJob?.cancel()
+    val plan = planBookSearch(text)
+    _bookSearch.value = plan.ui
+    val query = plan.query ?: return
+    bookSearchJob = viewModelScope.launch {
+      delay(250) // wait for the user to pause typing
+      val page = try { repo.searchBookPage(bookId, query) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+      if (page == null) { _bookSearch.value = BookSearchUi(); toast("Couldn’t search this book"); return@launch }
+      _bookSearch.value = bookSearchFirstPage(page)
+    }
+  }
+
+  /** Loads the next page of library-search matches; called as the list scrolls near its end. */
+  fun loadMoreBookSearch() {
+    val mode = _state.value.bookSearch ?: return
+    val current = _bookSearch.value
+    val after = current.nextAfterSeq ?: return
+    if (current.loadingMore || current.status != BookSearchStatus.Results) return
+    val query = (FtsQuery.parse(mode.query) as? FtsQuery.Result.Query) ?: return
+    _bookSearch.value = current.copy(loadingMore = true)
+    // The same job as the first page, so a newer query cancels a page that is still loading.
+    bookSearchJob = viewModelScope.launch {
+      val page = try { repo.searchBookPage(mode.bookId, query, after) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+      _bookSearch.update { if (page == null) it.copy(loadingMore = false) else it.withPage(after, page) }
+    }
+  }
+
+  /** Jumps to a library-search match: its own passage is underlined, and the overlay steps aside. */
+  fun openBookSearchHit(target: IndexTarget) {
+    val session = session() ?: return
+    if (target.bookId != session.book.id) return
+    targetJob?.cancel()
+    targetJob = viewModelScope.launch {
+      if (!repo.isCurrent(target)) { staleTarget(); return@launch }
+      edit { copy(textSearchOpen = false, chrome = false) }
+      reportOutcome(session.goToTarget(target))
+    }
   }
 
   fun goTo(entry: TocEntry) { session()?.go(entry.link); closeReaderOverlays() }

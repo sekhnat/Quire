@@ -8,7 +8,15 @@ import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.data.db.BookStateEntity
 import com.quire.reader.data.db.FolderEntity
+import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.QuireDatabase
+import com.quire.reader.data.index.BookTextPage
+import com.quire.reader.data.index.FtsQuery
+import com.quire.reader.data.index.IndexTarget
+import com.quire.reader.data.index.LibraryIndexer
+import com.quire.reader.data.index.TextSearchFilters
+import com.quire.reader.data.index.TextSearchResult
+import com.quire.reader.data.index.TextSearcher
 import com.quire.reader.data.scan.CoverStore
 import com.quire.reader.data.scan.LibraryScanner
 import com.quire.reader.data.scan.ScanResult
@@ -27,6 +35,7 @@ class LibraryRepository(
   val scanner: LibraryScanner,
   private val covers: CoverStore,
   private val settings: SettingsStore,
+  private val indexer: LibraryIndexer,
 ) {
   private val app = context.applicationContext
 
@@ -35,7 +44,35 @@ class LibraryRepository(
     .flowOn(Dispatchers.Default)
   val folders: Flow<List<FolderEntity>> = db.folders().observeAll()
 
-  suspend fun rescan(): ScanResult = scanner.scan()
+  // ── library text search ──────────────────────────────────────────────────
+
+  private val textSearcher = TextSearcher(db)
+
+  /** How much of the library is searchable right now. */
+  val indexCoverage: Flow<IndexCoverage> = db.index().observeCoverage()
+
+  /** Persisted chunk text across all books (not the search index or position data built on top of it). */
+  val indexedTextBytes: Flow<Long> = db.index().observeTextBytes()
+
+  /** Bytes the library database takes on disk: the database file and its write-ahead log (and shared-memory) files. Not the index alone. */
+  suspend fun databaseBytes(): Long = withContext(Dispatchers.IO) {
+    val main = app.getDatabasePath(QuireDatabase.FILE_NAME)
+    listOf("", "-wal", "-shm").sumOf { File(main.path + it).length() }
+  }
+
+  /** Books whose text matches [query], grouped and ranked, narrowed by the library [filters]. Follows the database. */
+  fun searchText(query: FtsQuery.Result.Query, filters: TextSearchFilters = TextSearchFilters.None): Flow<TextSearchResult> =
+    textSearcher.observe(query, filters)
+
+  /** One page of a single book's matches, for "Show all in this book"; pass the previous page's `nextAfterSeq` as [afterSeq]. */
+  suspend fun searchBookPage(bookId: Long, query: FtsQuery.Result.Query, afterSeq: Int = -1): BookTextPage =
+    textSearcher.page(query, bookId, afterSeq)
+
+  /** False once the book was changed or removed since [target] was indexed, so the target must not be opened at its text. */
+  suspend fun isCurrent(target: IndexTarget): Boolean =
+    db.books().byId(target.bookId)?.let { target.isCurrentFor(it.mtime, it.sizeBytes) } == true
+
+  suspend fun rescan(): ScanResult = scanner.scan().also { indexer.request() }
 
   /** Adds a folder to watch. Returns false if it can't be read or is already in the library. */
   suspend fun addFolder(path: String): Boolean = withContext(Dispatchers.IO) {
@@ -65,6 +102,7 @@ class LibraryRepository(
     if (copied > 0) {
       db.folders().insert(FolderEntity(path = dir.absolutePath))
       scanner.scan()
+      indexer.request()
     }
     copied
   }
@@ -149,6 +187,11 @@ class LibraryRepository(
   val watchNewBooks: Flow<Boolean> = settings.watchNewBooks
   suspend fun setUseCalibre(v: Boolean) = settings.setUseCalibre(v)
   suspend fun setWatchNewBooks(v: Boolean) = settings.setWatchNewBooks(v)
+
+  val indexingEnabled: Flow<Boolean> = settings.indexingEnabled
+  val indexChargingOnly: Flow<Boolean> = settings.indexChargingOnly
+  suspend fun setIndexingEnabled(v: Boolean) = settings.setIndexingEnabled(v)
+  suspend fun setIndexChargingOnly(v: Boolean) = settings.setIndexChargingOnly(v)
 
   suspend fun setBookPrefs(bookId: Long, prefs: ReaderPrefs) = db.states().edit(bookId) { it.copy(prefsJson = prefs.toJson()) }
 

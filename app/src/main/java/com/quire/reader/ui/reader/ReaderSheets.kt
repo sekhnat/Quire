@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -34,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,7 +48,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -61,6 +63,8 @@ import com.quire.reader.reader.ReaderSession
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.QuireFonts
 import com.quire.reader.theme.ReaderTheme
+import com.quire.reader.ui.BookSearchStatus
+import com.quire.reader.ui.BookSearchUi
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.IconBtn
@@ -76,6 +80,8 @@ import com.quire.reader.ui.SegOption
 import com.quire.reader.ui.Segmented
 import com.quire.reader.ui.Sheet
 import com.quire.reader.ui.SheetHost
+import com.quire.reader.ui.SnippetStyle
+import com.quire.reader.ui.snippetText
 import com.quire.reader.ui.TabRow2
 import com.quire.reader.ui.TocTab
 import com.quire.reader.ui.UiState
@@ -233,15 +239,21 @@ private fun TocItem(r: Row2) {
 // ── in-book search ──────────────────────────────────────────────────────────
 
 @Composable
-internal fun SearchOverlay(s: UiState, search: SearchUi, vm: QuireViewModel) {
+internal fun SearchOverlay(s: UiState, search: SearchUi, bookSearch: BookSearchUi, vm: QuireViewModel) {
   val focus = remember { FocusRequester() }
   LaunchedEffect(s.textSearchOpen) { if (s.textSearchOpen) { delay(300); runCatching { focus.requestFocus() } } }
+  val library = s.bookSearch
   Box(Modifier.fillMaxSize()) {
     AnimatedVisibility(s.textSearchOpen, enter = slideInVertically(tween(280)) { -it }, exit = slideOutVertically(tween(280)) { -it }) {
       Column(Modifier.fillMaxSize().background(Nq.bg).statusBarsPadding()) {
         Row(Modifier.padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           IconBtn(Ic.ArrowLeft, { vm.setTextSearch(false) })
-          QTextField(s.textQuery, vm::setTextQuery, "Search in this book", Modifier.weight(1f), onClear = { vm.setTextQuery("") }, focusRequester = focus)
+          if (library != null) QTextField(library.query, vm::setBookSearchQuery, "Search all matches in this book", Modifier.weight(1f), onClear = { vm.setBookSearchQuery("") }, focusRequester = focus)
+          else QTextField(s.textQuery, vm::setTextQuery, "Search in this book", Modifier.weight(1f), onClear = { vm.setTextQuery("") }, focusRequester = focus)
+        }
+        if (library != null) {
+          LibrarySearchResults(bookSearch, vm)
+          return@Column
         }
         val idle = s.textQuery.trim().length < 2
         val n = search.hits.size
@@ -264,7 +276,7 @@ internal fun SearchOverlay(s: UiState, search: SearchUi, vm: QuireViewModel) {
                   withStyle(SpanStyle(color = Nq.text, background = Nq.accentA(0.30f))) { append(r.hit) }
                   append(r.after)
                 },
-                style = TextStyle(fontFamily = QuireFonts.Literata, fontSize = 14.sp, lineHeight = 21.sp, color = Nq.neutral300, fontWeight = FontWeight.Normal),
+                style = SnippetStyle,
               )
             }
           }
@@ -273,6 +285,51 @@ internal fun SearchOverlay(s: UiState, search: SearchUi, vm: QuireViewModel) {
     }
   }
 }
+
+/** The overlay's body in library-search mode: a labelled header, the loaded matches, and a note when the index is partial. */
+@Composable
+private fun ColumnScope.LibrarySearchResults(ui: BookSearchUi, vm: QuireViewModel) {
+  Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Kicker("Library search · this book", Modifier.weight(1f), color = Nq.accent200)
+    QText("Use book search", 11.5f, Modifier.clip(RoundedCornerShape(6.dp)).clickable { vm.closeBookSearch() }.padding(horizontal = 6.dp, vertical = 4.dp), color = Nq.neutral400)
+  }
+  val n = ui.snippets.size
+  QText(
+    when (ui.status) {
+      BookSearchStatus.Idle -> "Finds every matching passage in this book"
+      BookSearchStatus.TooShort -> "Type at least two characters"
+      BookSearchStatus.OverLimit -> "That search is too long"
+      BookSearchStatus.Searching -> "Searching…"
+      BookSearchStatus.NoMatch -> "No matches"
+      BookSearchStatus.Results -> (if (ui.hasMore) "$n+ matches" else "$n ${if (n == 1) "match" else "matches"}")
+    },
+    11.5f, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp), color = Nq.neutral500,
+  )
+  if (ui.truncated && (ui.status == BookSearchStatus.Results || ui.status == BookSearchStatus.NoMatch)) {
+    QText("Only the first part of this book is searchable, so later matches are not listed.", 11.5f, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp), color = Nq.neutral500)
+  }
+  val listState = rememberLazyListState()
+  // Ask for the next page as the end of the list comes into view.
+  LaunchedEffect(listState, ui.snippets.size, ui.nextAfterSeq) {
+    snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
+      .collect { last -> if (last >= ui.snippets.size - LOAD_MORE_AHEAD) vm.loadMoreBookSearch() }
+  }
+  LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp)) {
+    items(ui.snippets, key = { it.seq }) { snippet ->
+      Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { vm.openBookSearchHit(snippet.target) }.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        QText(snippet.chapter.ifEmpty { "—" }, 11f, color = Nq.neutral500, maxLines = 1)
+        Text(
+          snippetText(snippet.spans),
+          style = SnippetStyle,
+        )
+      }
+    }
+    if (ui.loadingMore) item { QText("Loading more…", 11.5f, Modifier.padding(horizontal = 10.dp, vertical = 12.dp), color = Nq.neutral500) }
+  }
+}
+
+/** How many matches before the end of the loaded list the next page is requested. */
+private const val LOAD_MORE_AHEAD = 4
 
 // ── notes ───────────────────────────────────────────────────────────────────
 
