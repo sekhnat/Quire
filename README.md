@@ -24,6 +24,13 @@ Quire is a quiet replacement for Librera and Moon+ Reader. It watches the folder
 - **Browse the way you think.** Books, Authors (with an A–Z rail), Series (with the volumes you're missing), and Tags. Grid, dense list or shelves; sort by recently opened, date added, publication date, file size or length; filter and search across titles, authors, series and tags.
 - **Picks up where you left off.** A "Continue reading" card with time left, and every book remembers its place.
 
+### Search inside every book
+
+- **One search box for the whole library.** Quire indexes the text of your books in the background: it steps aside while you read, can be told to work only while charging, and resumes where it left off. Results group by book with passage counts, chapter labels and highlighted excerpts, and opening one jumps straight to the passage. Filter by author, series, tag or reading status as you type.
+- **Honest about what it can find.** Very common words report "N+" instead of an exact count, and a prefix of a very common word falls back to the exact word with a note. While the index is still being built the search screen says how much of the library is searchable, so a thin result is never mistaken for "it is not in my library".
+
+Search has limits worth knowing: it matches whole words, so it does not segment Chinese, Japanese or Korean; phrases and prefixes match indexed tokens rather than raw bytes; a book whose text passes 6 MiB is only partly indexed, and a few books whose markup Readium misreads today (a fallback extractor is planned) are only partly searchable; the index takes roughly three times the space of the text it covers; and the first pass over a large library takes a while: about 70 minutes for 1,500 books on the test emulator.
+
 ### A reader that stays out of the way
 - **Real EPUB rendering** through the [Readium toolkit](https://github.com/readium/kotlin-toolkit): images, tables, footnotes, internal links and publisher CSS all work.
 - **Tap zones.** Left edge back, right edge forward, middle for the controls.
@@ -55,9 +62,9 @@ Quire is a quiet replacement for Librera and Moon+ Reader. It watches the folder
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/reader-night.png" width="240"> | <img src="docs/screenshots/reader-black.png" width="240"> | <img src="docs/screenshots/display.png" width="240"> |
 
-| Contents | Search in book |
-|:---:|:---:|
-| <img src="docs/screenshots/contents.png" width="240"> | <img src="docs/screenshots/search.png" width="240"> |
+| Contents | Search in book | Search inside books |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/contents.png" width="240"> | <img src="docs/screenshots/search.png" width="240"> | <img src="docs/screenshots/search-text.png" width="240"> |
 
 ## Install
 
@@ -89,8 +96,10 @@ adb push my-books/ /sdcard/Books/
 app/src/main/java/com/quire/reader/
 ├── data/
 │   ├── db/        Room: books, tags, reading state, bookmarks, highlights
+│   ├── index/     library text search: FTS4 chunks, background indexer, grouped search
 │   ├── scan/      folder scanner, Calibre OPF parser, cover thumbnails, background worker
 │   ├── LibraryRepository.kt, SettingsStore.kt, ReaderPrefs.kt
+├── navigator/     vendored Readium EPUB navigator (WebView), extended for exact-passage navigation
 ├── reader/        Readium wrapper: session, navigator host, preferences, continuous scrolling
 ├── theme/         Nocturne design tokens, fonts, reader themes
 └── ui/            Compose screens: onboarding, library, book page, reader
@@ -99,6 +108,8 @@ app/src/main/java/com/quire/reader/
 - **Kotlin and Jetpack Compose**, with a single `ViewModel` holding screen state.
 - **Room** stores the library; sorting, filtering and grouping happen over the in-memory list, which is instant at this scale.
 - **Readium 3.3** parses and renders EPUBs. It is pinned because 3.4 needs compileSdk 37, which the current Android Gradle Plugin does not support.
+- **Library text search** stores each book's text as roughly 600-900-character chunks in an FTS4 index: 1,500 books become about 1.1 million chunks and 1.2 GB of stored text. A background WorkManager chain indexes in five-minute batches, stops while a reader is open (or on battery, if you ask it to), and a killed process resumes where it stopped.
+- The EPUB navigator is vendored (a copy of Readium's, under `navigator/`) and gained `evaluateJavascript(script, href)` and `scrollToDecoration`, so a search result can be located, underlined and scrolled to exactly.
 - The scanner skips unchanged files by size and modified time, reads the rest four at a time, and never lets one broken file stop the run. A folder that has gone missing (an unmounted SD card) never removes its books from the library.
 
 ## Design
