@@ -68,6 +68,21 @@ class ExcerptTest {
     assertEquals(listOf("house", "road"), excerpt.spans.hits())
   }
 
+  @Test fun `a later match just past the window is pulled in so the second term stays visible`() {
+    val text = "alpha " + List(20) { "filler$it" }.joinToString(" ") + " omega " + List(20) { "tail$it" }.joinToString(" ")
+    val chunk = TextChunker.chunk(listOf(el(text))).chunks.single()
+    val excerpt = buildExcerpt(chunk.text, chunk.segments, offsets(chunk.text, "alpha", "omega"))!!
+    assertEquals(listOf("alpha", "omega"), excerpt.spans.hits())
+  }
+
+  @Test fun `a later match far beyond the cap does not stretch the excerpt`() {
+    val text = "alpha " + List(50) { "filler$it" }.joinToString(" ") + " omega"
+    val chunk = TextChunker.chunk(listOf(el(text))).chunks.single()
+    val shown = buildExcerpt(chunk.text, chunk.segments, offsets(chunk.text, "alpha", "omega"))!!.spans
+    assertEquals(listOf("alpha"), shown.hits())
+    assertFalse(shown.joined().contains("omega"))
+  }
+
   @Test fun `byte offsets are converted so text after multibyte characters is highlighted correctly`() {
     val text = "Ünïcödé 日本語 and 😀 emoji then target word here"
     val chunk = TextChunker.chunk(listOf(el(text))).chunks.single()

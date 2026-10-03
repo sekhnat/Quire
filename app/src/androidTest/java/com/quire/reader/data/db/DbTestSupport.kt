@@ -46,6 +46,10 @@ abstract class DbTestCase {
   protected fun QuireDatabase.chunkTexts(bookId: Long): List<String> =
     openHelper.writableDatabase.rows("SELECT text FROM text_chunk WHERE bookId = ? ORDER BY seq", bookId).map { it[0]!! }
 
+  /** The stored locator-mapping JSON of every chunk of [bookId], in seq order. */
+  protected fun QuireDatabase.chunkMappings(bookId: Long): List<String> =
+    openHelper.writableDatabase.rows("SELECT mapping FROM text_chunk WHERE bookId = ? ORDER BY seq", bookId).map { it[0]!! }
+
   protected fun QuireDatabase.stateOf(bookId: Long): IndexStateEntity? =
     openHelper.writableDatabase.rows("SELECT mtime, sizeBytes, status, completedAt, chunkCount, textBytes, truncated FROM index_state WHERE bookId = ?", bookId)
       .singleOrNull()?.let { IndexStateEntity(bookId, it[0]!!.toLong(), it[1]!!.toLong(), it[2]!!, it[3]!!.toLong(), it[4]!!.toInt(), it[5]!!.toLong(), it[6] == "1") }

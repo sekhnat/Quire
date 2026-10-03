@@ -296,21 +296,20 @@ class LibraryIndexer(
       href = href,
       text = text,
       headingStart = isHeadingSelector(css),
-      locatorJson = slimLocator(locator, css).toJSON().toString(),
+      locatorJson = slimLocator(locator).toJSON().toString(),
       progression = locator.locations.totalProgression ?: 0.0,
       chapter = chapter.label,
       chapterStart = chapter.startsChapter,
     )
   }
 
-  /** Only what finds the element again: the stored text is the source of the highlight, so the large `text` part is dropped. */
-  private fun slimLocator(locator: Locator, cssSelector: String?): Locator =
+  /** Only what finds the element again: the stored text is the source of the highlight, so the large `text` part is dropped. The cssSelector is left out too — navigation finds the passage by its text — and only the progression position is kept. */
+  private fun slimLocator(locator: Locator): Locator =
     Locator(
       href = locator.href,
       mediaType = locator.mediaType,
       locations = Locator.Locations(
         progression = locator.locations.progression,
-        otherLocations = if (cssSelector != null) mapOf("cssSelector" to cssSelector) else emptyMap(),
       ),
     )
 

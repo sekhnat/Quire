@@ -37,9 +37,13 @@ data class Excerpt(val spans: List<ExcerptSpan>, val target: MatchTarget)
 private const val EXCERPT_BEFORE = 70
 private const val EXCERPT_AFTER = 110
 private const val BOUNDARY_SEARCH = 15
+/** How long an excerpt may grow when pulling a later match into view (twice one window). */
+private const val MAX_EXCERPT = 2 * (EXCERPT_BEFORE + EXCERPT_AFTER)
 
 /**
  * Cuts a short excerpt from a chunk's stored text around its first match and marks every match inside it.
+ * A later match — a second query term — that falls just past the window is pulled in ([MAX_EXCERPT] bounds the
+ * growth), so a multi-term search shows more than the word that happened to come first.
  * Matches are given as [offsets], the `offsets()` string for this chunk. Adjacent matches (the words of a phrase,
  * or neighbouring query words) are merged into one highlight, and the first one becomes the locator target's highlight.
  *
@@ -58,7 +62,12 @@ fun buildExcerpt(chunkText: String, segments: List<MappingSegment>, offsets: Str
   val target = resolveMatch(chunkText, segments, map.byteOf(first.first), map.byteOf(first.last + 1) - map.byteOf(first.first)) ?: return null
 
   val start = cutStart(chunkText, first.first - EXCERPT_BEFORE)
-  val end = cutEnd(chunkText, first.last + 1 + EXCERPT_AFTER)
+  var end = cutEnd(chunkText, first.last + 1 + EXCERPT_AFTER)
+  val beyond = hits.firstOrNull { it.first >= end }
+  if (beyond != null) {
+    val extended = cutEnd(chunkText, beyond.last + 1 + EXCERPT_AFTER)
+    if (extended - start <= MAX_EXCERPT) end = extended
+  }
   val spans = ArrayList<ExcerptSpan>()
   var at = start
   for (hit in hits) {
