@@ -2,6 +2,8 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.index.TextSearchFilters
+import com.quire.reader.data.index.TextStatusFilter
 import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.theme.ReaderTheme
 import java.time.LocalDate
@@ -59,6 +61,9 @@ data class UiState(
   val scope: Scope? = null,
   val query: String = "",
   val searchOpen: Boolean = false,
+  /** What the search field looks at; the text typed for [SearchScope.Text] is kept apart from [query]. */
+  val searchScope: SearchScope = SearchScope.Metadata,
+  val textLibraryQuery: String = "",
   val layout: LibLayout = LibLayout.Grid,
   val importOpen: Boolean = false,
 
@@ -73,6 +78,8 @@ data class UiState(
   val showZones: Boolean = false,
   val textSearchOpen: Boolean = false,
   val textQuery: String = "",
+  /** Set while the search overlay is in library-search mode ("Show all in this book"); [textQuery] is then not used. */
+  val bookSearch: BookSearchMode? = null,
   val brightness: Int = 100,
   /** Highlight whose actions (note, remove, copy) are showing after tapping it. */
   val activeHighlight: Long? = null,
@@ -131,4 +138,25 @@ fun visibleBooks(s: UiState, all: List<Book>): List<Book> {
     list = list.filter { (it.title + " " + it.author + " " + (it.series ?: "") + " " + it.tags.joinToString(" ")).lowercase().contains(q) }
   }
   return list
+}
+
+/**
+ * The library filters that narrow a text search: the same scope and status filter [visibleBooks] applies, without its
+ * metadata query. Like there, an active scope replaces the status filter.
+ */
+fun textFilters(s: UiState): TextSearchFilters = when (val scope = s.scope) {
+  null -> TextSearchFilters(
+    status = when (s.filter) {
+      LibFilter.All -> null
+      LibFilter.Reading -> TextStatusFilter.Reading
+      LibFilter.Unread -> TextStatusFilter.Unread
+      LibFilter.Finished -> TextStatusFilter.Finished
+      LibFilter.Recent -> TextStatusFilter.Recent
+    },
+  )
+  else -> when (scope.kind) {
+    ScopeKind.Author -> TextSearchFilters(author = scope.value)
+    ScopeKind.Series -> TextSearchFilters(series = scope.value)
+    ScopeKind.Tag -> TextSearchFilters(tag = scope.value)
+  }
 }

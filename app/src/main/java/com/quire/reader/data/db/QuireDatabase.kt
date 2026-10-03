@@ -4,10 +4,15 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-  entities = [FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class],
-  version = 1,
+  entities = [
+    FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
+    TextChunkEntity::class, TextChunkFts::class, IndexStateEntity::class,
+  ],
+  version = 2,
   exportSchema = false,
 )
 abstract class QuireDatabase : RoomDatabase() {
@@ -15,9 +20,51 @@ abstract class QuireDatabase : RoomDatabase() {
   abstract fun books(): BookDao
   abstract fun states(): StateDao
   abstract fun annotations(): AnnotationDao
+  abstract fun index(): IndexDao
+  abstract fun search(): SearchDao
 
   companion object {
-    fun create(context: Context): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, "quire.db").build()
+    private const val FTS_DELETE_TRIGGER_NAME = "room_fts_content_sync_text_chunk_fts_BEFORE_DELETE"
+
+    /** Keeps the full-text table in step when a chunk is deleted; the statement Room generates, see [MIGRATION_1_2]. */
+    const val FTS_DELETE_TRIGGER =
+      "CREATE TRIGGER IF NOT EXISTS $FTS_DELETE_TRIGGER_NAME BEFORE DELETE ON `text_chunk` BEGIN DELETE FROM `text_chunk_fts` WHERE `docid`=OLD.`rowid`; END"
+    const val DROP_FTS_DELETE_TRIGGER = "DROP TRIGGER IF EXISTS $FTS_DELETE_TRIGGER_NAME"
+
+    /**
+     * Adds the library text index. The statements are the ones Room generates for these entities, so its
+     * schema validation passes; the sync triggers are repeated here although Room also recreates them
+     * after every migration. Existing tables are not touched.
+     */
+    val MIGRATION_1_2: Migration = object : Migration(1, 2) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        listOf(
+          "CREATE TABLE IF NOT EXISTS `text_chunk` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `bookId` INTEGER NOT NULL, `seq` INTEGER NOT NULL, `chapter` TEXT NOT NULL, `href` TEXT NOT NULL, `tokenStart` INTEGER NOT NULL, `tokenEnd` INTEGER NOT NULL, `primaryEndByte` INTEGER NOT NULL, `text` TEXT NOT NULL, `mapping` TEXT NOT NULL, `progression` REAL NOT NULL, FOREIGN KEY(`bookId`) REFERENCES `book`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+          "CREATE UNIQUE INDEX IF NOT EXISTS `index_text_chunk_bookId_seq` ON `text_chunk` (`bookId`, `seq`)",
+          "CREATE VIRTUAL TABLE IF NOT EXISTS `text_chunk_fts` USING FTS4(`text` TEXT NOT NULL, tokenize=unicode61, content=`text_chunk`)",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_text_chunk_fts_BEFORE_UPDATE BEFORE UPDATE ON `text_chunk` BEGIN DELETE FROM `text_chunk_fts` WHERE `docid`=OLD.`rowid`; END",
+          FTS_DELETE_TRIGGER,
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_text_chunk_fts_AFTER_UPDATE AFTER UPDATE ON `text_chunk` BEGIN INSERT INTO `text_chunk_fts`(`docid`, `text`) VALUES (NEW.`rowid`, NEW.`text`); END",
+          "CREATE TRIGGER IF NOT EXISTS room_fts_content_sync_text_chunk_fts_AFTER_INSERT AFTER INSERT ON `text_chunk` BEGIN INSERT INTO `text_chunk_fts`(`docid`, `text`) VALUES (NEW.`rowid`, NEW.`text`); END",
+          "CREATE TABLE IF NOT EXISTS `index_state` (`bookId` INTEGER NOT NULL, `mtime` INTEGER NOT NULL, `sizeBytes` INTEGER NOT NULL, `status` TEXT NOT NULL, `completedAt` INTEGER NOT NULL, `chunkCount` INTEGER NOT NULL, `textBytes` INTEGER NOT NULL, `truncated` INTEGER NOT NULL, PRIMARY KEY(`bookId`), FOREIGN KEY(`bookId`) REFERENCES `book`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        ).forEach(db::execSQL)
+      }
+    }
+
+    /**
+     * Read-only view of the full-text index's terms with their document counts, for judging how common a word prefix is
+     * before searching for it (see `TextSearcher`). It holds no data of its own and is not a Room entity, so it is created
+     * whenever the database opens, which covers new installs and the 1 -> 2 migration alike.
+     */
+    const val FTS_TERMS_TABLE = "text_chunk_fts_terms"
+    private const val CREATE_FTS_TERMS = "CREATE VIRTUAL TABLE IF NOT EXISTS `$FTS_TERMS_TABLE` USING fts4aux(`text_chunk_fts`)"
+
+    const val FILE_NAME = "quire.db"
+
+    /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
+    fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2)
+        .addCallback(object : Callback() { override fun onOpen(db: SupportSQLiteDatabase) = db.execSQL(CREATE_FTS_TERMS) })
+        .build()
   }
 }

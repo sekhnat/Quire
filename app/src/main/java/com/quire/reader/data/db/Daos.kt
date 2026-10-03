@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
@@ -57,19 +58,22 @@ interface FolderDao {
   @Query("UPDATE folder SET lastScanAt = :at WHERE id = :id") suspend fun markScanned(id: Long, at: Long)
 }
 
-@Dao
-abstract class BookDao {
-  @Query(
-    """
+/** The columns and joins of a [BookRow]; append a WHERE clause to narrow it. */
+private const val BOOK_ROWS_SQL = """
     SELECT b.id, b.path, b.folderId, b.title, b.sortTitle, b.author, b.primaryAuthor, b.authorSort, b.series, b.seriesIndex,
            b.pubYear, b.language, b.description, b.calibreRating, s.userRating AS userRating, b.sizeBytes, b.addedAt,
            b.pageEstimate, b.coverPath, b.source, b.readable, s.progress AS progress, s.status AS status,
            s.lastOpenedAt AS lastOpenedAt,
            (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
     FROM book b LEFT JOIN book_state s ON s.bookId = b.id
-    """,
-  )
+    """
+
+@Dao
+abstract class BookDao {
+  @Query(BOOK_ROWS_SQL)
   abstract fun observeAll(): Flow<List<BookRow>>
+
+  @Query("$BOOK_ROWS_SQL WHERE b.id IN (:ids)") abstract suspend fun rowsByIds(ids: List<Long>): List<BookRow>
 
   @Query("SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath FROM book") abstract suspend fun knownFiles(): List<KnownFile>
   @Query("SELECT * FROM book WHERE id = :id") abstract suspend fun byId(id: Long): BookEntity?
@@ -125,4 +129,96 @@ interface AnnotationDao {
   @Insert suspend fun addHighlight(h: HighlightEntity): Long
   @Query("DELETE FROM highlight WHERE id = :id") suspend fun deleteHighlight(id: Long)
   @Query("UPDATE highlight SET note = :note WHERE id = :id") suspend fun setHighlightNote(id: Long, note: String?)
+}
+
+/** A book that still needs indexing, with the file signature to index against. */
+data class EligibleBook(val id: Long, val path: String, val mtime: Long, val sizeBytes: Long)
+
+/**
+ * How much of the library is searchable. Every count covers readable books only, and `searchable`, `failed`
+ * and `skipped` count a book only while its index state still matches the book's current signature.
+ */
+data class IndexCoverage(val eligible: Int, val searchable: Int, val failed: Int, val skipped: Int, val truncated: Int)
+
+@Dao
+abstract class IndexDao(private val database: RoomDatabase) {
+  /** Readable books with no index state, or whose file changed since it was indexed; newest first. */
+  @Query(
+    """
+    SELECT b.id AS id, b.path AS path, b.mtime AS mtime, b.sizeBytes AS sizeBytes
+    FROM book b LEFT JOIN index_state s ON s.bookId = b.id
+    WHERE b.readable = 1 AND (s.bookId IS NULL OR s.mtime != b.mtime OR s.sizeBytes != b.sizeBytes)
+    ORDER BY b.addedAt DESC, b.id DESC
+    """,
+  )
+  abstract suspend fun eligibleBooks(): List<EligibleBook>
+
+  @Query(
+    """
+    SELECT COUNT(*) AS eligible,
+           COALESCE(SUM(s.status = 'done'), 0) AS searchable,
+           COALESCE(SUM(s.status = 'failed'), 0) AS failed,
+           COALESCE(SUM(s.status = 'skipped'), 0) AS skipped,
+           COALESCE(SUM(s.status = 'done' AND s.truncated = 1), 0) AS truncated
+    FROM book b LEFT JOIN index_state s ON s.bookId = b.id AND s.mtime = b.mtime AND s.sizeBytes = b.sizeBytes
+    WHERE b.readable = 1
+    """,
+  )
+  abstract fun observeCoverage(): Flow<IndexCoverage>
+
+  /** Chunk text bytes persisted across all books, including state kept for books whose file has since changed. */
+  @Query("SELECT COALESCE(SUM(textBytes), 0) FROM index_state") abstract fun observeTextBytes(): Flow<Long>
+
+  @Query("SELECT COUNT(*) FROM book WHERE id = :bookId AND mtime = :mtime AND sizeBytes = :sizeBytes")
+  protected abstract suspend fun matchingBooks(bookId: Long, mtime: Long, sizeBytes: Long): Int
+  @Query("DELETE FROM text_chunk WHERE bookId = :bookId") protected abstract suspend fun deleteChunks(bookId: Long)
+  @Insert protected abstract suspend fun insertChunks(chunks: List<TextChunkEntity>)
+  @Insert(onConflict = OnConflictStrategy.REPLACE) protected abstract suspend fun putState(state: IndexStateEntity)
+  @Query("DELETE FROM text_chunk") protected abstract suspend fun deleteAllChunks()
+  @Query("DELETE FROM index_state") protected abstract suspend fun deleteAllStates()
+
+  /**
+   * Swaps a book's chunks for freshly extracted ones and records [state], all in one transaction, so readers
+   * see either the previous index or the new one and a failure part-way leaves the previous one untouched.
+   * Returns false, writing nothing, when the book was removed or its file no longer has the signature
+   * ([mtime], [sizeBytes]) the text was extracted from.
+   */
+  @Transaction
+  open suspend fun replaceBook(bookId: Long, mtime: Long, sizeBytes: Long, chunks: List<TextChunkEntity>, state: IndexStateEntity): Boolean {
+    require(state.bookId == bookId && state.mtime == mtime && state.sizeBytes == sizeBytes) { "state does not describe the book signature" }
+    require(chunks.all { it.bookId == bookId }) { "chunk belongs to another book" }
+    if (matchingBooks(bookId, mtime, sizeBytes) == 0) return false
+    deleteChunks(bookId)
+    insertChunks(chunks)
+    putState(state)
+    return true
+  }
+
+  /** Records a `failed` or `skipped` outcome for the signature and drops the book's obsolete chunks; false if the book is gone or changed. */
+  @Transaction
+  open suspend fun markTerminal(bookId: Long, mtime: Long, sizeBytes: Long, status: String, completedAt: Long = System.currentTimeMillis()): Boolean {
+    require(status == IndexStateEntity.STATUS_FAILED || status == IndexStateEntity.STATUS_SKIPPED) { "not a chunk-less terminal status: $status" }
+    if (matchingBooks(bookId, mtime, sizeBytes) == 0) return false
+    deleteChunks(bookId)
+    putState(IndexStateEntity(bookId, mtime, sizeBytes, status, completedAt))
+    return true
+  }
+
+  /**
+   * Forgets every indexing decision and all indexed text; the books themselves are untouched.
+   *
+   * Deleting the chunks row by row would fire the full-text delete trigger for each one, which measured about 130 µs a
+   * row on the emulator (19 s for 150,000 chunks, with the write lock held throughout). Instead the trigger is dropped
+   * for the bulk delete and the full-text index is then rebuilt from the now empty `text_chunk`, which empties it. All of
+   * it is one transaction, so a failure part-way leaves the trigger and the old index in place.
+   */
+  @Transaction
+  open suspend fun clearAll() {
+    val sql = database.openHelper.writableDatabase
+    sql.execSQL(QuireDatabase.DROP_FTS_DELETE_TRIGGER)
+    deleteAllChunks()
+    sql.execSQL("INSERT INTO `text_chunk_fts`(`text_chunk_fts`) VALUES('rebuild')")
+    sql.execSQL(QuireDatabase.FTS_DELETE_TRIGGER)
+    deleteAllStates()
+  }
 }

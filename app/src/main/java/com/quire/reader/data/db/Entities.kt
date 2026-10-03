@@ -1,6 +1,9 @@
 package com.quire.reader.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Fts4
+import androidx.room.FtsOptions
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -126,3 +129,66 @@ data class HighlightEntity(
   val progress: Float,
   val createdAt: Long,
 )
+
+/**
+ * One searchable passage of a book's text. [text] is the primary passage followed by up to 63 tokens of
+ * the text after it (so phrases that straddle a chunk boundary still match); [primaryEndByte] is the
+ * UTF-8 length of the primary part, which decides which chunk owns a match.
+ */
+@Entity(
+  tableName = "text_chunk",
+  indices = [Index(value = ["bookId", "seq"], unique = true)],
+  foreignKeys = [ForeignKey(BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"], onDelete = ForeignKey.CASCADE)],
+)
+data class TextChunkEntity(
+  @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val bookId: Long,
+  /** Position of the chunk within the book, 0-based. */
+  val seq: Int,
+  val chapter: String,
+  /** EPUB resource this chunk was read from. */
+  val href: String,
+  /** Canonical source token range of the primary part (not the repeated context). */
+  val tokenStart: Int,
+  val tokenEnd: Int,
+  val primaryEndByte: Int,
+  val text: String,
+  /** JSON associating UTF-8 ranges of [text] with their source elements' locators and text ranges. */
+  val mapping: String,
+  /** Nearest known progression through the publication, 0..1. */
+  val progression: Double,
+)
+
+/** Full-text index over [TextChunkEntity.text]; Room keeps it in step with `text_chunk` through triggers. */
+@Fts4(contentEntity = TextChunkEntity::class, tokenizer = FtsOptions.TOKENIZER_UNICODE61)
+@Entity(tableName = "text_chunk_fts")
+data class TextChunkFts(
+  @PrimaryKey @ColumnInfo(name = "rowid") val rowId: Long,
+  val text: String,
+)
+
+/** The outcome of indexing a book, tied to the file signature (`mtime`, `sizeBytes`) it was attempted against. */
+@Entity(
+  tableName = "index_state",
+  foreignKeys = [ForeignKey(BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"], onDelete = ForeignKey.CASCADE)],
+)
+data class IndexStateEntity(
+  @PrimaryKey val bookId: Long,
+  val mtime: Long,
+  val sizeBytes: Long,
+  val status: String,
+  val completedAt: Long,
+  val chunkCount: Int = 0,
+  /** UTF-8 bytes of chunk text persisted for the book. */
+  val textBytes: Long = 0,
+  /** True when the per-book size cap stopped indexing before the end of the book. */
+  val truncated: Boolean = false,
+) {
+  companion object {
+    const val STATUS_DONE = "done"
+    /** The publication could not be opened or is DRM-protected. */
+    const val STATUS_FAILED = "failed"
+    /** The publication opened but has no extractable text. */
+    const val STATUS_SKIPPED = "skipped"
+  }
+}
