@@ -73,6 +73,10 @@ class LibraryIndexerTest : DbTestCase() {
     assertEquals(1, f.db.hits("knightley").size)
     val chapters = f.db.openHelper.writableDatabase.rows("SELECT chapter FROM text_chunk WHERE bookId = ? ORDER BY seq", book.id).map { it[0] }
     assertEquals(listOf("Volume One", "Volume Two"), chapters)
+    val mappings = f.db.chunkMappings(book.id)
+    assertTrue(mappings.isNotEmpty())
+    assertTrue(mappings.none { it.contains("cssSelector") })
+    assertTrue(mappings.all { it.contains("href") })
     assertEquals(emptyList<Any>(), f.db.index().eligibleBooks())
   }
 
