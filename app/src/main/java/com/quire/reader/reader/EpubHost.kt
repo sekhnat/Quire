@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.core.net.toUri
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -78,64 +79,69 @@ fun EpubHost(
     }
   }
 
-  AndroidView(
-    modifier = modifier,
-    factory = { ctx -> FrameLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) } },
-    update = { container ->
-      val fm = activity.supportFragmentManager
-      if (fm.findFragmentByTag(tag) == null) {
-        val factory = EpubNavigatorFactory(session.publication)
-        fm.fragmentFactory = factory.createFragmentFactory(
-          initialLocator = session.current.value,
-          initialPreferences = preferences,
-          listener = object : EpubNavigatorFragment.Listener {
-            override fun onExternalLinkActivated(url: AbsoluteUrl) {
-              runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, url.toString().toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-            }
-          },
-          configuration = EpubNavigatorFragment.Configuration {
-            selectionActionModeCallback = SelectionMenu { selection(it) }
-            // Chapter changes come from the vertical scroll column; sideways swipes
-            // must not turn pages.
-            disablePageTurnsWhileScrolling = true
-            servedAssets = listOf("fonts/.*")
-            decorationTemplates = HtmlDecorationTemplates.defaultTemplates()
-            ReaderFontList.forEach { font ->
-              addFontFamilyDeclaration(FontFamily(font.name)) {
-                font.files.forEach { file ->
-                  addFontFace {
-                    addSource(file.asset)
-                    setFontStyle(if (file.italic) FontStyle.ITALIC else FontStyle.NORMAL)
-                    setFontWeight(file.weights)
+  // The container's id and the fragment's tag belong to this session, but AndroidView builds its view only once per place in
+  // the tree. When one session replaces another with no composition in between (the activity was stopped, a frame was
+  // missed) the old view, still carrying the old id, would be reused and the new fragment would have no container to attach to.
+  key(session) {
+    AndroidView(
+      modifier = modifier,
+      factory = { ctx -> FrameLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) } },
+      update = { container ->
+        val fm = activity.supportFragmentManager
+        if (fm.findFragmentByTag(tag) == null) {
+          val factory = EpubNavigatorFactory(session.publication)
+          fm.fragmentFactory = factory.createFragmentFactory(
+            initialLocator = session.current.value,
+            initialPreferences = preferences,
+            listener = object : EpubNavigatorFragment.Listener {
+              override fun onExternalLinkActivated(url: AbsoluteUrl) {
+                runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, url.toString().toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+              }
+            },
+            configuration = EpubNavigatorFragment.Configuration {
+              selectionActionModeCallback = SelectionMenu { selection(it) }
+              // Chapter changes come from the vertical scroll column; sideways swipes
+              // must not turn pages.
+              disablePageTurnsWhileScrolling = true
+              servedAssets = listOf("fonts/.*")
+              decorationTemplates = HtmlDecorationTemplates.defaultTemplates()
+              ReaderFontList.forEach { font ->
+                addFontFamilyDeclaration(FontFamily(font.name)) {
+                  font.files.forEach { file ->
+                    addFontFace {
+                      addSource(file.asset)
+                      setFontStyle(if (file.italic) FontStyle.ITALIC else FontStyle.NORMAL)
+                      setFontWeight(file.weights)
+                    }
                   }
                 }
               }
+            },
+          )
+          fm.commitNow(allowStateLoss = true) { add(containerId, EpubNavigatorFragment::class.java, null, tag) }
+          val nav = fm.findFragmentByTag(tag) as EpubNavigatorFragment
+          nav.addInputListener(object : InputListener {
+            override fun onTap(event: TapEvent): Boolean {
+              val w = container.width.takeIf { it > 0 } ?: return false
+              tap(event.point.x / w)
+              return true
             }
-          },
-        )
-        fm.commitNow(allowStateLoss = true) { add(containerId, EpubNavigatorFragment::class.java, null, tag) }
-        val nav = fm.findFragmentByTag(tag) as EpubNavigatorFragment
-        nav.addInputListener(object : InputListener {
-          override fun onTap(event: TapEvent): Boolean {
-            val w = container.width.takeIf { it > 0 } ?: return false
-            tap(event.point.x / w)
-            return true
-          }
-        })
-        nav.addDecorationListener(ReaderSession.HIGHLIGHTS, object : DecorableNavigator.Listener {
-          override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
-            val id = (event.decoration.extras["id"] as? Number)?.toLong() ?: return false
-            tapped(id)
-            return true
-          }
-        })
-        session.attach(nav)
-        session.scope.launch { nav.currentLocator.collect { session.onLocator(it) } }
-        lastPrefs[0] = preferences
-      } else if (lastPrefs[0] != preferences) {
-        (fm.findFragmentByTag(tag) as? EpubNavigatorFragment)?.submitPreferences(preferences)
-        lastPrefs[0] = preferences
-      }
-    },
-  )
+          })
+          nav.addDecorationListener(ReaderSession.HIGHLIGHTS, object : DecorableNavigator.Listener {
+            override fun onDecorationActivated(event: DecorableNavigator.OnActivatedEvent): Boolean {
+              val id = (event.decoration.extras["id"] as? Number)?.toLong() ?: return false
+              tapped(id)
+              return true
+            }
+          })
+          session.attach(nav)
+          session.scope.launch { nav.currentLocator.collect { session.onLocator(it) } }
+          lastPrefs[0] = preferences
+        } else if (lastPrefs[0] != preferences) {
+          (fm.findFragmentByTag(tag) as? EpubNavigatorFragment)?.submitPreferences(preferences)
+          lastPrefs[0] = preferences
+        }
+      },
+    )
+  }
 }

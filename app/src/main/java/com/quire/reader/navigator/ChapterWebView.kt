@@ -235,6 +235,25 @@ internal class ChapterWebView(
   }
 
   /**
+   * Vertical offset of the first decoration in [group] from the top of this chapter's content, in device px (the stack's unit).
+   * Null when the group has no decoration here.
+   */
+  suspend fun offsetTopForDecoration(group: String): Int? {
+    val script =
+      "(function () {" +
+        " var items = window.readium.getDecorations(${JSONObject.quote(group)}).items;" +
+        " if (!items.length) return null;" +
+        " return { top: items[0].range.getBoundingClientRect().top + window.pageYOffset, dpr: window.devicePixelRatio }; })()"
+    val json = runJavaScriptSuspend(script).takeIf { it != "null" } ?: return null
+    return runCatching {
+      val obj = JSONObject(json)
+      val top = obj.getDouble("top")
+      val dpr = obj.getDouble("dpr").takeIf { it > 0 } ?: resources.displayMetrics.density.toDouble()
+      (top * dpr).roundToInt()
+    }.getOrNull()
+  }
+
+  /**
    * Vertical offset of the element with [htmlId] from the top of this chapter's
    * content, in Android px. Null when the element doesn't exist.
    */

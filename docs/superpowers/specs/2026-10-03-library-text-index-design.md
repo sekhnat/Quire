@@ -11,7 +11,7 @@ Out of scope: remote search, uploads, OCR for image-only books, DRM removal, dep
 ### Success criteria
 
 - Newly scanned or imported books become searchable without indexing unchanged books again.
-- Queries use the index rather than opening EPUBs. Measured database query latency targets less than 100 ms on the 1,500-book fixture, excluding the input debounce.
+- Queries use the index rather than opening EPUBs. Measured database query latency targets less than 100 ms on the 1,500-book fixture, excluding the input debounce. Very common queries meet this only through the counting cap (see Query semantics); cold first runs of mid-frequency queries may exceed it and are reported with cold/warm conditions identified.
 - Results identify the book, chapter, and matching text. Selecting a snippet navigates to the corresponding source text and underlines it.
 - Deleted and changed books do not expose obsolete results. Existing metadata, collections, settings, and saved reading positions survive the database migration.
 - Indexing survives process interruption, respects its settings, and pauses while a reader session is opening or open.
@@ -68,6 +68,8 @@ Validate on Android SQLite using a file-backed v1 database populated with books 
 
 Use Readium's experimental `publication.content()` iterator, with the required API opt-in. Extract original text from paragraphs/headings and carry their locators into the chunker. No custom HTML stripping is the primary implementation.
 
+Phase 0 found that Readium 3.3.0 yields every element with a body role and exactly one segment, so heading starts are detected from the element locator's `cssSelector` (`h1`–`h6`), and chapter labels come from the table of contents. `Content.Iterator` has no `close()`; the publication is what must be closed. Element text is whitespace-normalised while `locator.text.highlight` is raw DOM text, so `Locator.Text` is built from stored raw text.
+
 `TextChunker` is a pure transformation from source elements and their mapping metadata to chunks. Target primary chunks of roughly 600–900 Unicode characters, merging adjacent small elements. Headings start a new primary chunk; a long element may span multiple chunks while preserving its source ranges. Do not split an indexed token solely to meet the character target.
 
 A phrase must not disappear because its first token lies at the end of a primary chunk. Append up to 63 subsequent indexed tokens as searchable context, spanning as many following chunks/elements as necessary within the same EPUB resource. The query limit is 64 indexed tokens in total, so every supported consecutive phrase beginning in primary text can fit in that row. Do not manufacture a phrase across different EPUB resources. Case, punctuation, diacritics, and token boundaries follow the selected `unicode61` configuration; this is token phrase matching, not byte-for-byte punctuation matching.
@@ -89,11 +91,13 @@ Terminal outcomes:
 | Outcome | State and next action |
 |---|---|
 | Text indexed | `done`, with signature, count, and possible truncated flag |
-| Publication unreadable or DRM-protected | `failed`; retry only after signature change or rebuild |
+| Publication unreadable or DRM-protected | Books the scanner or a reader open attempt has marked unreadable (`readable=0`) are not eligible: they are never queued, have no index state, and are excluded from coverage counts. `failed` is recorded only when a book the scanner could read cannot be opened or iterated by the indexer; it is retried only after signature change or rebuild |
 | No extractable text | `skipped`; retry only after signature change or rebuild |
 | Reader pause, cancellation, or process interruption | Work remains eligible; no failed/skipped terminal write |
 | Storage permission unavailable | Queue blocked globally; request access rather than failing every book |
 | Book changed or disappeared during extraction | Discard extracted output; reconsider current book state |
+
+Known limits of the extraction source (found in verification): Readium swallows per-resource read errors, so a book with some unreadable chapters is indexed from whatever Readium yields and is recorded `done` (a book whose every chapter is unreadable becomes `skipped`, not `failed`); and a resource whose head contains a self-closing `<title/>` is parsed by Readium's HTML-mode jsoup with the whole body inside the title, so such a book is largely missing from the index while still recorded `done`. Neither is detected or surfaced as partial coverage; both are documented limitations, and custom extraction is the alternative to discuss if they matter.
 
 For each completed book, perform old-chunk deletion, new chunk insertion, and terminal-state update in one transaction. A terminal failed/skipped outcome also removes any obsolete chunks in its state-update transaction. Before publishing any terminal outcome, compare the signature read during extraction against both the current file and current database book record. Do not publish against an obsolete signature or recreate a removed book. Retain old rows until replacement commits, but search joins include only `done` states whose indexed signature matches the scanned book signature. A failed new attempt must never make old chunks appear current.
 
@@ -113,6 +117,7 @@ Disabling indexing cancels pending/in-flight work at the same serialization boun
 
 - Input shorter than two Unicode characters does not search. Punctuation-only input does not search.
 - Unquoted words are ANDed within a searchable passage. Only the final query segment supports prefix matching, and only when that segment is unquoted; all earlier terms are complete tokens. A query ending in a quoted phrase has no automatically prefixed term.
+- **Common-prefix guard (Phase 4 finding).** FTS4 merges the doclists of every term sharing a prefix before returning any row, so the counting cap cannot bound a prefix query (`the*` measured 217 ms warm on 505k chunks, `th*` 445 ms). Before running a library query whose final segment is a prefix, check that prefix's frequency with `fts4aux`. If it is too common, search the segment as the exact word instead and tell the user (“showing exact matches — keep typing for prefix matches”). The frequency is the number of chunks holding a term with that prefix, read from `fts4aux` (a view over the index, created when the database opens) page by page in term order, stopping once the threshold is passed; the threshold is tuned during scale verification. The result records the downgraded word so the UI can say so, even when the exact search finds nothing. The guard applies to library-wide queries; single-book paging may still use the prefix.
 - Closed quoted sequences are consecutive-token phrases, without automatic prefix expansion. Multiple phrases/terms are ANDed.
 - During typing, an unmatched opening quote treats the remainder as an unfinished phrase, safely and without an SQL exception; it becomes an ordinary complete phrase when closed.
 - Characters such as `-`, `:`, and `*` are not user-accessible FTS operators. FTS operator-looking words are treated as text. Quotes express phrases and must not all be stripped.
@@ -123,7 +128,11 @@ Use bound MATCH arguments. Debounce library text input by approximately 250 ms; 
 
 Apply active library collection/author/series/tag/status filters to text results, but do not additionally apply the metadata substring query to them. Metadata mode retains `visibleBooks()` semantics unchanged.
 
-`LibraryRepository.searchText` exposes reactive grouped results for the query and active filters. Each book result has current metadata, total canonical matching-passage count, coverage information, and mapped snippets. Rank by passage count descending, then recently opened descending, then book identity for a stable tie. Limit library results to 40 books; make the cap visible when more books match. Initially show up to three snippets per book, expandable to five, and provide “Show all in this book.” Counts describe matching passages, not occurrence totals.
+`LibraryRepository.searchText` exposes reactive grouped results for the query and active filters. Each book result has current metadata, a canonical matching-passage count, coverage information, and mapped snippets. Rank by passage count descending, then recently opened descending, then book identity for a stable tie. Limit library results to 40 books; make the cap visible when more books match. Initially show up to three snippets per book, expandable to five, and provide “Show all in this book.” Counts describe matching passages, not occurrence totals.
+
+**Counting cap (Phase 0 decision).** Ownership-correct counting uses `offsets()`, which Phase 0 measured at about 4.7 µs per matched row; exact library-wide counts for very common queries (`the`, `th*`, `"of the"`) took 16–27 s on 1.17M chunks. The grouped query therefore examines at most a fixed number of matching passages per query (initial value in the low thousands, tuned during scale verification against the 100 ms target). When the cap is reached, counts are shown as “N+”, the result list states that the query is very common, and the ranking is explicitly approximate. Rare and mid-frequency queries stay exact. The cap biases toward whichever passages the engine visits first; this bias is documented, not hidden. “Show all in this book” pages a single book with its own bounded query and is not affected by the library-wide cap.
+
+**Filters and common words.** Filters are applied inside the search so they never shrink the examined sample. A narrow filter (about 40 books or fewer) is searched book by book inside each book's chunk range, which is exact. A broad filter on a query with few matches is scanned in full. A broad filter on a common word cannot be scanned past the books it rejects (each rejected match costs about 6 µs), so the first few allowed books are searched individually, which fills the cap for a common word; if that does not fill it, the result is flagged incomplete (books may be missing) and an empty incomplete result is never presented as “no matches”.
 
 Use FTS4 `snippet()`/match offsets to produce structured highlighted excerpts. Render text and spans with `AnnotatedString`; never render snippet text as executable HTML. Database grouping/counts must not require opening publications or loading all chunk text into application memory.
 
@@ -133,7 +142,7 @@ A snippet target carries book identity, indexed file signature, source mapping/l
 
 Allow `read` to receive an initial target instead of the saved locator. Ordinary opening still restores the saved position. An explicit search target takes precedence only for that opening, and subsequent reading-position persistence follows the existing reader-close path.
 
-After navigator attachment, navigate to the exact locator and apply the match decoration using the existing `applySearchHits` mechanism. Navigation must expose an observable success/failure outcome instead of treating the current Unit-returning wrapper as evidence of arrival. Phase 0 must exercise unresolved targets and confirm that the outcome reflects actual resolution.
+After navigator attachment, navigate to the exact locator and apply the match decoration using the existing `applySearchHits` mechanism. Navigation must expose an observable success/failure outcome instead of treating the current Unit-returning wrapper as evidence of arrival. Phase 0 showed the vendored navigator's `go()` already returns a `Boolean` but returns `true` for absent text, so success is read from the applied decoration (`window.readium.getDecorations('search').items.length` via `evaluateJavascript`). `ReaderSession.go` becomes a suspending function that returns an outcome and runs the progression fallback. Open the book with the target as `initialLocator` (or wait for the first page load before `go()`) so the saved position and footer are not left stale.
 
 If an otherwise current target cannot resolve, navigate to the nearest stored publication progression and show that the exact passage was unavailable. Do not underline unrelated text at the fallback position or pretend exact navigation succeeded. A known file change instead takes the stale-result path above.
 
@@ -168,6 +177,8 @@ Only after the written spec and implementation plan are approved, use throwaway 
 3. Token accounting agrees with `unicode61` for punctuation, accents, non-ASCII text, and the 64-token limit. UTF-8 offsets map to original text and Compose spans correctly.
 4. A phrase at a chunk boundary is returned once. Test a phrase spanning source elements in one resource, not just a single-paragraph phrase split artificially.
 5. A derived target navigates to and underlines the exact text after navigator attachment. Verify a deliberately unresolved target and the progression fallback.
+
+**Outcome (2026-10-03):** gates 1–5 passed with caveats; gate 6 failed for very common queries and was resolved by the counting cap above. Evidence is in `docs/superpowers/specs/2026-10-03-library-text-index-phase0-results.md`, summarised in `PLAN_LIBRARY_TEXT_INDEX.md`. Other findings folded into this spec: the Kotlin tokenizer matched `unicode61` on about 468k tokens but differs on rare characters, so the 63-token context needs a small margin and no hard-coded Unicode table; prefix queries must be written `pre*` (never `"pre"*`); only tokenised, quoted words may enter MATCH; stored data is about 3.5× source text.
 
 Measure and record outcomes; remove throwaway scaffolding after the probe. A failed gate stops permanent index implementation and requires design revision. Custom resource/HTML extraction is a possible alternative to discuss if Readium fails, not an automatic unreviewed fallback.
 

@@ -37,6 +37,9 @@ object Nq {
 
   val scrim = Color(0xFF080910)
 
+  /** For actions that delete something. The design has no destructive color; this one is muted to sit with the palette. */
+  val danger = Color(0xFFE08A84)
+
   /** `color-mix(in srgb, accent N%, transparent)` */
   fun accentA(alpha: Float) = accent.copy(alpha = alpha)
   fun textA(alpha: Float) = text.copy(alpha = alpha)

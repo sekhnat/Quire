@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.Decoration
@@ -311,6 +312,44 @@ public class EpubNavigatorFragment internal constructor(
         val page = activeScriptRunner() ?: return null
         page.awaitLoaded()
         return page.runJavaScriptSuspend(script)
+    }
+
+    /**
+     * Evaluates the given JavaScript on the resource at [href] rather than the one being read, once it has loaded.
+     * Returns null while that resource is not (yet) one of the loaded ones.
+     */
+    public suspend fun evaluateJavascript(script: String, href: Url): String? {
+        val page = scriptRunnerFor(href) ?: return null
+        page.awaitLoaded()
+        return page.runJavaScriptSuspend(script)
+    }
+
+    /**
+     * In continuous scroll, scrolls the first decoration of [group] in the chapter at [href] into view. A locator
+     * jump there lands by progression (or element id), which can miss the quoted text by a page or two. Returns false
+     * when there is nothing to scroll to, and in paged mode, where a jump to a locator already scrolls to its text.
+     */
+    public suspend fun scrollToDecoration(group: String, href: Url): Boolean {
+        val stack = chapterStack ?: return false
+        val index = readingOrder.indexOfFirst { it.url().isEquivalent(href) }
+        if (index < 0) return false
+        // A jump still on its way would otherwise land after, and undo, this one.
+        withTimeoutOrNull(2_000) { while (pendingStackJump != null) delay(50) }
+        delay(150)
+        val chapter = stack.chapterAt(index) ?: return false
+        chapter.awaitLoaded()
+        val within = chapter.offsetTopForDecoration(group) ?: return false
+        stack.jumpToY(stack.chapterTop(index) + within - stack.height / 4)
+        return true
+    }
+
+    private fun scriptRunnerFor(href: Url): com.quire.reader.navigator.ScriptRunner? {
+        val stack = chapterStack
+        if (stack != null) {
+            val index = readingOrder.indexOfFirst { it.url().isEquivalent(href) }
+            return if (index < 0) null else stack.chapterAt(index)
+        }
+        return loadedFragmentForHref(href)
     }
 
     private val viewModel: EpubNavigatorViewModel by viewModels {

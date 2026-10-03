@@ -3,13 +3,18 @@ package com.quire.reader.reader
 import android.graphics.Color as AndroidColor
 import com.quire.reader.data.Book
 import com.quire.reader.data.db.HighlightEntity
+import com.quire.reader.data.index.IndexTarget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.SelectableNavigator
@@ -20,6 +25,7 @@ import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.publication.services.search.search
+import org.readium.r2.shared.util.Url
 import org.json.JSONObject
 
 /**
@@ -52,15 +58,15 @@ class ReaderSession(
   private val _current = MutableStateFlow(initialLocator ?: positions.firstOrNull())
   val current: StateFlow<Locator?> = _current
 
-  var navigator: EpubNavigatorFragment? = null
-    private set
+  private val navigatorFlow = MutableStateFlow<EpubNavigatorFragment?>(null)
+  val navigator: EpubNavigatorFragment? get() = navigatorFlow.value
 
   private val _toc = MutableStateFlow(flatten(publication.tableOfContents))
   val toc: List<TocEntry> get() = _toc.value
   val tocFlow: StateFlow<List<TocEntry>> = _toc
 
-  fun attach(nav: EpubNavigatorFragment) { navigator = nav }
-  fun detach() { navigator = null }
+  fun attach(nav: EpubNavigatorFragment) { navigatorFlow.value = nav }
+  fun detach() { navigatorFlow.value = null }
 
   fun onLocator(locator: Locator) { _current.value = locator }
 
@@ -129,6 +135,58 @@ class ReaderSession(
     go(positions[(p.coerceIn(0f, 1f) * (positions.size - 1)).toInt()])
   }
 
+  /**
+   * Jumps to a library-search [target] and underlines it. Waits for the navigator to attach and its page to load
+   * (jumping earlier leaves the position and footer stale), then reads the underline back from the page: the
+   * navigator's own `go` answers "true" even when the text is not there. If the passage cannot be found, moves to the
+   * target's nearest place in the book and leaves nothing underlined.
+   */
+  suspend fun goToTarget(target: IndexTarget): TargetOutcome {
+    val nav = awaitNavigator() ?: return TargetOutcome.NoNavigator
+    val locator = parseTargetLocator(target)
+    if (!awaitPageLoaded(nav, locator?.href?.removeFragment())) return TargetOutcome.NoNavigator
+    if (locator != null) {
+      nav.go(locator, animated = false)
+      applySearchHits(listOf(SearchHit(locator, "", target.highlight, "", chapterTitle(locator))))
+      if (awaitUnderline(nav, locator.href.removeFragment())) {
+        nav.scrollToDecoration(SEARCH, locator.href.removeFragment())
+        return TargetOutcome.Arrived
+      }
+      applySearchHits(emptyList())
+    }
+    goToProgress(target.progression.toFloat())
+    return TargetOutcome.Unresolved
+  }
+
+  private suspend fun awaitNavigator(): EpubNavigatorFragment? =
+    withTimeoutOrNull(NAVIGATOR_TIMEOUT_MS) { navigatorFlow.filterNotNull().first() }
+
+  /**
+   * True once a page has loaded and runs scripts: the one being read, or (in continuous scroll, where the reading
+   * position is not known until the first scroll) the one at [href], the target's chapter.
+   */
+  private suspend fun awaitPageLoaded(nav: EpubNavigatorFragment, href: Url?): Boolean = withTimeoutOrNull(NAVIGATOR_TIMEOUT_MS) {
+    while (true) {
+      if (probe { nav.evaluateJavascript("1") }) break
+      if (href != null && probe { nav.evaluateJavascript("1", href) }) break
+      delay(POLL_MS)
+    }
+    true
+  } == true
+
+  /** True once the page reports at least one underline in the search group, which only happens when the text was found. */
+  private suspend fun awaitUnderline(nav: EpubNavigatorFragment, href: Url): Boolean = withTimeoutOrNull(UNDERLINE_TIMEOUT_MS) {
+    while (underlineCount(nav, href) == 0) delay(POLL_MS)
+    true
+  } == true
+
+  /** Whether [script] answers within a moment: a page that exists but has not loaded makes it wait, and must not hold up the other. */
+  private suspend fun probe(script: suspend () -> String?): Boolean = runCatching { withTimeoutOrNull(PROBE_TIMEOUT_MS) { script() } }.getOrNull() != null
+
+  /** Underlines in the search group on the resource at [href], read from its page. */
+  private suspend fun underlineCount(nav: EpubNavigatorFragment, href: Url): Int =
+    runCatching { withTimeoutOrNull(UNDERLINE_TIMEOUT_MS) { nav.evaluateJavascript(UNDERLINE_COUNT_JS, href) } }.getOrNull()?.trim('"')?.toIntOrNull() ?: 0
+
   fun firstPage() = goToProgress(0f)
   fun lastPage() = goToProgress(1f)
 
@@ -171,7 +229,7 @@ class ReaderSession(
 
   fun close() {
     scope.cancel()
-    navigator = null
+    navigatorFlow.value = null
     publication.close()
   }
 
@@ -186,6 +244,11 @@ class ReaderSession(
     const val HIGHLIGHTS = "highlights"
     const val SEARCH = "search"
     const val MAX_HITS = 300
+    private const val NAVIGATOR_TIMEOUT_MS = 5_000L
+    private const val UNDERLINE_TIMEOUT_MS = 2_500L
+    private const val POLL_MS = 100L
+    private const val PROBE_TIMEOUT_MS = 300L
+    private const val UNDERLINE_COUNT_JS = "(function(){try{return window.readium.getDecorations('$SEARCH').items.length}catch(e){return 0}})()"
     const val MINUTES_PER_POSITION = Book.MINUTES_PER_PAGE
     private const val PROGRESSION_SLACK = 0.0005
     private const val CONTEXT_BEFORE = 60
@@ -213,6 +276,26 @@ class ReaderSession(
       val needles = listOf("id=\"$fragment\"", "id='$fragment'", "name=\"$fragment\"", "name='$fragment'")
       val at = needles.map { html.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: return null
       return at.toDouble() / html.length
+    }
+
+    /**
+     * Where to open the book for a search [target]: its locator, completed with the place it sits in the book so the
+     * footer and a quick close record a sensible position. Falls back to the nearest position if the locator is unreadable.
+     */
+    fun targetLocator(target: IndexTarget, positions: List<Locator>): Locator? {
+      val progression = target.progression.coerceIn(0.0, 1.0)
+      val near = positions.getOrNull((progression * (positions.size - 1)).toInt())
+      val locator = parseTargetLocator(target) ?: return near
+      return locator.copy(locations = locator.locations.copy(totalProgression = progression, position = near?.locations?.position))
+    }
+
+    /**
+     * A target's locator without its CSS selector. Readium looks for the text only inside the element the selector
+     * names, and a selector counted from the book's source can name the wrong element in the page (it did, by two
+     * paragraphs, in a Project Gutenberg book), which makes the passage unfindable. The quoted text finds it on its own.
+     */
+    private fun parseTargetLocator(target: IndexTarget): Locator? = parseLocator(target.locatorJson)?.let { l ->
+      l.copy(locations = l.locations.copy(otherLocations = l.locations.otherLocations - "cssSelector"))
     }
 
     fun parseLocator(json: String?): Locator? = json?.let { runCatching { Locator.fromJSON(JSONObject(it)) }.getOrNull() }
