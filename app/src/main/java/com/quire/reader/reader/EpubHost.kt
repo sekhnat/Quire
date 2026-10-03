@@ -4,8 +4,8 @@ import android.content.Intent
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
-import android.view.ViewGroup
 import android.view.View
+import android.widget.FrameLayout
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.core.net.toUri
@@ -20,10 +20,10 @@ import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commitNow
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.DecorableNavigator
-import org.readium.r2.navigator.epub.EpubNavigatorFactory
-import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.navigator.epub.EpubPreferences
-import org.readium.r2.navigator.epub.css.FontStyle
+import com.quire.reader.navigator.epub.EpubNavigatorFactory
+import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.navigator.epub.EpubPreferences
+import com.quire.reader.navigator.epub.css.FontStyle
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import org.readium.r2.navigator.input.InputListener
 import org.readium.r2.navigator.input.TapEvent
@@ -60,9 +60,6 @@ fun EpubHost(
   onTap: (xFraction: Float) -> Unit,
   onSelectionAction: (SelectionAction) -> Unit,
   onHighlightTapped: (id: Long) -> Unit,
-  /** In scroll mode, scrolling past the end/start of a chapter calls this (true = forward). */
-  continuousScroll: Boolean,
-  onEdgeScroll: (forward: Boolean) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val activity = LocalActivity.current as FragmentActivity
@@ -71,7 +68,6 @@ fun EpubHost(
   val tap by rememberUpdatedState(onTap)
   val selection by rememberUpdatedState(onSelectionAction)
   val tapped by rememberUpdatedState(onHighlightTapped)
-  val edge by rememberUpdatedState(onEdgeScroll)
   var lastPrefs = remember(session) { arrayOfNulls<EpubPreferences>(1) }
 
   DisposableEffect(session) {
@@ -84,10 +80,8 @@ fun EpubHost(
 
   AndroidView(
     modifier = modifier,
-    factory = { ctx -> EdgeScrollLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT) } },
+    factory = { ctx -> FrameLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) } },
     update = { container ->
-      container.continuous = continuousScroll
-      container.onEdgeScroll = { edge(it) }
       val fm = activity.supportFragmentManager
       if (fm.findFragmentByTag(tag) == null) {
         val factory = EpubNavigatorFactory(session.publication)
@@ -101,7 +95,8 @@ fun EpubHost(
           },
           configuration = EpubNavigatorFragment.Configuration {
             selectionActionModeCallback = SelectionMenu { selection(it) }
-            // Chapters change by scrolling (see EdgeScrollLayout), so accidental sideways swipes must not.
+            // Chapter changes come from the vertical scroll column; sideways swipes
+            // must not turn pages.
             disablePageTurnsWhileScrolling = true
             servedAssets = listOf("fonts/.*")
             decorationTemplates = HtmlDecorationTemplates.defaultTemplates()

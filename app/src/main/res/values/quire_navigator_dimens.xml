@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vertical padding applied to paged (non-scroll) EPUB pages. Same values as the
+     Readium navigator's readium_navigator_epub_vertical_padding, redeclared because
+     the vendored sources reference the app's own (non-transitive) R class. -->
+<resources>
+    <dimen name="quire_navigator_epub_vertical_padding">40dp</dimen>
+</resources>

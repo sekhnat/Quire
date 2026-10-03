@@ -5,7 +5,7 @@ import com.quire.reader.data.ReadMode
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
 import com.quire.reader.theme.ReaderTheme
-import org.readium.r2.navigator.epub.EpubPreferences
+import com.quire.reader.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.preferences.Color
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.TextAlign

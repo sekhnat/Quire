@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Layout for the vendored R2EpubPageFragment. Copied from Readium's
+     readium_navigator_viewpager_fragment_epub.xml (BSD-style licensed), with the
+     web view class pointing at Quire's vendored package and a FrameLayout root
+     instead of CoordinatorLayout (the container only needs to host one child). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:focusable="false"
+    android:orientation="vertical">
+
+    <com.quire.reader.navigator.R2WebView
+        android:id="@+id/webView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+</FrameLayout>

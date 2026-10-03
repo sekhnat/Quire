@@ -54,6 +54,13 @@ dependencies {
   implementation(libs.readium.streamer)
   implementation(libs.readium.navigator)
   implementation(libs.androidx.fragment.ktx)
+  // Compile-visible versions of runtime-scope transitive deps used by the vendored
+  // Readium navigator sources (com.quire.reader.navigator).
+  implementation(libs.timber)
+  implementation(libs.jsoup)
+  implementation(libs.androidx.webkit)
+  implementation(libs.androidx.constraintlayout)
+  implementation(libs.androidx.viewpager)
 
   // Persistence, background work, images
   implementation(libs.androidx.room.runtime)
