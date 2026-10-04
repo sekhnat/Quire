@@ -181,8 +181,10 @@ in `/sdcard/QuireVerify`, which was deleted afterwards.
   `--rerun`, same counts).
 - Lint: 0 errors, 45 warnings. The pre-change commit (9a4539e) has 44 warnings, all 44 of the same kinds; the single new
   one is a `LogNotTimber` for the `Log.i` that reports sparse resources (the same pattern as the 5 existing `Log` calls).
-- Full instrumented suite (`--init-script tools/dbtest-suffix.init.gradle connectedDebugAndroidTest`): **not re-run in
-  this pass**. It was green on the Task 5 code, and no production file changed after it.
+- Full instrumented suite (`--init-script tools/dbtest-suffix.init.gradle connectedDebugAndroidTest`): not run in the
+  first pass. After the reader fix (`ReadiumCss.kt` plus the move of `normalizeHtml`) it was re-run through the init
+  script: 93 tests, 0 failed, 4 skipped (`IndexWorkerTest`, expected under the `.dbtest` app), including the new
+  `ReadiumCssTest`. JVM tests were 218 passing and lint 45 warnings (unchanged).
 
 ### Outcomes in the database (`index_state`, schema v3)
 
@@ -202,8 +204,9 @@ sparse after normalisation, so there is no evidence yet of a second misparse cau
 
 ### Screenshots
 
-- `docs/screenshots/juliet-deep-match.png`: "Inside books" search for `ladybugs hug trees` finds *Juliet Takes a Breath*,
-  "27. I Was Reborn by the River", a passage that is chunk 440 of 469. Before the fix the whole book was one chunk.
+- `docs/screenshots/juliet-deep-match.png`: the reader after tapping the "Inside books" result for `ladybugs hug trees`
+  in *Juliet Takes a Breath* ("27. I Was Reborn by the River", chunk 440 of 469), with "ladybugs" underlined (replaced
+  in the re-check below; the first version showed the XML error page). Before the fix the whole book was one chunk.
 - `docs/screenshots/partly-unreadable-card.png`: search `Clarke`; the *She* card carries "Parts of this book couldn't be
   read, so some passages may be missing", and the header reads "7 of 7 books searchable · 1 partly indexed".
 - `docs/screenshots/coverage-partly-indexed.png`: Settings, Library search: "Searchable books · 1 partly indexed · 7 of 7".
@@ -217,10 +220,24 @@ sparse after normalisation, so there is no evidence yet of a second misparse cau
   caused by the search jump. The cause is the one described under Extraction: `ReadiumCss.injectHtml` read the language
   attributes through an HTML-mode jsoup parse, which swallowed the body behind `<title/>`, so `injectLang` added a second
   `xml:lang` to the real `<body xml:lang="EN-US">`. This predates the branch, and the fix (parsing `normalizeHtml(html)` for
-  the detection) was made here. Juliet's deep-match underline is **to be re-checked after the reader fix**; no result is
-  claimed yet. Reader-side files on this branch: the search sheet in `ui/reader/ReaderSheets.kt` changed (a note only),
-  and after this fix `navigator/epub/css/ReadiumCss.kt` changed (the one detection line). `normalizeHtml` now
-  lives in `reader/HtmlNormalizer.kt`.
+  the detection) was made here. Reader-side files on this branch: the search sheet in `ui/reader/ReaderSheets.kt`
+  changed (a note only), and after this fix `navigator/epub/css/ReadiumCss.kt` changed (the one detection line).
+  `normalizeHtml` now lives in `reader/HtmlNormalizer.kt`.
+- **Juliet, re-checked after the reader fix (2026-10-04, branch at ed460e9, build installed as `.dbtest`, database
+  cleared and rebuilt from scratch): the book opens and the deep match lands.** Database: *Juliet Takes a Breath*
+  `done`, 469 chunks, 0 unreadable resources. Opened directly (library, book, "Start reading"): the reader showed the
+  cover on page 1 of 150, and a swipe showed ordinary rendered text (page 2, the imprint page); no XML error page. Deep
+  match, phrase `ladybugs hug trees` (the start of chunk 440 of 469, chapter "27. I Was Reborn by the River"): the card
+  label read "27. I Was Reborn by the River"; tapping the snippet opened the reader at that paragraph with the first
+  matched word ("ladybugs", split across two lines as "la-dybugs") underlined and no "Exact passage unavailable" toast
+  in screenshots taken 1 s and 5 s after the tap. The footer showed "Page 136 of 150" at 1 s and "Page 141 of 150" at 5 s,
+  so the page counter takes a few seconds to settle after a jump (not investigated). Screenshot:
+  `docs/screenshots/juliet-deep-match.png`. Second phrase, from the last chunks: `nerdburger who always wrote` (the
+  start of chunk 466 of 469, "About the Author"): the reader opened on the right page and chapter (page 150 of 150, "About
+  the Author" heading and paragraph), no toast, but the only underline was the word "who" two sentences earlier in the
+  same paragraph ("proud of who they are"), not "nerdburger". The underline lands on the first occurrence of a matched
+  term in the passage, which is a common word here; that is the same first-matched-word behaviour as the *Girlfriend
+  Material* case below, and it is why a phrase whose first word is rare is the clearer check.
 - **Deep match in a book the reader can render: works.** Search `talking groups lab called they` finds *Girlfriend
   Material* chapter "1. Iz" (chunk 650 of 698); tapping the snippet opens the reader at page 271 of 295 on the right
   paragraph with the first matched word ("talking") underlined, no fallback toast.
@@ -248,3 +265,12 @@ is a 5-book sample; it does not re-measure the 1,500-book scale run.
 still lists `com.quire.reader` (and the `.dbtest` app, left installed); `/sdcard/Books` listed
 `Frankenstein (copy).epub`, `Pride and Prejudice.epub` and `Sea/Moby-Dick.epub` before and after, byte-for-byte the same
 sizes and dates. The baseline worktree was removed (`git worktree list` shows only `main` and `html-normalisation`).
+
+### Cleanup after the Juliet re-check
+
+Same rules as above, run on the same emulator. At the start and the end, `adb shell ls /sdcard/Books` listed
+`Frankenstein (copy).epub`, `Pride and Prejudice.epub` and `Sea` (`Sea/Moby-Dick.epub`, 814108 bytes, dated 2026-10-03
+00:56), unchanged. `adb shell pm list packages com.quire.reader` listed only `package:com.quire.reader` at the start,
+and `package:com.quire.reader.dbtest` plus `package:com.quire.reader` at the end: the user's app is untouched and the
+`.dbtest` build, installed for this check, was left installed. `adb shell rm -rf /sdcard/QuireVerify` was run
+(`ls` then reports "No such file or directory"); `/sdcard/ui.xml` was never created.
