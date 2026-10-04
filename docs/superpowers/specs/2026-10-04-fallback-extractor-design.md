@@ -9,8 +9,10 @@ the 1,500-book scale run it waited for is complete (`2026-10-04-library-text-ind
 Verification found two ways a book is recorded `done` and fully searchable while most of its text is missing:
 
 1. **`<title/>` in the head.** Readium's `HtmlResourceContentIterator` parses each resource with `Jsoup.parse` in HTML
-   mode, where `<title/>` is not self-closing, so the whole body becomes the title's text. One real Calibre book
-   (*Juliet Takes a Breath*, ~450 KB of text) produced a single 184-character chunk.
+   mode, where `<title/>` is not self-closing, so body text is swallowed into the title. jsoup 1.22.2 recovers in documents
+   of about 2 KB or less; in larger ones nearly all of it is lost. One real Calibre book (*Juliet Takes a Breath*, one
+   450 KB file) parses to a 436,017-character title and 184 characters of body text, and produced a single 184-character
+   chunk; with the tag repaired the same file has 1,691 paragraphs and 369,321 characters of body text.
 2. **Swallowed read errors.** Readium skips resources it cannot read. A book with 17 of 34 chapters corrupted was published
    `done` with 545 chunks (a clean copy gives 1,059). A book with every chapter corrupted becomes `skipped`, not `failed`.
 
