@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<!--
+  Quire's continuous-scroll book shell (openspec change eager-seamless-scroll).
+
+  One outer document, served on the effective publication origin through a reserved,
+  collision-checked route in WebViewServer. Every reading-order resource is a
+  same-origin, full-content-height iframe in publication order. The outer document
+  owns the only scrollable range; frames have no borders, margins, reader-added
+  separators, inner scrollbars or viewport-height minimums. Reader chrome and insets
+  are applied once around this surface.
+
+  The shell URL is internal: it never becomes a public locator. Frame URLs are the
+  served original publication resource URLs, so relative assets, fragment resolution,
+  CSS scope and duplicate IDs keep working exactly as in the windowed reader.
+-->
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<style>
+  html, body { margin: 0; padding: 0; }
+  body { background: transparent; }
+  iframe {
+    display: block;
+    width: 100%;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    /* No renderer-added chapter chrome, no viewport-height minimums, no
+       pagination-only breaks carried across the boundary. */
+  }
+</style>
+<script src="continuous-scroll.js"></script>
+</head>
+<body></body>
+</html>

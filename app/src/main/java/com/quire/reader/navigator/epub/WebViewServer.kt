@@ -56,12 +56,37 @@ internal class WebViewServer(
         const val PACKAGE_HOSTNAME = "readium_package"
         const val ASSETS_HOSTNAME = "readium_assets"
 
+        /** Reserved path of the continuous-scroll shell document, on the publication origin. */
+        const val SHELL_PATH = "/quire/continuous-scroll"
+        const val SHELL_SCRIPT_PATH = "/quire/continuous-scroll.js"
+
         val packageBaseHref = AbsoluteUrl("https://$PACKAGE_HOSTNAME/")!!
         val assetsBaseHref = AbsoluteUrl("https://$ASSETS_HOSTNAME/")!!
 
         fun assetUrl(path: String): Url? =
             Url.fromDecodedPath(path)?.let { assetsBaseHref.resolve(it) }
+
+        /**
+         * Test-only gate installed by instrumentation to hold a resource response (slow
+         * startup regression coverage). Null, and unused, in production.
+         */
+        @Volatile
+        var onInterceptResource: ((url: String, stream: java.io.InputStream) -> java.io.InputStream)? = null
     }
+
+    init {
+        // The shell route must not shadow a real publication resource; fail loudly at
+        // navigator construction instead of serving the wrong document while reading.
+        val shellHref = Url(SHELL_PATH.removePrefix("/"))!!
+        check(publication.get(shellHref) == null) {
+            "Publication already contains a resource at $SHELL_PATH; the continuous-scroll shell route would shadow it."
+        }
+    }
+
+    /** The URL the continuous-scroll shell document is served at, on the publication origin. */
+    fun shellUrl(): AbsoluteUrl? =
+        publication.baseUrl?.resolve(Url(SHELL_PATH)!!) as? AbsoluteUrl
+            ?: packageBaseHref.resolve(Url(SHELL_PATH)!!)
 
     /**
      * Gets the url the given [link] is being served at.
@@ -80,6 +105,9 @@ internal class WebViewServer(
     fun servedUrlToLink(url: AbsoluteUrl): Link? {
         val link = when (url.host) {
             PACKAGE_HOSTNAME -> {
+                // The reserved shell routes are internal surfaces, never publication
+                // resources: they must not resolve to a link (a locator).
+                if (url.path == SHELL_PATH || url.path == SHELL_SCRIPT_PATH) return null
                 val href = packageBaseHref.relativize(url)
                 publication.linkWithHref(href)
             }
@@ -106,6 +134,8 @@ internal class WebViewServer(
      *
      * https://readium_package/ serves the publication resources through its container.
      * https://readium_assets/ serves the application assets.
+     * The reserved continuous-scroll shell route is served from the app assets on the
+     * publication origin.
      */
     fun shouldInterceptRequest(request: WebResourceRequest, css: ReadiumCss): WebResourceResponse? {
         val path = request.url.path ?: return null
@@ -113,8 +143,16 @@ internal class WebViewServer(
         val requestUrl = request.url.toAbsoluteUrl() ?: return null
         val range = HttpHeaders(request.requestHeaders).range
 
-        return when (hostname) {
-            ASSETS_HOSTNAME -> {
+        return when {
+            hostname == PACKAGE_HOSTNAME && path == SHELL_PATH -> serveShell(
+                assetName = "quire/continuous-scroll.html",
+                mediaType = MediaType("text/html")!!,
+            )
+            hostname == PACKAGE_HOSTNAME && path == SHELL_SCRIPT_PATH -> serveShell(
+                assetName = "quire/continuous-scroll.js",
+                mediaType = MediaType("application/javascript")!!,
+            )
+            hostname == ASSETS_HOSTNAME -> {
                 if (isServedAsset(path.removePrefix("/"))) {
                     // Request is for a known asset.
                     assetsLoader.shouldInterceptRequest(request.url)
@@ -136,6 +174,18 @@ internal class WebViewServer(
                 )
             }
         }
+    }
+
+    /** Serves a shell asset from the app assets, on the publication origin. */
+    private fun serveShell(assetName: String, mediaType: MediaType): WebResourceResponse {
+        val resource = StringResource {
+            withContext(Dispatchers.IO) {
+                Try.success(
+                    application.assets.open(assetName).bufferedReader().use { it.readText() }
+                )
+            }
+        }
+        return serveResource(resource, null, mediaType)
     }
 
     /**
@@ -162,6 +212,14 @@ internal class WebViewServer(
             css = css
         )
     }
+
+    /**
+     * When the continuous surface is active, every reflowable HTML document is served
+     * with the scroll-only frame adapter in front of Readium's scripts, tagged with
+     * its original resource href.
+     */
+    @Volatile
+    var injectsScrollFrameAdapter: Boolean = false
 
     private fun servePublicationResourceWithHref(
         href: Url,
@@ -192,18 +250,20 @@ internal class WebViewServer(
                         mediaType = it,
                         css,
                         assetsBaseHref,
-                        disableSelectionWhenProtected
+                        disableSelectionWhenProtected,
+                        scrollFrameHref = href.takeIf { injectsScrollFrameAdapter },
                     )
                 }
         }
 
-        return serveResource(resource, range, mediaType)
+        return serveResource(resource, range, mediaType, href)
     }
 
     private fun serveResource(
         resource: Resource,
         range: HttpRange?,
         mediaType: MediaType?,
+        href: Url? = null,
     ): WebResourceResponse {
         val headers = mutableMapOf(
             "Accept-Ranges" to "bytes"
@@ -211,13 +271,17 @@ internal class WebViewServer(
 
         val stream = resource.asInputStream()
         if (range == null) {
+            val gated = onInterceptResource?.invoke(
+                href?.toString() ?: resource.sourceUrl.toString(),
+                stream,
+            ) ?: stream
             return WebResourceResponse(
                 mediaType?.toString(),
                 null,
                 200,
                 "OK",
                 headers,
-                stream
+                gated
             )
         } else { // Byte range request
             val length = stream.available()

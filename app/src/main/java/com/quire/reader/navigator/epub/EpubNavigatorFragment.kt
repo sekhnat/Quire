@@ -14,6 +14,7 @@
 package com.quire.reader.navigator.epub
 
 import android.graphics.PointF
+import android.util.Log
 import android.graphics.RectF
 import android.os.Bundle
 import android.util.LayoutDirection
@@ -43,6 +44,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -64,7 +66,6 @@ import com.quire.reader.navigator.R2WebView
 import com.quire.reader.navigator.RestorationNotSupportedException
 import org.readium.r2.navigator.SelectableNavigator
 import org.readium.r2.navigator.Selection
-import com.quire.reader.navigator.ChapterWebView
 import com.quire.reader.navigator.dummyPublication
 import com.quire.reader.navigator.extensions.htmlId
 import com.quire.reader.navigator.epub.EpubNavigatorViewModel.RunScriptCommand
@@ -79,6 +80,8 @@ import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import com.quire.reader.navigator.input.CompositeInputListener
 import org.readium.r2.navigator.input.DragEvent
 import org.readium.r2.navigator.input.InputListener
+import org.readium.r2.navigator.input.InputModifier
+import org.readium.r2.navigator.input.Key
 import org.readium.r2.navigator.input.KeyEvent
 import com.quire.reader.navigator.input.KeyInterceptorView
 import org.readium.r2.navigator.input.TapEvent
@@ -90,6 +93,7 @@ import org.readium.r2.navigator.preferences.Configurable
 import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.preferences.ReadingProgression
 import org.readium.r2.navigator.util.createFragmentFactory
+import org.readium.r2.shared.extensions.optNullableString
 import org.readium.r2.shared.DelicateReadiumApi
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
@@ -293,6 +297,32 @@ public class EpubNavigatorFragment internal constructor(
         data object Ready : State()
     }
 
+    /** Whole-book preparation state of the navigator. */
+    public sealed interface Readiness {
+        public data object Preparing : Readiness
+        public data object Ready : Readiness
+        public data class Failed(val error: String) : Readiness
+    }
+
+    private val _readiness = MutableStateFlow<Readiness>(Readiness.Preparing)
+
+    /** Current whole-book readiness: ready only once the entire book is prepared. */
+    public val readiness: StateFlow<Readiness> get() = _readiness
+
+    /**
+     * Waits until the whole book is prepared for reading. In scroll mode this is the
+     * eager continuous surface's readiness barrier (no deadline: whole-book preparation
+     * legitimately exceeds the old five-second page wait); in paged and fixed modes
+     * the first loaded page readies the navigator. False on failure or disposal.
+     */
+    public suspend fun awaitWholeBookReadiness(): Boolean =
+        readiness.first { it !is Readiness.Preparing } is Readiness.Ready
+
+    /** Publishes [new] as the whole-book readiness unless the navigator is gone. */
+    private fun publishReadiness(new: Readiness) {
+        _readiness.value = new
+    }
+
     private var state: State = State.Initializing
 
     // Configurable
@@ -325,34 +355,43 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     /**
+     * The URL the given original publication href is served at, for tests and tools that must
+     * address a resource the way the WebView does. The href may be the manifest spelling
+     * (`OEBPS/c1.xhtml`) or the file name (`c1.xhtml`); null when it is not in the manifest.
+     */
+    public fun servedUrlFor(href: Url): Url? {
+        val clean = href.removeFragment().toString()
+        val link = readingOrder.firstOrNull {
+            val candidate = it.url().removeFragment().toString()
+            candidate == clean || candidate.endsWith("/$clean")
+        } ?: return null
+        val served = viewModel.urlTo(link).toString()
+        return Url(served.removeSuffix("/"))?.removeFragment()
+    }
+
+    /**
      * In continuous scroll, scrolls the first decoration of [group] in the chapter at [href] into view. A locator
      * jump there lands by progression (or element id), which can miss the quoted text by a page or two. Returns false
      * when there is nothing to scroll to, and in paged mode, where a jump to a locator already scrolls to its text.
      */
     public suspend fun scrollToDecoration(group: String, href: Url): Boolean {
-        val stack = chapterStack ?: return false
-        val index = readingOrder.indexOfFirst { it.url().isEquivalent(href) }
-        if (index < 0) return false
-        // A jump still on its way would otherwise land after, and undo, this one.
-        withTimeoutOrNull(2_000) { while (pendingStackJump != null) delay(50) }
-        delay(150)
-        val chapter = stack.chapterAt(index) ?: return false
-        chapter.awaitLoaded()
-        val within = chapter.offsetTopForDecoration(group) ?: return false
-        stack.jumpToY(stack.chapterTop(index) + within - stack.height / 4)
-        return true
+        val book = continuousBook ?: return false
+        return book.scrollToDecoration(group, href)
     }
 
     private fun scriptRunnerFor(href: Url): com.quire.reader.navigator.ScriptRunner? {
-        val stack = chapterStack
-        if (stack != null) {
-            val index = readingOrder.indexOfFirst { it.url().isEquivalent(href) }
-            return if (index < 0) null else stack.chapterAt(index)
+        continuousBook?.let { book ->
+            // Accept either the original href or a served URL: canonicalize through the
+            // server mapping so tests/tools can address a resource the way a WebView does.
+            val original = AbsoluteUrl(href.toString())
+                ?.let { viewModel.server.servedUrlToLink(it)?.url()?.removeFragment() }
+                ?: href
+            return book.runnerFor(original)
         }
         return loadedFragmentForHref(href)
     }
 
-    private val viewModel: EpubNavigatorViewModel by viewModels {
+    internal val viewModel: EpubNavigatorViewModel by viewModels {
         EpubNavigatorViewModel.createFactory(
             requireActivity().application,
             publication,
@@ -364,7 +403,95 @@ public class EpubNavigatorFragment internal constructor(
         )
     }
 
-    private val readingOrder: List<Link> = readingOrder ?: publication.readingOrder
+    internal val readingOrder: List<Link> = readingOrder ?: publication.readingOrder
+
+    /** The continuous-scroll surface's host, wired to this fragment's view model. */
+    internal val bookHost: ContinuousBookWebView.Host by lazy {
+        object : ContinuousBookWebView.Host {
+            override val publication: Publication get() = this@EpubNavigatorFragment.publication
+
+            override val backgroundColor: Int
+                get() = viewModel.settings.value.effectiveBackgroundColor
+
+            override val selectionActionModeCallback: ActionMode.Callback?
+                get() = config.selectionActionModeCallback
+
+            override fun shellUrl(): AbsoluteUrl =
+                checkNotNull(viewModel.server.shellUrl()) { "No publication origin for the scroll shell" }
+
+            override fun urlTo(link: Link): AbsoluteUrl = viewModel.urlTo(link)
+
+            override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? =
+                viewModel.shouldInterceptRequest(request)
+
+            override fun shouldOverrideUrlLoading(request: WebResourceRequest): Boolean {
+                val url = request.url.toAbsoluteUrl() ?: return false
+                viewModel.navigateToUrl(url)
+                return true
+            }
+
+            override fun onResourceLoaded(link: Link) {
+                // Same per-resource initialization the paged fragment runs after a page
+                // loads: current CSS, decoration templates, and saved decorations.
+                run(viewModel.onResourceLoaded(link.url().removeFragment(), link))
+            }
+
+            override fun onBookReady() {
+                if (state == State.Initializing || state is State.Loading) state = State.Ready
+                publishReadiness(Readiness.Ready)
+            }
+
+            override fun onBookFailed(error: String) {
+                publishReadiness(Readiness.Failed(error))
+            }
+
+            override fun onProgressionChanged() {
+                notifyCurrentLocation()
+            }
+
+            override fun onTap(point: PointF): Boolean =
+                inputListener.onTap(TapEvent(point))
+
+            override fun onDrag(
+                type: ContinuousBookWebView.DragType,
+                start: PointF,
+                offset: PointF,
+            ): Boolean {
+                val dragType = when (type) {
+                    ContinuousBookWebView.DragType.Start -> DragEvent.Type.Start
+                    ContinuousBookWebView.DragType.Move -> DragEvent.Type.Move
+                    ContinuousBookWebView.DragType.End -> DragEvent.Type.End
+                }
+                return inputListener.onDrag(DragEvent(type = dragType, start = start, offset = offset))
+            }
+
+            override fun onDecorationActivated(
+                id: DecorationId,
+                group: String,
+                rect: RectF,
+                point: PointF,
+                href: Url,
+            ): Boolean = viewModel.onDecorationActivated(id, group, rect, point)
+
+            override fun onFootnoteLinkActivated(url: AbsoluteUrl, context: String) {
+                viewModel.navigateToUrl(url, null)
+            }
+
+            override fun resourceAtUrl(url: AbsoluteUrl): Resource? =
+                viewModel.internalLinkFromUrl(url)?.let { publication.get(it) }
+
+            override fun javascriptInterfacesFor(link: Link): Map<String, Any?> =
+                config.javascriptInterfaces.mapValues { (_, factory) -> factory(link) }
+
+            override fun clearSelectionRequested() {
+                run(viewModel.clearSelection())
+            }
+
+            override fun runScript(command: EpubNavigatorViewModel.RunScriptCommand) {
+                this@EpubNavigatorFragment.run(command)
+            }
+        }
+    }
 
     private val positionsByReadingOrder: List<List<Locator>> =
         if (readingOrder != null) {
@@ -383,38 +510,26 @@ public class EpubNavigatorFragment internal constructor(
     internal var currentPagerPosition: Int = 0
     internal lateinit var adapter: R2PagerAdapter
     private lateinit var currentActivity: FragmentActivity
-    /** The continuous-scroll chapter stack. Null while the resource pager is active. */
-    internal var chapterStack: ContinuousChapterLayout? = null
+    /** The eager continuous-scroll surface. Null while the resource pager is active. */
+    internal var continuousBook: ContinuousBookWebView? = null
 
-    private var pendingStackJump: PendingStackJump? = null
-
-    /** A stack jump waiting for its chapter to load and measure. */
-    private class PendingStackJump(val index: Int, val htmlId: String?, val progression: Double)
-
-    private val stackHost = object : ContinuousChapterLayout.Host {
-        override val pageCount: Int get() = this@EpubNavigatorFragment.readingOrder.size
-        override fun positionCountFor(index: Int): Int =
-            this@EpubNavigatorFragment.positionsByReadingOrder.getOrNull(index)?.size ?: 0
-
-        override fun createChapterView(index: Int): ChapterWebView {
-            val link = this@EpubNavigatorFragment.readingOrder[index]
-            return ChapterWebView(
-                context = requireContext(),
-                navigator = this@EpubNavigatorFragment,
-                index = index,
-                link = link,
-                resourceUrl = viewModel.urlTo(link)
-            )
+    /**
+     * Forwards a raw key-event JSON from the continuous surface's frames into the
+     * input pipeline, mirroring [com.quire.reader.navigator.R2BasicWebView]'s parsing.
+     */
+    internal fun forwardKeyEventFromFrame(json: String): Boolean {
+        val obj = runCatching { JSONObject(json) }.getOrNull() ?: return false
+        val type = when (obj.optString("type")) {
+            "down" -> KeyEvent.Type.Down
+            "up" -> KeyEvent.Type.Up
+            else -> return false
         }
-
-        override fun disposeChapterView(view: ChapterWebView) {
-            val webView = view.webView
-            webView.listener = null
-            view.removeAllViews()
-            webView.destroy()
-        }
+        val key = Key(obj.optString("code"))
+        val modifiers = com.quire.reader.navigator.inputModifiers(obj)
+        val characters = obj.optNullableString("characters")?.takeUnless { it.isBlank() }
+        val event = KeyEvent(type = type, key = key, modifiers = modifiers, characters = characters)
+        return inputListener.onKey(event)
     }
-
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -496,8 +611,8 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     /**
-     * Builds the container matching the current mode: the continuous chapter stack in
-     * scroll mode, the resource pager otherwise. Rebuilds on preference changes.
+     * Builds the container matching the current mode: the eager continuous-scroll
+     * surface in scroll mode, the resource pager otherwise. Rebuilds on preference changes.
      */
     private fun resetContainer(root: View) {
         val parent = root as? ConstraintLayout
@@ -511,18 +626,15 @@ public class EpubNavigatorFragment internal constructor(
             if (child is R2ViewPager) {
                 child.adapter = null
                 parent.removeView(child)
-            } else if (child is ContinuousChapterLayout) {
-                child.onScrollChanged = null
-                child.onChapterAvailable = null
-                child.forEachChapter(stackHost::disposeChapterView)
-                child.removeAllViews()
+            } else if (child is ContinuousBookWebView) {
+                child.dispose()
                 parent.removeView(child)
             }
         }
-        chapterStack = null
+        continuousBook = null
 
         if (viewModel.isScrollEnabled.value && publication.metadata.layout != Layout.FIXED) {
-            resetStack(parent)
+            resetBook(parent)
         } else {
             resetPager(parent)
         }
@@ -530,6 +642,11 @@ public class EpubNavigatorFragment internal constructor(
 
     /** Builds and installs an empty resource pager (paged mode). */
     private fun resetPager(parent: ViewGroup) {
+        // The scroll frames' adapter must not leak into documents served for the pager:
+        // it overrides `Android.getViewportWidth` with the shell's CSS-px width, which
+        // Readium's paged layout reads as device pixels (the column then collapses to
+        // ~157 px instead of 411 px and the page renders as clipped multi-column text).
+        viewModel.server.injectsScrollFrameAdapter = false
         resourcePager = R2ViewPager(requireContext())
         resourcePager.id = R.id.resourcePager
         resourcePager.publicationType = when (publication.metadata.layout) {
@@ -546,41 +663,22 @@ public class EpubNavigatorFragment internal constructor(
         resetResourcePagerAdapter()
     }
 
-    /** Builds and installs the continuous chapter stack (scroll mode). */
-    private fun resetStack(parent: ViewGroup) {
-        val stack = ContinuousChapterLayout(requireContext(), stackHost)
-        stack.setBackgroundColor(viewModel.settings.value.effectiveBackgroundColor)
-        // The chapter views handle the keyboard events.
-        stack.isFocusable = false
-        stack.onScrollChanged = { notifyCurrentLocation() }
-        stack.onChapterAvailable = { resolvePendingStackJump(it) }
-        chapterStack = stack
-        parent.addView(stack)
-        stack.updateWindow()
+    /** Builds and installs the eager continuous-scroll surface (scroll mode). */
+    private fun resetBook(parent: ViewGroup) {
+        Log.d("ContinuousBook", "resetBook: creating surface #${System.identityHashCode(bookHost)}")
+        val book = ContinuousBookWebView(requireContext(), this)
+        book.setBackgroundColor(viewModel.settings.value.effectiveBackgroundColor)
+        // The shell handles the keyboard events itself; the surface is not focusable.
+        book.isFocusable = false
+        continuousBook = book
+        parent.addView(book)
+        book.prepare(initialLocatorForSurface())
         notifyCurrentLocation()
     }
 
-    /** Jumps to a pending [PendingStackJump] as soon as its chapter is measured. */
-    private fun resolvePendingStackJump(index: Int) {
-        val jump = pendingStackJump ?: return
-        if (jump.index != index) return
-        val stack = chapterStack ?: return
-        val chapter = stack.chapterAt(index) ?: return
-        if (!chapter.isLoaded.value) return
-        pendingStackJump = null
-        landStackJump(stack, jump)
-    }
-
-    private fun landStackJump(stack: ContinuousChapterLayout, jump: PendingStackJump) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            val chapter = stack.chapterAt(jump.index) ?: return@launch
-            chapter.awaitLoaded()
-            val height = stack.chapterHeight(jump.index)
-            val within = jump.htmlId?.let { chapter.offsetTopForId(it) }
-                ?: (jump.progression.coerceIn(0.0, 1.0) * height).toInt()
-            stack.jumpToY(stack.chapterTop(jump.index) + within)
-        }
-    }
+    /** The locator the surface should land on: the restored/current one, if any. */
+    private fun initialLocatorForSurface(): Locator? =
+        currentLocator.value.takeIf { state != State.Initializing } ?: initialLocator
 
     private inner class PageChangeListener : ViewPager.SimpleOnPageChangeListener() {
         override fun onPageSelected(position: Int) {
@@ -696,13 +794,27 @@ public class EpubNavigatorFragment internal constructor(
     private fun onSettingsChange(previous: EpubSettings, new: EpubSettings) {
         if (previous.effectiveBackgroundColor != new.effectiveBackgroundColor) {
             resourcePager.setBackgroundColor(new.effectiveBackgroundColor)
-            chapterStack?.setBackgroundColor(new.effectiveBackgroundColor)
+            continuousBook?.setBackgroundColor(new.effectiveBackgroundColor)
         }
 
         if (viewModel.layout == Layout.REFLOWABLE) {
             if (previous.fontSize != new.fontSize) {
                 r2PagerAdapter?.setFontSize(new.fontSize)
             }
+            // Reflow every frame of the continuous surface with a text anchor.
+            if (previous.fontSize != new.fontSize || previous.theme != new.theme) {
+                reflowContinuousSurface()
+            }
+        }
+    }
+
+    /** Captures the reading anchor, remeasures all frames, restores once (task 5.1). */
+    internal fun reflowContinuousSurface() {
+        val book = continuousBook ?: return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val anchor = book.captureAnchor()
+            book.remeasureAllFrames()
+            book.restoreAnchor(anchor)
         }
     }
 
@@ -725,13 +837,8 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     override fun onDestroyView() {
-        chapterStack?.let {
-            it.onScrollChanged = null
-            it.onChapterAvailable = null
-            it.forEachChapter(stackHost::disposeChapterView)
-            it.removeAllViews()
-            chapterStack = null
-        }
+        continuousBook?.dispose()
+        continuousBook = null
         super.onDestroyView()
     }
 
@@ -784,8 +891,8 @@ public class EpubNavigatorFragment internal constructor(
         }
 
         if (publication.metadata.layout != Layout.FIXED) {
-            val stack = chapterStack
-            if (stack != null) return goInStack(stack, locator, href)
+            val book = continuousBook
+            if (book != null) return book.go(locator)
             setCurrent(resourcesSingle)
         } else {
             when (viewModel.dualPageMode) {
@@ -817,12 +924,9 @@ public class EpubNavigatorFragment internal constructor(
                 activeScriptRunner()?.runJavaScript(command.script)
             }
             RunScriptCommand.Scope.LoadedResources -> {
-                val stack = chapterStack
-                if (stack != null) {
-                    stack.forEachChapter { chapter ->
-                        chapter.takeIf { it.isLoaded.value }
-                            ?.runJavaScript(command.script)
-                    }
+                val book = continuousBook
+                if (book != null) {
+                    book.forEachLoadedRunner { it.runJavaScript(command.script) }
                 } else {
                     r2PagerAdapter?.mFragments?.forEach { _, fragment ->
                         (fragment as? R2EpubPageFragment)
@@ -831,21 +935,23 @@ public class EpubNavigatorFragment internal constructor(
                     }
                 }
             }
-            is RunScriptCommand.Scope.LoadedResource -> {
-                val stack = chapterStack
-                if (stack != null) {
-                    stack.forEachChapter { chapter ->
-                        chapter.takeIf { it.isLoaded.value && it.link.url() == command.scope.href }
-                            ?.runJavaScript(command.script)
-                    }
-                } else {
-                    loadedFragmentForHref(command.scope.href)
+            is RunScriptCommand.Scope.Resource -> {
+                val book = continuousBook
+                if (book != null) {
+                    book.runnerFor(command.scope.href)
                         ?.takeIf { it.isLoaded.value }
                         ?.runJavaScript(command.script)
+                } else {
+                    // Paged mode: the migration replaced the concrete-WebView scope with
+                    // the resource scope, so the pager's fragment for that href is the
+                    // target. `runJavaScript` queues until the page finished, and the
+                    // per-resource initialization is dispatched from `onPageFinished`
+                    // *before* the fragment marks itself loaded — gating on `isLoaded`
+                    // here silently dropped `registerDecorationTemplates` and the saved
+                    // decorations in paged mode.
+                    loadedFragmentForHref(command.scope.href)
+                        ?.runJavaScript(command.script)
                 }
-            }
-            is RunScriptCommand.Scope.WebView -> {
-                command.scope.webView.runJavaScript(command.script)
             }
         }
     }
@@ -870,18 +976,30 @@ public class EpubNavigatorFragment internal constructor(
 
     // SelectableNavigator
     override suspend fun currentSelection(): Selection? {
-        val fragment = activeScriptRunner() ?: return null
+        // A selection belongs to the resource it started in, which is not necessarily the
+        // resource at the viewport top (the reader may have scrolled after selecting).
+        val book = continuousBook
+        val selectionHref = book?.activeSelectionHref()
+        val selectionRunner = book?.selectionRunner() ?: activeScriptRunner() ?: return null
         val json =
-            fragment.runJavaScriptSuspend("readium.getCurrentSelection();")
+            selectionRunner.runJavaScriptSuspend("readium.getCurrentSelection();")
                 .takeIf { it != "null" }
                 ?.let { tryOrLog { JSONObject(it) } }
                 ?: return null
 
         val rect = json.optRectF("rect")
-            ?.run { adjustedToViewport() }
+            ?.run { adjustedToViewport(selectionHref) }
+
+        // The selection's locator carries its own resource, so highlights/notes saved from
+        // it address the right document even when the visible one differs.
+        val locatorBase = if (book != null && selectionHref != null) {
+            currentLocator.value.copy(href = selectionHref, locations = Locator.Locations())
+        } else {
+            currentLocator.value
+        }
 
         return Selection(
-            locator = currentLocator.value.copy(
+            locator = locatorBase.copy(
                 text = Locator.Text.fromJSON(json.optJSONObject("text"))
             ),
             rect = rect
@@ -889,24 +1007,43 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     override fun clearSelection() {
+        // Clear in the resource the selection belongs to, not just the visible one.
+        val book = continuousBook
+        val href = book?.activeSelectionHref()
+        if (book != null && href != null) {
+            book.runnerFor(href)?.runJavaScript("window.getSelection().removeAllRanges();")
+            book.clearSelectionHref()
+            return
+        }
         run(viewModel.clearSelection())
     }
 
-    private fun PointF.adjustedToViewport(): PointF =
-        activePaddingTop()?.let { top ->
+    private fun PointF.adjustedToViewport(href: Url? = null): PointF {
+        continuousBook?.let { book ->
+            val resolved = href ?: book.activeRunner()?.href ?: return this
+            book.frameRectToView(resolved, RectF(this.x, this.y, this.x, this.y))?.let { rect ->
+                return PointF(rect.left, rect.top)
+            }
+        }
+        return activePaddingTop()?.let { top ->
             PointF(x, y + top)
         } ?: this
+    }
 
-    private fun RectF.adjustedToViewport(): RectF =
-        activePaddingTop()?.let { topOffset ->
+    private fun RectF.adjustedToViewport(href: Url? = null): RectF {
+        continuousBook?.let { book ->
+            val resolved = href ?: book.activeRunner()?.href ?: return this
+            book.frameRectToView(resolved, this)?.let { return it }
+        }
+        return activePaddingTop()?.let { topOffset ->
             RectF(left, top + topOffset, right, bottom)
         } ?: this
+    }
 
     /** Top padding of the page the user is reading, for moving child coordinates
      * into the navigator's viewport space. */
     private fun activePaddingTop(): Int? =
-        chapterStack?.let { stack -> stack.chapterAt(stack.focusChapter())?.paddingTop }
-            ?: currentReflowablePageFragment?.paddingTop
+        currentReflowablePageFragment?.paddingTop
 
     // DecorableNavigator
 
@@ -930,32 +1067,6 @@ public class EpubNavigatorFragment internal constructor(
         run(viewModel.applyDecorations(decorations, group))
     }
 
-    /**
-     * Navigates to [locator] inside the continuous chapter stack. Locators pointing
-     * at a chapter that is still loading wait in [pendingStackJump] until it is.
-     */
-    private fun goInStack(
-        stack: ContinuousChapterLayout,
-        locator: Locator,
-        href: Url,
-    ): Boolean {
-        val index = readingOrder.indexOfFirst { it.url().isEquivalent(href) }
-        if (index < 0) return false
-        val jump = PendingStackJump(
-            index = index,
-            htmlId = locator.locations.htmlId,
-            progression = locator.locations.progression ?: 0.0
-        )
-        val chapter = stack.chapterAt(index)
-        if (chapter != null && chapter.isLoaded.value) {
-            landStackJump(stack, jump)
-        } else {
-            pendingStackJump = jump
-            stack.updateWindow(index)
-        }
-        return true
-    }
-
     // R2BasicWebView.Listener
 
     internal val webViewListener: R2BasicWebView.Listener = WebViewListener()
@@ -969,7 +1080,7 @@ public class EpubNavigatorFragment internal constructor(
             get() = viewModel.verticalText
 
         override fun onResourceLoaded(webView: R2BasicWebView, link: Link) {
-            run(viewModel.onResourceLoaded(webView, link))
+            run(viewModel.onResourceLoaded(link.url().removeFragment(), link))
         }
 
         override fun onPageLoaded(webView: R2BasicWebView, link: Link) {
@@ -981,6 +1092,7 @@ public class EpubNavigatorFragment internal constructor(
                 ) == true
             ) {
                 state = State.Ready
+                publishReadiness(Readiness.Ready)
             }
 
             notifyCurrentLocation()
@@ -1070,6 +1182,14 @@ public class EpubNavigatorFragment internal constructor(
             return goToNextResource(jump = false, animated = animated)
         }
 
+        // Scroll mode: a "page turn" moves by one reader viewport within the prepared
+        // book, the way the paged web view pages within its resource. Without this the
+        // reader's left/right tap zones would need a native page WebView that the
+        // continuous surface deliberately does not have.
+        continuousBook?.let { book ->
+            return book.pageForward()
+        }
+
         val webView = activeWebView() ?: return false
 
         when (settings.value.readingProgression) {
@@ -1085,6 +1205,10 @@ public class EpubNavigatorFragment internal constructor(
     override fun goBackward(animated: Boolean): Boolean {
         if (publication.metadata.layout == Layout.FIXED) {
             return goToPreviousResource(jump = false, animated = animated)
+        }
+
+        continuousBook?.let { book ->
+            return book.pageBackward()
         }
 
         val webView = activeWebView() ?: return false
@@ -1166,16 +1290,16 @@ public class EpubNavigatorFragment internal constructor(
     private val currentReflowablePageFragment: R2EpubPageFragment? get() =
         currentFragment as? R2EpubPageFragment
 
-    /** The scripting page the user is currently reading: the stack's focus chapter in
-     * scroll mode, the pager's current page fragment otherwise. */
+    /** The scripting page the user is currently reading: the book surface's frame at the
+     * reading position in scroll mode, the pager's current page fragment otherwise. */
     private fun activeScriptRunner(): com.quire.reader.navigator.ScriptRunner? {
-        val stack = chapterStack ?: return currentReflowablePageFragment
-        return stack.chapterAt(stack.focusChapter())
+        continuousBook?.let { book -> return book.activeRunner() }
+        return currentReflowablePageFragment
     }
 
     private fun activeWebView(): R2WebView? {
-        val stack = chapterStack ?: return currentReflowablePageFragment?.webView
-        return stack.chapterAt(stack.focusChapter())?.webView
+        check(continuousBook == null) { "The continuous surface does not expose a native page WebView" }
+        return currentReflowablePageFragment?.webView
     }
 
     private val currentFragment: Fragment? get() =
@@ -1212,13 +1336,14 @@ public class EpubNavigatorFragment internal constructor(
      */
     @ExperimentalReadiumApi
     override suspend fun firstVisibleElementLocator(): Locator? {
-        val stack = chapterStack
-        if (stack != null) {
-            val resource = readingOrder[stack.focusChapter()]
+        val book = continuousBook
+        if (book != null) {
+            val index = book.resourceIndexAt(book.outerScrollY()) ?: return null
+            val resource = readingOrder[index]
             return Locator(
                 href = resource.url(),
                 mediaType = resource.mediaType ?: MediaType.XHTML,
-                locations = Locator.Locations(progression = stack.focusProgression())
+                locations = Locator.Locations(progression = book.progressionAt(book.outerScrollY()))
             )
         }
 
@@ -1280,46 +1405,42 @@ public class EpubNavigatorFragment internal constructor(
 
             // We don't want to notify the current location if the navigator is still loading a
             // locator, to avoid notifying intermediate locations.
-            when (val stack = chapterStack) {
-                null -> {
-                    if (currentReflowablePageFragment?.isLoaded?.value == false || state != State.Ready) {
-                        return@launch
-                    }
-                    val reflowableWebView = currentReflowablePageFragment?.webView
-                    val currentProgression = reflowableWebView?.run {
-                        // The transition has stabilized, so we can ask the web view to refresh its
-                        // current item to reflect the current scroll position.
-                        updateCurrentItem()
-                        progression.coerceIn(0.0, 1.0)
-                    } ?: 0.0
-                    val currentLink = when (val pageResource = adapter.getResource(resourcePager.currentItem)) {
-                        is PageResource.EpubFxl -> checkNotNull(
-                            pageResource.leftLink ?: pageResource.rightLink
-                        )
-                        is PageResource.EpubReflowable -> pageResource.link
-                        else -> throw IllegalStateException(
-                            "Expected EpubFxl or EpubReflowable page resources"
-                        )
-                    }
-                    emitCurrentLocation(currentLink, currentProgression)
-                    // Deprecated notifications
-                    reflowableWebView?.let {
-                        paginationListener?.onPageChanged(
-                            pageIndex = it.mCurItem,
-                            totalPages = it.numPages,
-                            locator = _currentLocator.value
-                        )
-                    }
+            val book = continuousBook
+            if (book != null) {
+                // The book surface drives the geometry itself: the active resource is the
+                // one the viewport top is in (half-open intervals, zero-height skipped),
+                // and the progression follows Readium's scroll-mode convention.
+                if (state != State.Ready) return@launch
+                val y = book.outerScrollY()
+                val index = book.resourceIndexAt(y) ?: return@launch
+                emitCurrentLocation(readingOrder[index], book.progressionAt(y))
+            } else if (currentReflowablePageFragment?.isLoaded?.value == false || state != State.Ready) {
+                return@launch
+            } else {
+                val reflowableWebView = currentReflowablePageFragment?.webView
+                val currentProgression = reflowableWebView?.run {
+                    // The transition has stabilized, so we can ask the web view to refresh its
+                    // current item to reflect the current scroll position.
+                    updateCurrentItem()
+                    progression.coerceIn(0.0, 1.0)
+                } ?: 0.0
+                val currentLink = when (val pageResource = adapter.getResource(resourcePager.currentItem)) {
+                    is PageResource.EpubFxl -> checkNotNull(
+                        pageResource.leftLink ?: pageResource.rightLink
+                    )
+                    is PageResource.EpubReflowable -> pageResource.link
+                    else -> throw IllegalStateException(
+                        "Expected EpubFxl or EpubReflowable page resources"
+                    )
                 }
-                else -> {
-                    // The stack drives the geometry itself: the focus chapter is the one the
-                    // viewport top is in, and the progression follows Readium's scroll-mode
-                    // convention (offset within the chapter / content height).
-                    val focus = stack.focusChapter()
-                    if (stack.chapterAt(focus)?.isLoaded?.value != true || state != State.Ready) {
-                        return@launch
-                    }
-                    emitCurrentLocation(readingOrder[focus], stack.focusProgression())
+                emitCurrentLocation(currentLink, currentProgression)
+                // Deprecated notifications
+                reflowableWebView?.let {
+                    paginationListener?.onPageChanged(
+                        pageIndex = it.mCurItem,
+                        totalPages = it.numPages,
+                        locator = _currentLocator.value
+                    )
                 }
             }
         }
