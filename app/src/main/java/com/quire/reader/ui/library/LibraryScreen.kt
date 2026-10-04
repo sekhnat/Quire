@@ -68,6 +68,7 @@ import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
+import com.quire.reader.ui.scanStatus
 import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.SearchScope
 import com.quire.reader.ui.Segmented
@@ -110,6 +111,7 @@ fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
       Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         LibraryHeader(s, lib, vm)
+        ScanStatusCard(vm)
         AnimatedVisibility(s.searchOpen) {
           val focus = remember { FocusRequester() }
           LaunchedEffect(Unit) { focus.requestFocus() }
@@ -168,6 +170,18 @@ private fun LibraryHeader(s: UiState, lib: LibraryData, vm: QuireViewModel) {
 }
 
 // ── books ───────────────────────────────────────────────────────────────────
+
+/** While a folder scan runs, what it is doing, so a library still filling up doesn't look finished. */
+@Composable
+private fun ScanStatusCard(vm: QuireViewModel) {
+  val scan by vm.scan.collectAsStateWithLifecycle()
+  val status = scanStatus(scan) ?: return
+  val shape = RoundedCornerShape(10.dp)
+  Column(Modifier.fillMaxWidth().clip(shape).background(Nq.surface).border(1.dp, Nq.neutral800, shape).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    QText(status.line, 12.5f, color = Nq.neutral300, lh = 1.45f)
+    status.progress?.let { ProgressLine(it) }
+  }
+}
 
 @Composable
 private fun BooksView(s: UiState, lib: LibraryData, vm: QuireViewModel) {

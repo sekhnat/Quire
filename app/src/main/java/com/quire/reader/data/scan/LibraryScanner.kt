@@ -8,19 +8,15 @@ import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.reader.PublicationLoader
 import org.readium.r2.shared.publication.services.cover
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipFile
 import kotlin.math.max
@@ -63,58 +59,66 @@ class LibraryScanner(
     val startedAt = System.currentTimeMillis()
     val useCalibre = settings.useCalibre.first()
     val folders = db.folders().watched()
+    val folderById = folders.associateBy { it.id }
+    val known = db.books().knownFiles().associateBy { it.path }
     _progress.value = ScanProgress(ScanPhase.Finding)
 
-    // 1. Walk the folders.
-    val found = mutableListOf<FoundFile>()
+    val foundPaths = HashSet<String>()
     val reachable = mutableSetOf<Long>()
-    for (folder in folders) {
-      val root = File(folder.path)
-      if (!root.isDirectory || !root.canRead()) { Log.w(TAG, "folder unreachable: ${folder.path}"); continue }
-      reachable += folder.id
-      walk(root) { f ->
-        found += FoundFile(f.absolutePath, folder.id, f.length(), f.lastModified())
-        if (found.size % 25 == 0) _progress.value = ScanProgress(ScanPhase.Finding, found = found.size, currentFile = relative(f, root))
-      }
-    }
-
-    // 2. Decide what to do.
-    val known = db.books().knownFiles().associateBy { it.path }
-    val plan = planScan(found, known, reachable)
-    val byId = known.values.associateBy { it.id }
-    plan.removedIds.forEach { covers.delete(byId[it]?.coverPath) }
-    if (plan.removedIds.isNotEmpty()) db.books().delete(plan.removedIds)
-
-    // 3. Read new and changed files.
-    val folderById = folders.associateBy { it.id }
+    val found = AtomicInteger(0)
+    val queued = AtomicInteger(0)
     val done = AtomicInteger(0)
     val unreadable = AtomicInteger(0)
     val updated = AtomicInteger(0)
-    _progress.value = ScanProgress(ScanPhase.Reading, found = found.size, total = plan.toRead.size)
-    val gate = Semaphore(PARALLELISM)
-    coroutineScope {
-      plan.toRead.map { file ->
-        async {
-          gate.withPermit {
-            val existing = known[file.path]
-            if (existing != null) updated.incrementAndGet()
-            val ok = runCatching { readAndStore(file, folderById.getValue(file.folderId), existing?.id ?: 0L, existing?.addedAt, useCalibre) }
-              .onFailure { Log.w(TAG, "failed to read ${file.path}", it) }
-              .getOrDefault(false)
-            if (!ok) unreadable.incrementAndGet()
-            val n = done.incrementAndGet()
-            _progress.value = ScanProgress(ScanPhase.Reading, found.size, n, plan.toRead.size, File(file.path).name)
+    val walking = AtomicBoolean(true)
+    fun publish(currentFile: String) = synchronized(_progress) {
+      _progress.value = ScanProgress(if (walking.get()) ScanPhase.Finding else ScanPhase.Reading, found.get(), done.get(), queued.get(), currentFile)
+    }
+
+    // Walk the folders, reading each new or changed file as soon as it is found.
+    readWhileFinding<FoundFile>(
+      PARALLELISM,
+      walk = { emit ->
+        for (folder in folders) {
+          val root = File(folder.path)
+          if (!root.isDirectory || !root.canRead()) { Log.w(TAG, "folder unreachable: ${folder.path}"); continue }
+          reachable += folder.id
+          walk(root) { f ->
+            val file = FoundFile(f.absolutePath, folder.id, f.length(), f.lastModified())
+            foundPaths += file.path
+            val n = found.incrementAndGet()
+            if (needsRead(file, known[file.path])) { queued.incrementAndGet(); emit(file) }
+            if (n % 25 == 0) publish(relative(f, root))
           }
         }
-      }.awaitAll()
-    }
+        walking.set(false)
+        publish("")
+      },
+      read = { file ->
+        val existing = known[file.path]
+        if (existing != null) updated.incrementAndGet()
+        val ok = runCatching { readAndStore(file, folderById.getValue(file.folderId), existing?.id ?: 0L, existing?.addedAt, useCalibre) }
+          .onFailure { Log.w(TAG, "failed to read ${file.path}", it) }
+          .getOrDefault(false)
+        if (!ok) unreadable.incrementAndGet()
+        done.incrementAndGet()
+        publish(File(file.path).name)
+      },
+    )
+
+    // Only a finished walk shows which known books are gone.
+    val removedIds = removedIds(foundPaths, known, reachable)
+    val byId = known.values.associateBy { it.id }
+    removedIds.forEach { covers.delete(byId[it]?.coverPath) }
+    if (removedIds.isNotEmpty()) db.books().delete(removedIds)
 
     val now = System.currentTimeMillis()
     reachable.forEach { db.folders().markScanned(it, now) }
-    _progress.value = ScanProgress(ScanPhase.Done, found.size, plan.toRead.size, plan.toRead.size)
-    val added = plan.toRead.size - updated.get()
-    Log.i(TAG, "scan done: ${found.size} files, ${plan.toRead.size} read, ${plan.removedIds.size} removed, ${unreadable.get()} unreadable in ${System.currentTimeMillis() - startedAt} ms")
-    return ScanResult(added = added, updated = updated.get(), removed = plan.removedIds.size, unreadable = unreadable.get())
+    val read = queued.get()
+    _progress.value = ScanProgress(ScanPhase.Done, found.get(), read, read)
+    val added = read - updated.get()
+    Log.i(TAG, "scan done: ${found.get()} files, $read read, ${removedIds.size} removed, ${unreadable.get()} unreadable in ${System.currentTimeMillis() - startedAt} ms")
+    return ScanResult(added = added, updated = updated.get(), removed = removedIds.size, unreadable = unreadable.get())
   }
 
   /** Returns false when the book was stored but could not be opened as an EPUB. */
@@ -179,7 +183,7 @@ class LibraryScanner(
     return readable
   }
 
-  private fun walk(root: File, onFile: (File) -> Unit) {
+  private suspend fun walk(root: File, onFile: suspend (File) -> Unit) {
     val stack = ArrayDeque<File>().apply { add(root) }
     while (stack.isNotEmpty()) {
       val dir = stack.removeLast()
