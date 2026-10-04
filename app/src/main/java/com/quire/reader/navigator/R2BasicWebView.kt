@@ -334,7 +334,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
     }
 
     /** Produced by gestures.js */
-    private data class TapEvent(
+    internal data class TapEvent(
         val defaultPrevented: Boolean,
         val point: PointF,
         val targetElement: String,
@@ -655,7 +655,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
     }
 }
 
-private fun inputModifiers(json: JSONObject): Set<InputModifier> =
+internal fun inputModifiers(json: JSONObject): Set<InputModifier> =
     buildSet {
         if (json.optBoolean("alt")) {
             add(InputModifier.Alt)
