@@ -162,3 +162,80 @@ Instrumented (generated EPUBs; run only through `tools/dbtest-suffix.init.gradle
   are public in 3.3.0 but marked experimental in places; a Readium upgrade must re-check them (Readium is pinned).
 - **Charset.** Normalisation decodes as UTF-8, exactly as Readium does, and passes bytes through unchanged when nothing was
   rewritten, so non-UTF-8 resources behave as before.
+
+## Verification results
+
+Run 2026-10-04 on the Pixel 7 AVD (`Android_API_36`, API 36), branch `html-normalisation` at 22c11fe, app installed as
+`com.quire.reader.dbtest` (the user's `com.quire.reader` and `/sdcard/Books` were never touched). Test books lived only
+in `/sdcard/QuireVerify`, which was deleted afterwards.
+
+### Build, tests, lint
+
+- `./gradlew assembleDebug test lint`: BUILD SUCCESSFUL. Unit tests: 218 run, 0 failed, 0 skipped (re-run with
+  `--rerun`, same counts).
+- Lint: 0 errors, 45 warnings. The pre-change commit (9a4539e) has 44 warnings, all 44 of the same kinds; the single new
+  one is a `LogNotTimber` for the `Log.w` that reports sparse resources (the same pattern as the 5 existing `Log` calls).
+- Full instrumented suite (`--init-script tools/dbtest-suffix.init.gradle connectedDebugAndroidTest`): **not re-run in
+  this pass**. It was green on the Task 5 code, and no production file changed after it.
+
+### Outcomes in the database (`index_state`, schema v3)
+
+| Book | status | chunkCount | truncated | unreadableResources |
+|---|---|---|---|---|
+| *Juliet Takes a Breath* (single 459 KB `.htm`, `<title/>`) | done | **469** (was 1 before the fix) | 0 | 0 |
+| `damaged.epub` (*She*, 10 chapters, `chapter2_1.xhtml` overwritten with 0xFF; opens as a zip, that entry fails with "invalid block type") | done | 388 | 0 | **1** |
+| 5 healthy books (below) | done | 165 / 384 / 2,536 / 698 / 643 | 0 | 0 |
+
+The healthy books produced identical chunk counts on the pre-change build and on this branch (165, 384, 698, 2,536 and
+643 chunks for *forever, if you want*, *Lost in Translation*, *Girlfriend Material*, *Mercy*, *Dexter by Design*).
+
+### Sparse-resource log
+
+`adb logcat -d -s LibraryIndexer` after indexing all 7 books: **none**. No resource of any of the 7 books was classed
+sparse after normalisation, so there is no evidence yet of a second misparse cause.
+
+### Screenshots
+
+- `docs/screenshots/juliet-deep-match.png`: "Inside books" search for `ladybugs hug trees` finds *Juliet Takes a Breath*,
+  "27. I Was Reborn by the River", a passage that is chunk 440 of 469. Before the fix the whole book was one chunk.
+- `docs/screenshots/partly-unreadable-card.png`: search `Clarke`; the *She* card carries "Parts of this book couldn't be
+  read, so some passages may be missing", and the header reads "7 of 7 books searchable · 1 partly indexed".
+- `docs/screenshots/coverage-partly-indexed.png`: Settings, Library search: "Searchable books · 1 partly indexed · 7 of 7".
+
+### Navigating from a deep match
+
+- **Juliet: the search side works, the reader cannot display this book.** Tapping the deep snippet opens the reader on
+  *Juliet Takes a Breath*, shows the "Exact passage unavailable. Showing the nearest place in the book." toast and a
+  browser XML error page ("error on line 203 at column 47: Attribute xml:lang redefined", page 150 of 150). Opening Juliet
+  from its detail page ("Read again") shows the same error page on page 1, so this is not caused by the search jump. The
+  book's `<body xml:lang="EN-US">` plus the reader's own `xml:lang` injection (`navigator/epub/css/ReadiumCss.kt`,
+  `injectLang`) is the likely trigger. No reader file changed on this branch (`git diff 9a4539e..HEAD` touches only
+  `data/` and `ui/`), but this was not run against the pre-change build. It is a reader rendering problem, separate from
+  indexing, and the underline on Juliet could not be confirmed.
+- **Deep match in a book the reader can render: works.** Search `talking groups lab called they` finds *Girlfriend
+  Material* chapter "1. Iz" (chunk 650 of 698); tapping the snippet opens the reader at page 271 of 295 on the right
+  paragraph with the first matched word ("talking") underlined, no fallback toast.
+
+### Healthy-book speed
+
+Five books (59 KB, 151 KB, 399 KB, 899 KB, 2.0 MB; 4,426 chunks in all), indexed from an empty `.dbtest` database. Time is
+the WorkManager `IndexWorker` span in logcat (`Starting work` to `Worker result SUCCESS`), which covers the whole queue as
+one batch. Run 1 is first index after a scan; runs 2 and 3 are "Rebuild index" in Settings (clear and requeue). The
+pre-change build is 9a4539e (throwaway worktree, removed afterwards), installed with the same `.dbtest` init script.
+
+| Run | Pre-change (9a4539e) | This branch |
+|---|---|---|
+| 1 (first index) | 9.888 s | 9.854 s |
+| 2 (rebuild) | 9.089 s | 9.088 s |
+| 3 (rebuild) | 9.015 s | 9.021 s |
+| Books per minute (run 3) | 33.3 | 33.3 |
+
+No measurable difference (within 0.04 s on every pair), so the extra regex scan per resource costs nothing visible. This
+is a 5-book sample; it does not re-measure the 1,500-book scale run.
+
+### Cleanup
+
+`adb shell rm -rf /sdcard/QuireVerify` (then `ls` reports "No such file or directory"); `adb shell pm list packages quire`
+still lists `com.quire.reader` (and the `.dbtest` app, left installed); `/sdcard/Books` listed
+`Frankenstein (copy).epub`, `Pride and Prejudice.epub` and `Sea/Moby-Dick.epub` before and after, byte-for-byte the same
+sizes and dates. The baseline worktree was removed (`git worktree list` shows only `main` and `html-normalisation`).
