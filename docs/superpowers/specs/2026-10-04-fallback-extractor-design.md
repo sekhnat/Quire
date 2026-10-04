@@ -1,8 +1,6 @@
 # Design: HTML normalisation and partial-coverage reporting for the text index
 
-Status: APPROVED DESIGN, not implemented. Supersedes `PLAN_FALLBACK_EXTRACTOR.md`; the hand-rolled fallback extractor
-described there is not built (see Decisions). Follows the library text index (`2026-10-03-library-text-index-design.md`);
-the 1,500-book scale run it waited for is complete (`2026-10-04-library-text-index-scale-results.md`).
+Status: IMPLEMENTED (plan: docs/superpowers/plans/2026-10-04-html-normalisation-partial-coverage.md).
 
 ## Problem
 
@@ -33,7 +31,7 @@ readable); healthy books produce the same chunks as before and are no slower.
 
 ## Extraction
 
-New file `data/index/IndexContent.kt`:
+New files `data/index/HtmlNormalizer.kt` (`normalizeHtml`) and `data/index/IndexContent.kt` (the Readium plumbing):
 
 - **`normalizeHtml(html: String): String`**, pure. Rewrites the self-closing form of the elements jsoup reads as raw text or
   RCDATA (`title`, `script`, `style`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes`), case-insensitively and with or
@@ -65,6 +63,7 @@ New file `data/index/IndexContent.kt`:
 - New pure `extracted(chunks, htmlResources, unreadable): Extracted` returns `Unreadable` when `htmlResources > 0 &&
   unreadable == htmlResources`, else `Text(chunks, unreadable)`.
 - `settle()` is unchanged: an all-unreadable book now becomes `failed`; a readable book with no text stays `skipped`.
+- Pure `isSparse(bytes, yieldedChars)` with `SPARSE_MIN_BYTES = 2_048` and `SPARSE_RATIO = 0.02`.
 
 The reader is unaffected: its WebView parses XHTML as XML and never had the `<title/>` problem.
 
@@ -110,7 +109,7 @@ Docs:
 
 ## Files
 
-New: `data/index/IndexContent.kt`.
+New: `data/index/HtmlNormalizer.kt`, `data/index/IndexContent.kt`.
 Modified: `data/index/LibraryIndexer.kt`, `data/index/ResourceOrder.kt`, `data/index/IndexPolicy.kt`,
 `data/index/TextSearchResult.kt`, `data/index/TextSearcher.kt`, `data/db/Entities.kt`, `data/db/QuireDatabase.kt`,
 `data/db/Daos.kt`, `data/db/SearchDao.kt`, `ui/BookSearch.kt`, `ui/TextSearchPresentation.kt`,
@@ -133,6 +132,7 @@ Instrumented (generated EPUBs; run only through `tools/dbtest-suffix.init.gradle
 
 - `EpubFixtures` gains a raw `<head>` option per resource and a way to corrupt named entries (deflate the entry, then
   overwrite its compressed bytes, so the archive opens but that entry's read fails).
+- `IndexContentTest`: a healthy book yields exactly the elements Readium's own content service yields (href, text, cssSelector, progression); a `<title/>` book yields the same texts as its closed-title twin; a corrupted resource is tallied `readFailed` while the others yield; fixtures are sized above jsoup's ~2 KB threshold.
 - `LibraryIndexerTest`:
   1. A `<title/>` book is indexed fully: a phrase from its last chapter is found, and its chunk count equals the same book
      written with `<title>T</title>`.

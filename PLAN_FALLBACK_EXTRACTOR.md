@@ -1,6 +1,6 @@
 # Plan: fallback text extractor and partial-coverage reporting
 
-Status: PLAN ONLY. Nothing here is implemented. Follows `PLAN_LIBRARY_TEXT_INDEX.md` (library text index, Phases 0-7). Start only after the 1,500-book scale run has finished, because that run times indexing and scrolling and edits to `LibraryIndexer` or Gradle builds would disturb it.
+Status: SUPERSEDED by `docs/superpowers/specs/2026-10-04-fallback-extractor-design.md` (HTML normalisation before Readium instead of a hand-rolled extractor; schema v3 instead of amending Migration(1,2)). Kept for the discussion that led there.
 
 ## Context
 
