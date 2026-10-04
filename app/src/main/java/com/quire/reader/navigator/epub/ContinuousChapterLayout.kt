@@ -367,6 +367,18 @@ internal class ContinuousChapterLayout(
     }
   }
 
+  /** Stops an in-flight fling: the standard scroll-container contract for a finger
+   * landing mid-momentum (ScrollView, RecyclerView, WebView all do this). Without it
+   * a tap or hold cannot freeze the column, and a drag started mid-fling fights
+   * computeScroll, which keeps snapping the position back onto the scroller's
+   * trajectory. No position sync is needed — computeScroll applies currY to y in the
+   * same frame, so aborting freezes the column exactly where it is. */
+  private fun stopFling() {
+    if (!scroller.isFinished) {
+      scroller.abortAnimation()
+    }
+  }
+
   override fun computeScroll() {
     if (scroller.computeScrollOffset()) {
       syncTo(scroller.currY)
@@ -416,6 +428,7 @@ internal class ContinuousChapterLayout(
   override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
+        stopFling()
         activePointerId = event.getPointerId(0)
         downTouchX = event.x
         downTouchY = event.y
@@ -457,7 +470,21 @@ internal class ContinuousChapterLayout(
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
     when (event.actionMasked) {
-      MotionEvent.ACTION_DOWN -> return false
+      MotionEvent.ACTION_DOWN -> {
+        // A gesture no child consumed (bare container while the window churns):
+        // own it so the finger still freezes the column and the UP/CANCEL cleanup
+        // below runs — an unhandled down means the rest of the gesture would
+        // never arrive. Later events bypass onInterceptTouchEvent (no child
+        // target) and come straight here.
+        stopFling()
+        activePointerId = event.getPointerId(0)
+        downTouchX = event.x
+        downTouchY = event.y
+        isDragging = false
+        velocityTracker?.recycle()
+        velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
+        return true
+      }
 
       MotionEvent.ACTION_MOVE -> {
         velocityTracker?.addMovement(event)
@@ -471,7 +498,12 @@ internal class ContinuousChapterLayout(
       }
 
       MotionEvent.ACTION_UP -> {
-        if (!isDragging) return true
+        if (!isDragging) {
+          velocityTracker?.recycle()
+          velocityTracker = null
+          activePointerId = -1
+          return true
+        }
         velocityTracker?.addMovement(event)
         val tracker = velocityTracker
         if (tracker != null) {
