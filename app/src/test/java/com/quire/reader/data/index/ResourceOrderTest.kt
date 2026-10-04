@@ -46,4 +46,14 @@ class ResourceOrderTest {
   @Test fun `a resource too large to parse again has no order`() {
     assertNull(ResourceOrder.parse("<body><p>" + "x".repeat(ResourceOrder.MAX_CHARS) + "</p></body>"))
   }
+
+  @Test fun `a resource with a self-closing title still has its anchors and elements`() {
+    // The filler makes the document large enough for jsoup to swallow its start into the title (see HtmlNormalizerTest).
+    val filler = (1..200).joinToString("") { "<p>Filler paragraph $it, long enough to count.</p>" }
+    val html = """<html xmlns="http://www.w3.org/1999/xhtml"><head><title/></head><body><h2 id="ch1">One</h2><p class="first">Text.</p>$filler</body></html>"""
+    val order = ResourceOrder.parse(html)!!
+    assertNotNull(order.anchor("ch1"))
+    // Readium reports selectors computed over the normalised document, so that is what is looked up.
+    assertNotNull(order.element(css(normalizeHtml(html), ".first")))
+  }
 }
