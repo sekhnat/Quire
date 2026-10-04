@@ -60,4 +60,30 @@ class IndexPolicyTest {
     assertEquals(IndexActivity.Idle, deriveActivity(queued))
     assertEquals(IndexActivity.Idle, deriveActivity(queued.copy(chargingOnly = true, pending = 0)))
   }
+
+  @Test fun `a book none of whose resources can be read is unreadable and fails`() {
+    val outcome = extracted(chunks = 0, htmlResources = 3, unreadable = 3)
+    assertEquals(Extracted.Unreadable, outcome)
+    assertEquals(Settlement.MarkFailed, settle(outcome, fileUnchanged = true, epochCurrent = true))
+  }
+
+  @Test fun `a book with some unreadable resources is published and says how many`() {
+    val outcome = extracted(chunks = 40, htmlResources = 34, unreadable = 17)
+    assertEquals(Extracted.Text(chunks = 40, unreadableResources = 17), outcome)
+    assertEquals(Settlement.Publish, settle(outcome, fileUnchanged = true, epochCurrent = true))
+  }
+
+  @Test fun `a readable book without text is still skipped and a book without HTML is not failed`() {
+    assertEquals(Settlement.MarkSkipped, settle(extracted(chunks = 0, htmlResources = 2, unreadable = 0), fileUnchanged = true, epochCurrent = true))
+    assertEquals(Extracted.Text(chunks = 0), extracted(chunks = 0, htmlResources = 0, unreadable = 0))
+  }
+
+  @Test fun `only a sizeable resource that yields almost nothing is sparse`() {
+    assertTrue(isSparse(bytes = 450_000, yieldedChars = 184))
+    assertTrue(isSparse(bytes = 450_000, yieldedChars = 8_999))
+    assertFalse("exactly 2% is enough text", isSparse(bytes = 450_000, yieldedChars = 9_000))
+    assertTrue(isSparse(bytes = 2_048, yieldedChars = 0))
+    assertFalse("a short page is never sparse", isSparse(bytes = 2_047, yieldedChars = 0))
+    assertFalse("an unread resource is never sparse", isSparse(bytes = 0, yieldedChars = 0))
+  }
 }

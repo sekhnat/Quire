@@ -38,8 +38,11 @@ fun deriveActivity(i: ActivityInputs): IndexActivity = when {
 sealed interface Extracted {
   /** The publication could not be opened or read (corrupt, DRM, not an EPUB). */
   data object Unreadable : Extracted
-  /** The book was read to the end, or to the size cap; [chunks] is how many searchable chunks it made (possibly none). */
-  data class Text(val chunks: Int) : Extracted
+  /**
+   * The book was read to the end, or to the size cap; [chunks] is how many searchable chunks it made (possibly none) and
+   * [unreadableResources] how many of its HTML resources could not be read, so their text is missing.
+   */
+  data class Text(val chunks: Int, val unreadableResources: Int = 0) : Extracted
   /** Reading stopped early (reader opened, indexing cleared or disabled). Nothing was extracted completely. */
   data object Interrupted : Extracted
 }
@@ -66,6 +69,23 @@ fun settle(extracted: Extracted, fileUnchanged: Boolean, epochCurrent: Boolean):
   extracted is Extracted.Text && extracted.chunks == 0 -> Settlement.MarkSkipped
   else -> Settlement.Publish
 }
+
+/**
+ * What reading a book came to, from its chunks and its HTML resources: unreadable when it has HTML and none of it could be
+ * read, otherwise its text with the count of resources that could not be read. A readable book without text is still
+ * `Text(0)`, and so skipped.
+ */
+fun extracted(chunks: Int, htmlResources: Int, unreadable: Int): Extracted =
+  if (htmlResources > 0 && unreadable == htmlResources) Extracted.Unreadable else Extracted.Text(chunks, unreadable)
+
+/** Resources smaller than this are never sparse: a cover, divider or image page is short by nature. */
+const val SPARSE_MIN_BYTES = 2_048L
+
+/** A resource yielding fewer characters than this share of its bytes has probably lost its text to a misparse. */
+const val SPARSE_RATIO = 0.02
+
+/** Whether a resource of [bytes] that yielded [yieldedChars] characters looks misread. Only logged, never acted on. */
+fun isSparse(bytes: Long, yieldedChars: Long): Boolean = bytes >= SPARSE_MIN_BYTES && yieldedChars < bytes * SPARSE_RATIO
 
 /** Why a batch of indexing ended. */
 enum class BatchStop {
