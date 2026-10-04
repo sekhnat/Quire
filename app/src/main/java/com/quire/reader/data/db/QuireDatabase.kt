@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
     TextChunkEntity::class, TextChunkFts::class, IndexStateEntity::class,
   ],
-  version = 2,
+  version = 3,
   exportSchema = false,
 )
 abstract class QuireDatabase : RoomDatabase() {
@@ -51,10 +51,17 @@ abstract class QuireDatabase : RoomDatabase() {
       }
     }
 
+    /** Records how many resources of an indexed book could not be read. Books indexed before it read as fully readable (0). */
+    val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `index_state` ADD COLUMN `unreadableResources` INTEGER NOT NULL DEFAULT 0")
+      }
+    }
+
     /**
      * Read-only view of the full-text index's terms with their document counts, for judging how common a word prefix is
      * before searching for it (see `TextSearcher`). It holds no data of its own and is not a Room entity, so it is created
-     * whenever the database opens, which covers new installs and the 1 -> 2 migration alike.
+     * whenever the database opens, which covers new installs and every migration alike.
      */
     const val FTS_TERMS_TABLE = "text_chunk_fts_terms"
     private const val CREATE_FTS_TERMS = "CREATE VIRTUAL TABLE IF NOT EXISTS `$FTS_TERMS_TABLE` USING fts4aux(`text_chunk_fts`)"
@@ -63,7 +70,7 @@ abstract class QuireDatabase : RoomDatabase() {
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2)
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
         .addCallback(object : Callback() { override fun onOpen(db: SupportSQLiteDatabase) = db.execSQL(CREATE_FTS_TERMS) })
         .build()
   }

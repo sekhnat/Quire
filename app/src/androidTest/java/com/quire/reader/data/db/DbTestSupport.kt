@@ -51,8 +51,8 @@ abstract class DbTestCase {
     openHelper.writableDatabase.rows("SELECT mapping FROM text_chunk WHERE bookId = ? ORDER BY seq", bookId).map { it[0]!! }
 
   protected fun QuireDatabase.stateOf(bookId: Long): IndexStateEntity? =
-    openHelper.writableDatabase.rows("SELECT mtime, sizeBytes, status, completedAt, chunkCount, textBytes, truncated FROM index_state WHERE bookId = ?", bookId)
-      .singleOrNull()?.let { IndexStateEntity(bookId, it[0]!!.toLong(), it[1]!!.toLong(), it[2]!!, it[3]!!.toLong(), it[4]!!.toInt(), it[5]!!.toLong(), it[6] == "1") }
+    openHelper.writableDatabase.rows("SELECT mtime, sizeBytes, status, completedAt, chunkCount, textBytes, truncated, unreadableResources FROM index_state WHERE bookId = ?", bookId)
+      .singleOrNull()?.let { IndexStateEntity(bookId, it[0]!!.toLong(), it[1]!!.toLong(), it[2]!!, it[3]!!.toLong(), it[4]!!.toInt(), it[5]!!.toLong(), it[6] == "1", it[7]!!.toInt()) }
 
   protected fun folder(db: QuireDatabase): Long = runBlocking { db.folders().insert(FolderEntity(path = "/sdcard/Books")) }
 
@@ -68,6 +68,9 @@ abstract class DbTestCase {
       primaryEndByte = text.toByteArray().size, text = text, mapping = "[]", progression = seq / 10.0,
     )
 
-  protected fun doneState(book: BookEntity, bookId: Long, chunks: Int, truncated: Boolean = false, textBytes: Long = 0) =
-    IndexStateEntity(bookId, book.mtime, book.sizeBytes, IndexStateEntity.STATUS_DONE, completedAt = 1_000, chunkCount = chunks, textBytes = textBytes, truncated = truncated)
+  protected fun doneState(book: BookEntity, bookId: Long, chunks: Int, truncated: Boolean = false, textBytes: Long = 0, unreadableResources: Int = 0) =
+    IndexStateEntity(
+      bookId, book.mtime, book.sizeBytes, IndexStateEntity.STATUS_DONE, completedAt = 1_000, chunkCount = chunks, textBytes = textBytes,
+      truncated = truncated, unreadableResources = unreadableResources,
+    )
 }

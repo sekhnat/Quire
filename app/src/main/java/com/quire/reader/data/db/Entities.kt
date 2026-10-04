@@ -183,6 +183,8 @@ data class IndexStateEntity(
   val textBytes: Long = 0,
   /** True when the per-book size cap stopped indexing before the end of the book. */
   val truncated: Boolean = false,
+  /** HTML resources of the book that could not be read (damaged entries); their text is missing from the index. */
+  @ColumnInfo(defaultValue = "0") val unreadableResources: Int = 0,
 ) {
   companion object {
     const val STATUS_DONE = "done"
