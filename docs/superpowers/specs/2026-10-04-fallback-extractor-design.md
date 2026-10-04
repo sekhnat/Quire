@@ -31,7 +31,7 @@ readable); healthy books produce the same chunks as before and are no slower.
 
 ## Extraction
 
-New files `data/index/HtmlNormalizer.kt` (`normalizeHtml`) and `data/index/IndexContent.kt` (the Readium plumbing):
+New files `reader/HtmlNormalizer.kt` (`normalizeHtml`, shared by the indexer and the vendored navigator, so the navigator does not depend on `data/index`) and `data/index/IndexContent.kt` (the Readium plumbing):
 
 - **`normalizeHtml(html: String): String`**, pure. Rewrites the self-closing form of the elements jsoup reads as raw text or
   RCDATA (`title`, `script`, `style`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes`), case-insensitively and with or
@@ -65,7 +65,12 @@ New files `data/index/HtmlNormalizer.kt` (`normalizeHtml`) and `data/index/Index
 - `settle()` is unchanged: an all-unreadable book now becomes `failed`; a readable book with no text stays `skipped`.
 - Pure `isSparse(bytes, yieldedChars)` with `SPARSE_MIN_BYTES = 2_048` and `SPARSE_RATIO = 0.02`.
 
-The reader is unaffected: its WebView parses XHTML as XML and never had the `<title/>` problem.
+The reader's WebView does parse XHTML as XML, but the vendored navigator's `ReadiumCss.injectHtml` reads language
+attributes through an HTML-mode jsoup parse, which hit the same `<title/>` misparse. For a book such as Juliet it saw an
+empty body, injected a second `xml:lang` into the real `<body xml:lang="EN-US">`, and the WebView rejected the page with
+"Attribute xml:lang redefined", so the book could not be opened. `injectHtml` now parses `normalizeHtml(html)` for that
+detection; the content itself is still injected into the original text. `R2BasicWebView`'s footnote parsing
+(`Jsoup.parse`, around lines 366 and 384) has not been checked and is left unchanged.
 
 ## Schema, reporting and UI
 
@@ -109,8 +114,8 @@ Docs:
 
 ## Files
 
-New: `data/index/HtmlNormalizer.kt`, `data/index/IndexContent.kt`.
-Modified: `data/index/LibraryIndexer.kt`, `data/index/ResourceOrder.kt`, `data/index/IndexPolicy.kt`,
+New: `reader/HtmlNormalizer.kt`, `data/index/IndexContent.kt`.
+Modified: `navigator/epub/css/ReadiumCss.kt` (one line: the language-detection parse), `data/index/LibraryIndexer.kt`, `data/index/ResourceOrder.kt`, `data/index/IndexPolicy.kt`,
 `data/index/TextSearchResult.kt`, `data/index/TextSearcher.kt`, `data/db/Entities.kt`, `data/db/QuireDatabase.kt`,
 `data/db/Daos.kt`, `data/db/SearchDao.kt`, `ui/BookSearch.kt`, `ui/TextSearchPresentation.kt`,
 `ui/library/TextSearchResults.kt`, `ui/reader/ReaderSheets.kt`, the text-index design spec, `README.md`,
@@ -120,7 +125,7 @@ Modified: `data/index/LibraryIndexer.kt`, `data/index/ResourceOrder.kt`, `data/i
 
 JVM:
 
-- `HtmlNormalizerTest`: `<title/>`, `<TITLE />`, `<title id="x"/>` become pairs; each other listed tag likewise; `<br/>`,
+- `HtmlNormalizerTest` (in `reader/`): `<title/>`, `<TITLE />`, `<title id="x"/>` become pairs; each other listed tag likewise; `<br/>`,
   `<img/>`, `<meta/>` and `<title>Book</title>` untouched; unchanged input returns the same instance; a normalised
   `<title/>` document parsed with `Jsoup.parse` has its paragraphs in `body`.
 - `ResourceOrderTest`: anchors and element selectors resolve in a resource with `<title/>` in its head.
@@ -140,6 +145,7 @@ Instrumented (generated EPUBs; run only through `tools/dbtest-suffix.init.gradle
   3. One corrupted chapter → `done`, `unreadableResources = 1`, `IndexGap.PartsUnreadable`, other chapters searchable.
   4. Every chapter corrupted → `failed`.
   5. Healthy fixtures produce exactly the chunks they produced before the change.
+- `ReadiumCssTest` (`navigator/epub/css`; instrumented because `Url` needs Android's `Uri`): injecting into a document over 3 KB with a self-closing `<title/>` and a real `<body xml:lang="EN-US">` leaves exactly one `xml:lang` on `<body>` and one on `<html>`, and serves the original text (the `<title/>` is not rewritten). It fails without the `normalizeHtml` call in `injectHtml`.
 - `TextIndexMigrationTest`: a seeded v2 file migrates to v3 keeping every row, with `unreadableResources = 0`; the existing
   1 → 2 tests now open at v3 through both migrations.
 
@@ -174,7 +180,7 @@ in `/sdcard/QuireVerify`, which was deleted afterwards.
 - `./gradlew assembleDebug test lint`: BUILD SUCCESSFUL. Unit tests: 218 run, 0 failed, 0 skipped (re-run with
   `--rerun`, same counts).
 - Lint: 0 errors, 45 warnings. The pre-change commit (9a4539e) has 44 warnings, all 44 of the same kinds; the single new
-  one is a `LogNotTimber` for the `Log.w` that reports sparse resources (the same pattern as the 5 existing `Log` calls).
+  one is a `LogNotTimber` for the `Log.i` that reports sparse resources (the same pattern as the 5 existing `Log` calls).
 - Full instrumented suite (`--init-script tools/dbtest-suffix.init.gradle connectedDebugAndroidTest`): **not re-run in
   this pass**. It was green on the Task 5 code, and no production file changed after it.
 
@@ -204,14 +210,17 @@ sparse after normalisation, so there is no evidence yet of a second misparse cau
 
 ### Navigating from a deep match
 
-- **Juliet: the search side works, the reader cannot display this book.** Tapping the deep snippet opens the reader on
-  *Juliet Takes a Breath*, shows the "Exact passage unavailable. Showing the nearest place in the book." toast and a
-  browser XML error page ("error on line 203 at column 47: Attribute xml:lang redefined", page 150 of 150). Opening Juliet
-  from its detail page ("Read again") shows the same error page on page 1, so this is not caused by the search jump. The
-  book's `<body xml:lang="EN-US">` plus the reader's own `xml:lang` injection (`navigator/epub/css/ReadiumCss.kt`,
-  `injectLang`) is the likely trigger. No reader file changed on this branch (`git diff 9a4539e..HEAD` touches only
-  `data/` and `ui/`), but this was not run against the pre-change build. It is a reader rendering problem, separate from
-  indexing, and the underline on Juliet could not be confirmed.
+- **Juliet: the search side works; the reader could not display this book before the reader fix.** Tapping the deep
+  snippet opened the reader on *Juliet Takes a Breath*, showed the "Exact passage unavailable. Showing the nearest place
+  in the book." toast and a browser XML error page ("error on line 203 at column 47: Attribute xml:lang redefined", page
+  150 of 150). Opening Juliet from its detail page ("Read again") showed the same error page on page 1, so it is not
+  caused by the search jump. The cause is the one described under Extraction: `ReadiumCss.injectHtml` read the language
+  attributes through an HTML-mode jsoup parse, which swallowed the body behind `<title/>`, so `injectLang` added a second
+  `xml:lang` to the real `<body xml:lang="EN-US">`. This predates the branch, and the fix (parsing `normalizeHtml(html)` for
+  the detection) was made here. Juliet's deep-match underline is **to be re-checked after the reader fix**; no result is
+  claimed yet. Reader-side files on this branch: the search sheet in `ui/reader/ReaderSheets.kt` changed (a note only),
+  and after this fix `navigator/epub/css/ReadiumCss.kt` changed (the one detection line). `normalizeHtml` now
+  lives in `reader/HtmlNormalizer.kt`.
 - **Deep match in a book the reader can render: works.** Search `talking groups lab called they` finds *Girlfriend
   Material* chapter "1. Iz" (chunk 650 of 698); tapping the snippet opens the reader at page 271 of 295 on the right
   paragraph with the first matched word ("talking") underlined, no fallback toast.
