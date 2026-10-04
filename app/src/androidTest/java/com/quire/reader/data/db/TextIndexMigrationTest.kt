@@ -2,6 +2,9 @@ package com.quire.reader.data.db
 
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.sqlite.db.SupportSQLiteOpenHelper
+import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -10,7 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Runs the version 1 -> 2 migration and the FTS triggers on the device's own SQLite, over a real file. */
+/** Runs the version 1 -> 2 -> 3 and 2 -> 3 migrations and the FTS triggers on the device's own SQLite, over a real file. */
 class TextIndexMigrationTest : DbTestCase() {
   private val v1Tables = listOf("folder", "book", "book_tag", "book_state", "bookmark", "highlight")
 
@@ -59,6 +62,30 @@ class TextIndexMigrationTest : DbTestCase() {
     return file
   }
 
+  /** Builds a version 2 database file the way an installed v2 app left it: the v1 tables and seed, the 1 -> 2 migration, and one indexed book. */
+  private fun createV2File(): File {
+    val file = tempDbFile()
+    val callback = object : SupportSQLiteOpenHelper.Callback(2) {
+      override fun onCreate(db: SupportSQLiteDatabase) {
+        v1Schema.forEach(db::execSQL)
+        v1Seed.forEach(db::execSQL)
+        QuireDatabase.MIGRATION_1_2.migrate(db)
+        db.execSQL(
+          "INSERT INTO text_chunk (bookId, seq, chapter, href, tokenStart, tokenEnd, primaryEndByte, text, mapping, progression) " +
+            "VALUES (1, 0, 'Chapter 1', 'ch1.xhtml', 0, 4, 31, 'Jonathan kept a careful journal', '[]', 0.0)",
+        )
+        db.execSQL(
+          "INSERT INTO index_state (bookId, mtime, sizeBytes, status, completedAt, chunkCount, textBytes, truncated) " +
+            "VALUES (1, 1690000000001, 603000, 'done', 1700000000000, 1, 31, 0)",
+        )
+      }
+      override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    }
+    val config = SupportSQLiteOpenHelper.Configuration.builder(target).name(file.absolutePath).callback(callback).build()
+    FrameworkSQLiteOpenHelperFactory().create(config).use { it.writableDatabase }
+    return file
+  }
+
   private fun dumpV1Tables(file: File): Map<String, List<List<String?>>> =
     SQLiteDatabase.openDatabase(file.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
       v1Tables.associateWith { t ->
@@ -70,18 +97,31 @@ class TextIndexMigrationTest : DbTestCase() {
 
   private fun migrated(): QuireDatabase = open(createV1File())
 
-  @Test fun `migration to version 2 keeps every seeded row of every v1 table unchanged`() {
+  @Test fun `migration to the current version keeps every seeded row of every v1 table unchanged`() {
     val file = createV1File()
     val before = dumpV1Tables(file)
     assertTrue("seed must populate each table", before.values.all { it.isNotEmpty() })
 
     val db = open(file)
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(2, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(3, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
     val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid") }
 
     assertEquals(before, after)
     assertTrue(sqlite.rows("PRAGMA foreign_key_check").isEmpty())
+    assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
+  }
+
+  @Test fun `migration from version 2 keeps the index and reads every state as fully readable`() = runBlocking {
+    val db = open(createV2File())
+    val sqlite = db.openHelper.writableDatabase
+    assertEquals(3, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    val state = db.stateOf(1)!!
+    assertEquals(IndexStateEntity.STATUS_DONE, state.status)
+    assertEquals(1, state.chunkCount)
+    assertEquals(0, state.unreadableResources)
+    assertEquals(1, db.hits("journal").size)
+    assertEquals(emptyList<EligibleBook>(), db.index().eligibleBooks().filter { it.id == 1L })
     assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
   }
 
