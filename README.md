@@ -36,7 +36,7 @@ If you used text search before books with self-closing `<title/>` tags were hand
 ### A reader that stays out of the way
 - **Real EPUB rendering** through the [Readium toolkit](https://github.com/readium/kotlin-toolkit): images, tables, footnotes, internal links and publisher CSS all work.
 - **Tap zones.** Left edge back, right edge forward, middle for the controls.
-- **Pages or scroll.** In scroll mode chapters run into each other, so there's no sideways swipe to change chapter.
+- **Pages or scroll.** Scroll mode opens the whole book at once: every chapter is prepared and laid out in one continuous column before the reader appears, so chapter changes are invisible and one drag or fling runs through them. The tap zones step by a screen within the prepared book. Loading a large book takes a moment up front (about 1.5 s for a 40-chapter book on the test emulator) and the whole book stays in memory while it is open.
 - **Make it yours.** Five themes including **AMOLED Black** (true `#000000`), four fonts (Literata, Source Serif, Atkinson Hyperlegible, Inter), size, line spacing, margins, alignment, and a brightness dimmer. Set your **reading defaults** once in Settings (theme, font, size, spacing, margins, alignment, pages or scroll) with a live preview; any single book can override them, and "Back to my defaults" undoes that.
 - **Highlights, notes and bookmarks.** Select text to highlight it or attach a note; everything is listed in one place and tied to the page.
 - **Search the whole book.** Results stream in as they are found, and the matches are underlined on the page.
@@ -67,6 +67,14 @@ If you used text search before books with self-closing `<title/>` tags were hand
 | Contents | Search in book | Search inside books |
 |:---:|:---:|:---:|
 | <img src="docs/screenshots/contents.png" width="240"> | <img src="docs/screenshots/search.png" width="240"> | <img src="docs/screenshots/search-text.png" width="240"> |
+
+| Scroll: chapter seam | Scroll: highlight | Scroll: search hit |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/scroll-seam-chapter20-21.png" width="240"> | <img src="docs/screenshots/scroll-highlight-created.png" width="240"> | <img src="docs/screenshots/scroll-search-underline.png" width="240"> |
+
+| Scroll: highlight actions | Scroll: reflow keeps the place | Paged mode after switching |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/scroll-highlight-actions.png" width="240"> | <img src="docs/screenshots/scroll-reflow-fontsize.png" width="240"> | <img src="docs/screenshots/scroll-paged-mode.png" width="240"> |
 
 ## Install
 
@@ -102,7 +110,7 @@ app/src/main/java/com/quire/reader/
 │   ├── scan/      folder scanner, Calibre OPF parser, cover thumbnails, background worker
 │   ├── LibraryRepository.kt, SettingsStore.kt, ReaderPrefs.kt
 ├── navigator/     vendored Readium EPUB navigator (WebView), extended for exact-passage navigation
-├── reader/        Readium wrapper: session, navigator host, preferences, continuous scrolling
+├── reader/        Readium wrapper: session, navigator host, preferences, scroll readiness
 ├── theme/         Nocturne design tokens, fonts, reader themes
 └── ui/            Compose screens: onboarding, library, book page, reader
 ```
@@ -112,6 +120,8 @@ app/src/main/java/com/quire/reader/
 - **Readium 3.3** parses and renders EPUBs. It is pinned because 3.4 needs compileSdk 37, which the current Android Gradle Plugin does not support.
 - **Library text search** stores each book's text as roughly 600-900-character chunks in an FTS4 index: 1,500 books become about 1.1 million chunks and 1.2 GB of stored text. A background WorkManager chain indexes in five-minute batches, stops while a reader is open (or on battery, if you ask it to), and a killed process resumes where it stopped.
 - The EPUB navigator is vendored (a copy of Readium's, under `navigator/`) and gained `evaluateJavascript(script, href)` and `scrollToDecoration`, so a search result can be located, underlined and scrolled to exactly.
+- **Scroll mode is one eager continuous surface**: `navigator/epub/ContinuousBookWebView.kt` owns a single WebView whose reserved shell document (`assets/quire/continuous-scroll.*`) stacks every reading-order resource as a same-origin, full-content-height iframe in publication order. The surface is book-wide: it reports ready only after every document, its Readium runtime, current CSS, decoration templates, fonts and static-image layout have settled and one geometry table is committed, and it never mounts, evicts or refetches a chapter because the reader scrolled near it. Each frame gets its own `ScriptRunner` bound to the original href, so selection, decorations, links and taps stay attached to that resource even when the viewport shows a different chapter. The historical windowed chapter-stack engine (`ContinuousChapterLayout`/`ChapterWebView`) was removed; `plans/continuous-scroll.md` records that design as superseded.
+- Readium and Coil stay pinned (3.3.0 / 3.5.0) and locator, position and database formats are unchanged: scroll mode still reports original EPUB hrefs and resource-local progression, so old bookmarks, highlights and saved positions reopen as they did.
 - The scanner skips unchanged files by size and modified time, reads the rest four at a time, and never lets one broken file stop the run. A folder that has gone missing (an unmounted SD card) never removes its books from the library.
 
 ## Design
