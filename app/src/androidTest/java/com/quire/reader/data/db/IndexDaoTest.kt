@@ -20,10 +20,10 @@ class IndexDaoTest : DbTestCase() {
     return entity.copy(id = db.books().save(entity, emptyList()))
   }
 
-  private suspend fun Fixture.index(book: BookEntity, vararg texts: String, truncated: Boolean = false): Boolean =
+  private suspend fun Fixture.index(book: BookEntity, vararg texts: String, truncated: Boolean = false, unreadable: Int = 0): Boolean =
     db.index().replaceBook(
       book.id, book.mtime, book.sizeBytes, texts.mapIndexed { i, t -> chunk(book.id, i, t) },
-      doneState(book, book.id, texts.size, truncated, textBytes = texts.sumOf { it.toByteArray().size }.toLong()),
+      doneState(book, book.id, texts.size, truncated, textBytes = texts.sumOf { it.toByteArray().size }.toLong(), unreadableResources = unreadable),
     )
 
   @Test fun `replacing a book swaps its chunks and full-text rows for the new ones and records the state`() = runBlocking {
@@ -205,6 +205,7 @@ class IndexDaoTest : DbTestCase() {
     val pending = f.add("Pending")
     val stale = f.add("Stale")
     val unreadable = f.add("Unreadable")
+    val damaged = f.add("Damaged")
     f.index(done, "Alpha")
     f.index(truncated, "Bravo", truncated = true)
     f.db.index().markTerminal(failed.id, failed.mtime, failed.sizeBytes, IndexStateEntity.STATUS_FAILED)
@@ -212,12 +213,13 @@ class IndexDaoTest : DbTestCase() {
     f.index(stale, "Charlie", truncated = true)
     f.db.books().update(stale.copy(mtime = stale.mtime + 5))
     f.index(unreadable, "Delta")
+    f.index(damaged, "Echo", unreadable = 1)
     f.db.books().setReadable(unreadable.id, false)
 
     val coverage = f.db.index().observeCoverage().first()
 
-    // Of 6 readable books: done and truncated are searchable, the stale one waits for re-indexing like the pending one.
-    assertEquals(IndexCoverage(eligible = 6, searchable = 2, failed = 1, skipped = 1, truncated = 1), coverage)
+    // Of 7 readable books: done, truncated and damaged are searchable, and the last two are partial; the stale one waits like the pending one.
+    assertEquals(IndexCoverage(eligible = 7, searchable = 3, failed = 1, skipped = 1, partial = 2), coverage)
     assertTrue(pending.id in f.db.index().eligibleBooks().map { it.id })
   }
 

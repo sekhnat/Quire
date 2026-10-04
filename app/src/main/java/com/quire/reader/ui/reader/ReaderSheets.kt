@@ -81,6 +81,7 @@ import com.quire.reader.ui.Segmented
 import com.quire.reader.ui.Sheet
 import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.SnippetStyle
+import com.quire.reader.ui.sheetNote
 import com.quire.reader.ui.snippetText
 import com.quire.reader.ui.TabRow2
 import com.quire.reader.ui.TocTab
@@ -305,8 +306,9 @@ private fun ColumnScope.LibrarySearchResults(ui: BookSearchUi, vm: QuireViewMode
     },
     11.5f, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp), color = Nq.neutral500,
   )
-  if (ui.truncated && (ui.status == BookSearchStatus.Results || ui.status == BookSearchStatus.NoMatch)) {
-    QText("Only the first part of this book is searchable, so later matches are not listed.", 11.5f, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp), color = Nq.neutral500)
+  val gapNote = sheetNote(ui.gap)
+  if (gapNote != null && (ui.status == BookSearchStatus.Results || ui.status == BookSearchStatus.NoMatch)) {
+    QText(gapNote, 11.5f, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp), color = Nq.neutral500)
   }
   val listState = rememberLazyListState()
   // Ask for the next page as the end of the list comes into view.

@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.index.BookTextResult
 import com.quire.reader.data.index.FtsQuery
+import com.quire.reader.data.index.IndexGap
 import com.quire.reader.data.index.PassageCount
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextSearchResult
@@ -23,7 +24,7 @@ import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TextSearchStatusTest {
-  private fun result(vararg ids: Long) = TextSearchResult(ids.map { BookTextResult(testBook(it, "Book $it"), PassageCount(1, false), false, emptyList()) }, ids.size, capped = false)
+  private fun result(vararg ids: Long) = TextSearchResult(ids.map { BookTextResult(testBook(it, "Book $it"), PassageCount(1, false), IndexGap.None, emptyList()) }, ids.size, capped = false)
 
   private fun input(q: String, filters: TextSearchFilters = TextSearchFilters.None) = TextSearchInput(q, filters)
 

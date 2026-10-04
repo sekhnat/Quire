@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.index.BookTextPage
 import com.quire.reader.data.index.ExcerptSpan
+import com.quire.reader.data.index.IndexGap
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.data.index.Snippet
 import org.junit.Assert.assertEquals
@@ -13,7 +14,7 @@ import org.junit.Test
 
 class BookSearchTest {
   private fun snippet(seq: Int) = Snippet(seq, "Chapter", listOf(ExcerptSpan("match $seq", hit = true)), IndexTarget(1, 10, 20, "{}", "match $seq", 0.5))
-  private fun page(vararg seqs: Int, next: Int? = null, truncated: Boolean = false) = BookTextPage(seqs.map(::snippet), next, truncated)
+  private fun page(vararg seqs: Int, next: Int? = null, gap: IndexGap = IndexGap.None) = BookTextPage(seqs.map(::snippet), next, gap)
   private fun seqs(ui: BookSearchUi) = ui.snippets.map { it.seq }
 
   @Test fun `blank input is idle and too little input is too short`() {
@@ -35,10 +36,10 @@ class BookSearchTest {
     assertEquals("\"large handsome\" \"stone*\"", plan.query!!.match)
   }
 
-  @Test fun `an empty last page is no match and keeps the truncation note`() {
-    val ui = bookSearchFirstPage(page(truncated = true))
+  @Test fun `an empty last page is no match and keeps the book's gap`() {
+    val ui = bookSearchFirstPage(page(gap = IndexGap.FirstPartOnly))
     assertEquals(BookSearchStatus.NoMatch, ui.status)
-    assertTrue(ui.truncated)
+    assertEquals(IndexGap.FirstPartOnly, ui.gap)
   }
 
   @Test fun `a first page has results and a cursor for more`() {
@@ -82,8 +83,8 @@ class BookSearchTest {
     assertEquals(fresh.snippets, fresh.withPage(2, page(5)).snippets)
   }
 
-  @Test fun `later pages keep reporting truncation`() {
-    val ui = bookSearchFirstPage(page(1, next = 1)).withPage(1, page(2, truncated = true))
-    assertTrue(ui.truncated)
+  @Test fun `later pages keep reporting the book's gap`() {
+    val ui = bookSearchFirstPage(page(1, next = 1)).withPage(1, page(2, gap = IndexGap.PartsUnreadable))
+    assertEquals(IndexGap.PartsUnreadable, ui.gap)
   }
 }

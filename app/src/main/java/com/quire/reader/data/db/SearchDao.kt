@@ -27,8 +27,8 @@ data class ChunkRow(val id: Long, val bookId: Long, val seq: Int, val chapter: S
 /** One matching passage of a single book, with what the snippet needs and the raw FTS `offsets()` string. */
 data class PageRow(val seq: Int, val chapter: String, val progression: Double, val text: String, val mapping: String, val offsets: String)
 
-/** A book's index as search sees it: the signature the text was indexed from and whether the index stops early. */
-data class IndexedBook(val bookId: Long, val mtime: Long, val sizeBytes: Long, val truncated: Boolean)
+/** A book's index as search sees it: the signature the text was indexed from, whether the index stops early, and how many resources could not be read. */
+data class IndexedBook(val bookId: Long, val mtime: Long, val sizeBytes: Long, val truncated: Boolean, val unreadableResources: Int)
 
 /**
  * The library filters as a clause on a `book b` joined with `book_state st`: author, series and tag are exact matches and
@@ -154,6 +154,6 @@ abstract class SearchDao {
   @Query("SELECT id, bookId, seq, chapter, progression, text, mapping FROM text_chunk WHERE id IN (:ids)")
   abstract suspend fun chunks(ids: List<Long>): List<ChunkRow>
 
-  @Query("SELECT bookId, mtime, sizeBytes, truncated FROM index_state WHERE status = 'done' AND bookId IN (:bookIds)")
+  @Query("SELECT bookId, mtime, sizeBytes, truncated, unreadableResources FROM index_state WHERE status = 'done' AND bookId IN (:bookIds)")
   abstract suspend fun indexedBooks(bookIds: List<Long>): List<IndexedBook>
 }

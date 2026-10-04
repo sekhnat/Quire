@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.index.BookTextPage
 import com.quire.reader.data.index.FtsQuery
+import com.quire.reader.data.index.IndexGap
 import com.quire.reader.data.index.Snippet
 
 /**
@@ -14,14 +15,14 @@ enum class BookSearchStatus { Idle, TooShort, OverLimit, Searching, Results, NoM
 
 /**
  * What the overlay shows in library-search mode: the pages loaded so far, in reading order. [nextAfterSeq] is the
- * cursor of the page still to load (null when everything is loaded); [truncated] says the book's index stops before
- * its end, so matches past that point cannot be listed.
+ * cursor of the page still to load (null when everything is loaded); [gap] says why the book's index may be
+ * missing text, so some matches cannot be listed.
  */
 data class BookSearchUi(
   val status: BookSearchStatus = BookSearchStatus.Idle,
   val snippets: List<Snippet> = emptyList(),
   val nextAfterSeq: Int? = null,
-  val truncated: Boolean = false,
+  val gap: IndexGap = IndexGap.None,
   val loadingMore: Boolean = false,
 ) {
   val hasMore: Boolean get() = nextAfterSeq != null
@@ -38,8 +39,8 @@ fun planBookSearch(text: String): BookSearchPlan = when (val parsed = FtsQuery.p
 
 /** The state once a query's first page has arrived. */
 fun bookSearchFirstPage(page: BookTextPage): BookSearchUi =
-  if (page.snippets.isEmpty() && page.nextAfterSeq == null) BookSearchUi(BookSearchStatus.NoMatch, truncated = page.truncated)
-  else BookSearchUi(BookSearchStatus.Results, page.snippets, page.nextAfterSeq, page.truncated)
+  if (page.snippets.isEmpty() && page.nextAfterSeq == null) BookSearchUi(BookSearchStatus.NoMatch, gap = page.gap)
+  else BookSearchUi(BookSearchStatus.Results, page.snippets, page.nextAfterSeq, page.gap)
 
 /**
  * Adds the page that was requested after chunk [afterSeq]. A page answering any other cursor (a repeat, or one from
@@ -48,5 +49,5 @@ fun bookSearchFirstPage(page: BookTextPage): BookSearchUi =
 fun BookSearchUi.withPage(afterSeq: Int, page: BookTextPage): BookSearchUi {
   if (status != BookSearchStatus.Results || nextAfterSeq != afterSeq) return copy(loadingMore = false)
   val seen = snippets.mapTo(HashSet()) { it.seq }
-  return copy(snippets = snippets + page.snippets.filter { it.seq !in seen }, nextAfterSeq = page.nextAfterSeq, truncated = page.truncated, loadingMore = false)
+  return copy(snippets = snippets + page.snippets.filter { it.seq !in seen }, nextAfterSeq = page.nextAfterSeq, gap = page.gap, loadingMore = false)
 }

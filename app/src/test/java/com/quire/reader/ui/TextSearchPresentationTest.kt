@@ -4,6 +4,7 @@ import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.index.BookTextResult
 import com.quire.reader.data.index.ExcerptSpan
 import com.quire.reader.data.index.IndexActivity
+import com.quire.reader.data.index.IndexGap
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.data.index.PassageCount
 import com.quire.reader.data.index.Snippet
@@ -16,18 +17,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TextSearchPresentationTest {
-  private fun coverage(eligible: Int = 10, searchable: Int = 10, failed: Int = 0, skipped: Int = 0, truncated: Int = 0) =
-    IndexCoverage(eligible, searchable, failed, skipped, truncated)
+  private fun coverage(eligible: Int = 10, searchable: Int = 10, failed: Int = 0, skipped: Int = 0, partial: Int = 0) =
+    IndexCoverage(eligible, searchable, failed, skipped, partial)
 
   private fun snippet(seq: Int) = Snippet(seq, "Chapter", listOf(ExcerptSpan("match", hit = true)), IndexTarget(1, 10, 20, "{}", "match", 0.5))
-  private fun book(id: Long, snippets: Int = 1) = BookTextResult(testBook(id, "Book $id"), PassageCount(snippets, false), false, (1..snippets).map(::snippet))
+  private fun book(id: Long, snippets: Int = 1) = BookTextResult(testBook(id, "Book $id"), PassageCount(snippets, false), IndexGap.None, (1..snippets).map(::snippet))
   private fun result(books: Int = 1, matching: Int = books, capped: Boolean = false, incomplete: Boolean = false, downgraded: String? = null) =
     TextSearchResult((1..books).map { book(it.toLong()) }, matching, capped, incomplete, downgraded)
 
   // ── coverage ──
 
   @Test fun `finished indexing with failed skipped and truncated books does not claim everything is searchable`() {
-    val line = coverageLine(coverage(eligible = 14, searchable = 11, failed = 1, skipped = 2, truncated = 3))
+    val line = coverageLine(coverage(eligible = 14, searchable = 11, failed = 1, skipped = 2, partial = 3))
     assertEquals("11 of 14 books searchable · 1 failed · 2 skipped · 3 partly indexed", line)
   }
 
@@ -43,7 +44,7 @@ class TextSearchPresentationTest {
   @Test fun `coverage is partial while books are missing or only partly indexed`() {
     assertFalse(isPartial(coverage()))
     assertTrue(isPartial(coverage(searchable = 9)))
-    assertTrue(isPartial(coverage(truncated = 1)))
+    assertTrue(isPartial(coverage(partial = 1)))
     assertFalse(isPartial(null))
   }
 
@@ -136,7 +137,7 @@ class TextSearchPresentationTest {
   }
 
   @Test fun `no match when every book is searchable but one is only partly indexed blames the missing part not missing books`() {
-    val detail = textSearchStatusCopy(TextSearchStatus.NoMatch(result(books = 0)), coverage(truncated = 1))!!.detail!!
+    val detail = textSearchStatusCopy(TextSearchStatus.NoMatch(result(books = 0)), coverage(partial = 1))!!.detail!!
     assertTrue(detail.contains("only partly searchable"))
     assertFalse(detail.contains("Not every book"))
   }
@@ -223,5 +224,28 @@ class TextSearchPresentationTest {
     assertEquals("48 KB", formatBytes(48 * 1024L + 100))
     assertEquals("13.4 MB", formatBytes((13.4 * 1048576).toLong()))
     assertEquals("1.25 GB", formatBytes((1.25 * 1073741824).toLong()))
+  }
+
+  // ── per-book notes ──
+
+  @Test fun `a book card names why the book is only partly searchable`() {
+    assertNull(cardNote(IndexGap.None))
+    assertEquals("Only the first part of this book is searchable", cardNote(IndexGap.FirstPartOnly))
+    assertEquals("Parts of this book couldn’t be read, so some passages may be missing", cardNote(IndexGap.PartsUnreadable))
+    assertEquals("Only the first part of this book is searchable, and some of it couldn’t be read", cardNote(IndexGap.Both))
+  }
+
+  @Test fun `the in-book search sheet says what the gap means for its matches`() {
+    assertNull(sheetNote(IndexGap.None))
+    assertEquals("Only the first part of this book is searchable, so later matches are not listed.", sheetNote(IndexGap.FirstPartOnly))
+    assertEquals("Parts of this book couldn’t be read, so some passages may be missing.", sheetNote(IndexGap.PartsUnreadable))
+    assertEquals("Only the first part of this book is searchable, and some of it couldn’t be read, so some matches may be missing.", sheetNote(IndexGap.Both))
+  }
+
+  @Test fun `a gap comes from the cap, the unreadable parts, or both`() {
+    assertEquals(IndexGap.None, IndexGap.of(truncated = false, partsUnreadable = false))
+    assertEquals(IndexGap.FirstPartOnly, IndexGap.of(truncated = true, partsUnreadable = false))
+    assertEquals(IndexGap.PartsUnreadable, IndexGap.of(truncated = false, partsUnreadable = true))
+    assertEquals(IndexGap.Both, IndexGap.of(truncated = true, partsUnreadable = true))
   }
 }

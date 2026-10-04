@@ -39,12 +39,27 @@ data class IndexTarget(
 /** One matching passage: [spans] is the excerpt to show, [seq] the chunk's place in the book, [chapter] where it is. */
 data class Snippet(val seq: Int, val chapter: String, val spans: List<ExcerptSpan>, val target: IndexTarget)
 
+/** Why a book's index may not hold all of its text: the size cap stopped it, some of its resources could not be read, or both. */
+enum class IndexGap {
+  None, FirstPartOnly, PartsUnreadable, Both;
+
+  companion object {
+    /** The gap for a book whose index hit the size cap ([truncated]) and/or had resources it could not read ([partsUnreadable]). */
+    fun of(truncated: Boolean, partsUnreadable: Boolean): IndexGap = when {
+      truncated && partsUnreadable -> Both
+      truncated -> FirstPartOnly
+      partsUnreadable -> PartsUnreadable
+      else -> None
+    }
+  }
+}
+
 /**
  * One book in the results. [passages] counts matching passages (not occurrences) and reads "N+" when the query hit
- * the examine cap; [truncated] says the book's index stops before its end, so absence of matches proves nothing.
+ * the examine cap; [gap] says why the book's index may be missing text, so absence of matches there proves nothing.
  * [snippets] are the first few matches in reading order.
  */
-data class BookTextResult(val book: Book, val passages: PassageCount, val truncated: Boolean, val snippets: List<Snippet>)
+data class BookTextResult(val book: Book, val passages: PassageCount, val gap: IndexGap, val snippets: List<Snippet>)
 
 /**
  * A library text search: the best [books] and how many books matched in all.
@@ -66,5 +81,5 @@ data class TextSearchResult(
   val moreBooks: Int get() = matchingBooks - books.size
 }
 
-/** One page of a single book's matches. [nextAfterSeq] is the cursor for the next page, null on the last. */
-data class BookTextPage(val snippets: List<Snippet>, val nextAfterSeq: Int?, val truncated: Boolean)
+/** One page of a single book's matches. [nextAfterSeq] is the cursor for the next page, null on the last; [gap] as in [BookTextResult]. */
+data class BookTextPage(val snippets: List<Snippet>, val nextAfterSeq: Int?, val gap: IndexGap)

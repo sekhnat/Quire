@@ -4,6 +4,7 @@ import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.index.ExcerptSpan
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.IndexActivity
+import com.quire.reader.data.index.IndexGap
 import com.quire.reader.data.index.PassageCount
 import com.quire.reader.data.index.Snippet
 import com.quire.reader.data.index.TextSearchResult
@@ -25,7 +26,7 @@ fun coverageFraction(c: IndexCoverage): String = "${number(c.searchable)} of ${n
 fun coverageIssues(c: IndexCoverage): String? = listOfNotNull(
   if (c.failed > 0) "${number(c.failed)} failed" else null,
   if (c.skipped > 0) "${number(c.skipped)} skipped" else null,
-  if (c.truncated > 0) "${number(c.truncated)} partly indexed" else null,
+  if (c.partial > 0) "${number(c.partial)} partly indexed" else null,
 ).joinToString(" · ").ifEmpty { null }
 
 /** One line on how much of the library can be searched; finishing indexing never reads as "everything is searchable". */
@@ -33,7 +34,7 @@ fun coverageLine(c: IndexCoverage): String =
   "${coverageFraction(c)} ${if (c.eligible == 1) "book" else "books"} searchable" + (coverageIssues(c)?.let { " · $it" } ?: "")
 
 /** Whether a search may be missing books, either unindexed or indexed only in part. */
-fun isPartial(c: IndexCoverage?): Boolean = c != null && (c.searchable < c.eligible || c.truncated > 0)
+fun isPartial(c: IndexCoverage?): Boolean = c != null && (c.searchable < c.eligible || c.partial > 0)
 
 /**
  * What to say about the indexer. [headline] is why books may be missing (null when nothing needs explaining),
@@ -91,7 +92,7 @@ fun textSearchStatusCopy(status: TextSearchStatus, coverage: IndexCoverage?): St
         when {
           coverage == null -> null
           coverage.searchable < coverage.eligible -> "Not every book is searchable yet, so a match may be in one that isn’t."
-          coverage.truncated > 0 -> "Some books are only partly searchable, so a match may be in a part that isn’t."
+          coverage.partial > 0 -> "Some books are only partly searchable, so a match may be in a part that isn’t."
           else -> "No passage in your books contains that."
         },
       )
@@ -107,7 +108,21 @@ fun resultNotices(result: TextSearchResult): List<String> = listOfNotNull(
   result.prefixDowngraded?.let { "Showing exact matches for \"$it\" — keep typing for prefix matches" },
 )
 
-const val TRUNCATED_BOOK_NOTE = "Only the first part of this book is searchable"
+/** The note under a book card whose index is missing text; null when it is complete. */
+fun cardNote(gap: IndexGap): String? = when (gap) {
+  IndexGap.None -> null
+  IndexGap.FirstPartOnly -> "Only the first part of this book is searchable"
+  IndexGap.PartsUnreadable -> "Parts of this book couldn’t be read, so some passages may be missing"
+  IndexGap.Both -> "Only the first part of this book is searchable, and some of it couldn’t be read"
+}
+
+/** The note under the in-book search status ("Show all in this book") when the book's index is missing text. */
+fun sheetNote(gap: IndexGap): String? = when (gap) {
+  IndexGap.None -> null
+  IndexGap.FirstPartOnly -> "Only the first part of this book is searchable, so later matches are not listed."
+  IndexGap.PartsUnreadable -> "Parts of this book couldn’t be read, so some passages may be missing."
+  IndexGap.Both -> "Only the first part of this book is searchable, and some of it couldn’t be read, so some matches may be missing."
+}
 
 /** "1 passage", "12 passages", "5000+ passages": passages that match, not occurrences of the words. */
 fun passageLabel(count: PassageCount): String = "${count.label} ${if (count.value == 1 && !count.isCapped) "passage" else "passages"}"
