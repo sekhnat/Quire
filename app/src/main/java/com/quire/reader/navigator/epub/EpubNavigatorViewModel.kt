@@ -60,7 +60,7 @@ internal class EpubNavigatorViewModel(
     val layout: Layout,
     val listener: EpubNavigatorFragment.Listener?,
     private val defaults: EpubDefaults,
-    private val server: WebViewServer,
+    internal val server: WebViewServer,
 ) : AndroidViewModel(application) {
 
     // Make a copy to prevent new decoration templates from being registered after initializing
@@ -71,8 +71,9 @@ internal class EpubNavigatorViewModel(
         sealed class Scope {
             object CurrentResource : Scope()
             object LoadedResources : Scope()
-            data class LoadedResource(val href: Url) : Scope()
-            data class WebView(val webView: R2BasicWebView) : Scope()
+
+            /** A prepared resource runner, addressed by its original resource href. */
+            data class Resource(val href: Url) : Scope()
         }
     }
 
@@ -153,9 +154,9 @@ internal class EpubNavigatorViewModel(
             .launchIn(viewModelScope)
     }
 
-    fun onResourceLoaded(webView: R2BasicWebView, link: Link): List<RunScriptCommand> =
+    fun onResourceLoaded(href: Url, link: Link): List<RunScriptCommand> =
         buildList {
-            val scope = RunScriptCommand.Scope.WebView(webView)
+            val scope = RunScriptCommand.Scope.Resource(href)
 
             // Applies the Readium CSS properties in case they changed since they were injected
             // in the HTML document.
@@ -316,7 +317,7 @@ internal class EpubNavigatorViewModel(
             for ((href, changes) in source.changesByHref(target)) {
                 val script = changes.javascriptForGroup(group, decorationTemplates) ?: continue
                 cmds.add(
-                    RunScriptCommand(script, scope = RunScriptCommand.Scope.LoadedResource(href))
+                    RunScriptCommand(script, scope = RunScriptCommand.Scope.Resource(href))
                 )
             }
         }

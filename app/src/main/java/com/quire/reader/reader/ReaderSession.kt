@@ -136,15 +136,17 @@ class ReaderSession(
   }
 
   /**
-   * Jumps to a library-search [target] and underlines it. Waits for the navigator to attach and its page to load
-   * (jumping earlier leaves the position and footer stale), then reads the underline back from the page: the
-   * navigator's own `go` answers "true" even when the text is not there. If the passage cannot be found, moves to the
-   * target's nearest place in the book and leaves nothing underlined.
+   * Jumps to a library-search [target] and underlines it. Waits for the navigator to attach and the
+   * whole book to be prepared — in scroll mode preparation is eager and can legitimately take longer
+   * than the old five-second page wait, so loading duration alone never triggers the fallback — then
+   * reads the underline back from the page: the navigator's own `go` answers "true" even when the text
+   * is not there. If the passage cannot be found after readiness, moves to the target's nearest place
+   * in the book and leaves nothing underlined.
    */
   suspend fun goToTarget(target: IndexTarget): TargetOutcome {
     val nav = awaitNavigator() ?: return TargetOutcome.NoNavigator
     val locator = parseTargetLocator(target)
-    if (!awaitPageLoaded(nav, locator?.href?.removeFragment())) return TargetOutcome.NoNavigator
+    if (!awaitBookReady(nav)) return TargetOutcome.NoNavigator
     if (locator != null) {
       nav.go(locator, animated = false)
       applySearchHits(listOf(SearchHit(locator, "", target.highlight, "", chapterTitle(locator))))
@@ -162,26 +164,19 @@ class ReaderSession(
     withTimeoutOrNull(NAVIGATOR_TIMEOUT_MS) { navigatorFlow.filterNotNull().first() }
 
   /**
-   * True once a page has loaded and runs scripts: the one being read, or (in continuous scroll, where the reading
-   * position is not known until the first scroll) the one at [href], the target's chapter.
+   * True once the whole book is prepared: in scroll mode the eager continuous surface's readiness
+   * barrier (no deadline — a slow but healthy book resolves its targets after readiness, not despite
+   * its loading time), in paged mode the first loaded page. False when the book failed or the
+   * navigator was replaced before becoming ready.
    */
-  private suspend fun awaitPageLoaded(nav: EpubNavigatorFragment, href: Url?): Boolean = withTimeoutOrNull(NAVIGATOR_TIMEOUT_MS) {
-    while (true) {
-      if (probe { nav.evaluateJavascript("1") }) break
-      if (href != null && probe { nav.evaluateJavascript("1", href) }) break
-      delay(POLL_MS)
-    }
-    true
-  } == true
+  private suspend fun awaitBookReady(nav: EpubNavigatorFragment): Boolean =
+    runCatching { nav.awaitWholeBookReadiness() }.getOrNull() == true
 
   /** True once the page reports at least one underline in the search group, which only happens when the text was found. */
   private suspend fun awaitUnderline(nav: EpubNavigatorFragment, href: Url): Boolean = withTimeoutOrNull(UNDERLINE_TIMEOUT_MS) {
     while (underlineCount(nav, href) == 0) delay(POLL_MS)
     true
   } == true
-
-  /** Whether [script] answers within a moment: a page that exists but has not loaded makes it wait, and must not hold up the other. */
-  private suspend fun probe(script: suspend () -> String?): Boolean = runCatching { withTimeoutOrNull(PROBE_TIMEOUT_MS) { script() } }.getOrNull() != null
 
   /** Underlines in the search group on the resource at [href], read from its page. */
   private suspend fun underlineCount(nav: EpubNavigatorFragment, href: Url): Int =
@@ -247,7 +242,6 @@ class ReaderSession(
     private const val NAVIGATOR_TIMEOUT_MS = 5_000L
     private const val UNDERLINE_TIMEOUT_MS = 2_500L
     private const val POLL_MS = 100L
-    private const val PROBE_TIMEOUT_MS = 300L
     private const val UNDERLINE_COUNT_JS = "(function(){try{return window.readium.getDecorations('$SEARCH').items.length}catch(e){return 0}})()"
     const val MINUTES_PER_POSITION = Book.MINUTES_PER_PAGE
     private const val PROGRESSION_SLACK = 0.0005

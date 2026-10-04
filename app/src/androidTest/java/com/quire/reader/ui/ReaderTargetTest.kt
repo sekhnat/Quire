@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import android.graphics.Bitmap
 import android.os.Environment
+import android.util.Log
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -16,8 +17,12 @@ import com.quire.reader.data.index.EpubFixtures
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.BatchStop
 import com.quire.reader.data.index.Snippet
+import com.quire.reader.data.index.FixtureResource
+import com.quire.reader.data.index.FixtureToc
+import com.quire.reader.navigator.epub.EpubNavigatorFragment
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.STALE_TARGET_MESSAGE
+import com.quire.reader.reader.SearchHit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -58,6 +63,9 @@ class ReaderTargetTest {
   @Before fun setUp() = runBlocking {
     app.settings.setOnboardingDone(true)
     val dir = args.getString("booksDir") ?: generatedLibrary()
+    // Library isolation: other instrumentation classes add their own fixture folders;
+    // this class's assertions (largest book, snippet counts) need only its own books.
+    app.library.folders.first().filter { File(it.path).canonicalPath != File(dir).canonicalPath }.forEach { app.library.removeFolder(it.id) }
     app.library.addFolder(dir)
     app.library.rescan()
     while (app.indexer.runBatch(System.currentTimeMillis() + 120_000).stop != BatchStop.Drained) Unit
@@ -78,7 +86,16 @@ class ReaderTargetTest {
     val chapters = (1..3).map { c ->
       EpubFixtures.chapter("Part $c", *Array(40) { p -> "The garden of part $c, paragraph $p, held the quiet and the dark and the light of the evening; nobody in the house spoke of the crimson heron $c-$p because the old story said that the bird sang only to the lonely. ".repeat(2) })
     }
-    EpubFixtures.write(File(dir, "generated.epub"), chapters)
+    // One optional image in the first part, so the optional-image readiness contract can be
+    // exercised by making its bytes undecodable.
+    val resources = chapters.mapIndexed { i, c ->
+      FixtureResource("c$i.xhtml", c.body + if (i == 0) """<p><img id="opt" src="img/optional.png" alt="optional"/></p>""" else "")
+    } + FixtureResource("img/optional.png", body = "", mediaType = "image/png", inSpine = false, bytes = ByteArray(64) { 0x42 })
+    EpubFixtures.write(
+      File(dir, "generated.epub"),
+      resources,
+      chapters.mapIndexed { i, c -> FixtureToc("c$i.xhtml", null, c.title) },
+    )
     return dir.path
   }
 
@@ -89,6 +106,10 @@ class ReaderTargetTest {
     open { vm.openTextHit(snippet.target) }
     val underlined = awaitUnderlined(href = hrefOf(snippet.target)) { it.isNotEmpty() }
     assertEquals(normalize(snippet.target.highlight), normalize(underlined.first()))
+    assertTrue(
+      "the search underline must be rendered in the document, not only registered",
+      awaitRenderedDecorationBoxes(hrefOf(snippet.target)) > 0,
+    )
     shoot("target-open")
     assertNull(vm.state.value.toast)
   }
@@ -99,12 +120,140 @@ class ReaderTargetTest {
     open { vm.openTextHit(snippet.target) }
     val underlined = awaitUnderlined(href = hrefOf(snippet.target)) { it.isNotEmpty() }
     assertEquals(normalize(snippet.target.highlight), normalize(underlined.first()))
-    // The underlined passage is on screen: the reader's place is within a page or two of it.
+    // A frame must have run the per-resource Readium initialization, or the decoration
+    // registers in the JS model but renders nothing (the 7.5a regression: empty host box,
+    // zero-pixel A/B diff).
+    assertTrue(
+      "the search underline must be rendered in the frame, not only registered",
+      awaitRenderedDecorationBoxes(hrefOf(snippet.target)) > 0,
+    )
+    // The underlined passage is on screen: the match itself must be scrolled into view,
+    // not merely underlined somewhere in the prepared book, and the reader's place is
+    // within a page or two of it.
+    val inView = awaitUnderlinedInViewport(hrefOf(snippet.target))
+    assertTrue("underlined at ${inView.first} of ${inView.second}", inView.first >= 0 && inView.first < inView.second)
     Thread.sleep(1_000)
     val here = session().current.value!!.locations.totalProgression!!
     assertTrue("at $here, target ${snippet.target.progression}", kotlin.math.abs(here - snippet.target.progression) < 0.01)
     shoot("target-open-scroll")
     assertNull(vm.state.value.toast)
+  }
+
+  @Test fun `the newest jump and decoration win while the book is still preparing`() {
+    // Two jumps asked for on the same session before it is ready, then the newest
+    // decoration request: only the latest of each pair may take effect (4.5).
+    runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = ReadMode.Scroll)) }
+    val all = allSnippets(phrase())
+    val early = Locator.fromJSON(JSONObject(all.first().target.locatorJson))!!
+    val late = Locator.fromJSON(JSONObject(all.last().target.locatorJson))!!
+    assertTrue("fixture needs two distinct targets", early.href != late.href)
+
+    // Hold one resource response so the surface stays in preparation while both jumps land.
+    val release = java.util.concurrent.CountDownLatch(1)
+    val held = java.util.concurrent.atomic.AtomicBoolean(false)
+    val heldFile = early.href.removeFragment().toString().substringAfterLast('/')
+    com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = { url, stream ->
+      if (url.endsWith(heldFile)) {
+        held.set(true)
+        val bytes = stream.use { it.readBytes() }
+        object : java.io.InputStream() {
+          private var started = false
+          private var at = 0
+          private fun await() { if (!started) { release.await(); started = true } }
+          override fun read(): Int { await(); return if (at >= bytes.size) -1 else bytes[at++].toInt() and 0xFF }
+          override fun read(b: ByteArray, off: Int, len: Int): Int {
+            await()
+            if (at >= bytes.size) return -1
+            val n = minOf(len, bytes.size - at)
+            System.arraycopy(bytes, at, b, off, n); at += n
+            return n
+          }
+        }
+      } else stream
+    }
+    try {
+      open { vm.read(book.id) }
+      // Wait out any preference-driven container rebuild first: a rebuild re-applies the
+      // saved locator over our jumps, so the test must run against the surface that survives.
+      Thread.sleep(2_000)
+      awaitCondition("a prepared surface", 30_000) { held.get() && session().navigator?.readiness?.value is EpubNavigatorFragment.Readiness.Preparing }
+      scenario.onActivity {
+        // Both jumps arrive while the surface is still preparing: the newer must win.
+        session().go(early)
+        session().go(late)
+      }
+      assertTrue("the resource gate must actually hold a chapter", held.get())
+      release.countDown()
+      awaitCondition("whole-book readiness", 30_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
+      Thread.sleep(1_000)
+      val landed = session().current.value!!
+      // The latest request owns the landing: the early target's resource must not be it.
+      // (Within the winning resource, a first-viewport reflow legitimately re-anchors,
+      // so the assertion is on which resource won, not on an exact offset.)
+      assertTrue("landed in ${landed.href}, expected ${late.href}", landed.href.removeFragment().toString().endsWith(late.href.removeFragment().toString().substringAfterLast('/')))
+      assertFalse(
+        "the superseded target's resource must not be the landing: ${landed.href}",
+        landed.href.removeFragment().toString().endsWith(early.href.removeFragment().toString().substringAfterLast('/')),
+      )
+
+      // The decoration for the winning target renders in its resource. (Readium applies
+      // per-resource decoration diffs, so a resource that never held a decoration stays
+      // clean; the app applies a single target's hits per navigation.)
+      runBlocking { session().applySearchHits(listOf(SearchHit(late, "", "late", "", ""))) }
+      assertTrue("the winning target must be underlined", awaitRenderedDecorationBoxes(late.href.removeFragment()) > 0)
+      assertTrue(
+        "the superseded target's resource must not be underlined",
+        awaitRenderedDecorationBoxes(early.href.removeFragment(), timeoutMs = 2_000) == 0,
+      )
+    } finally {
+      com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = null
+    }
+  }
+
+  @Test fun `a book with a broken optional image still becomes ready`() {
+    // The spec's optional-image contract: a failed image settles the frame instead of
+    // holding the book in preparation forever (the shell awaits load *or* error). A
+    // dedicated book and a unique image name keep the WebView's own cache out of it.
+    val dir = File(app.filesDir, "broken-image-books").apply { deleteRecursively(); mkdirs() }
+    val imageName = "img/optional-${System.nanoTime()}.png"
+    EpubFixtures.write(
+      File(dir, "broken-image.epub"),
+      listOf(
+        FixtureResource("c0.xhtml", """<h2>Broken image part</h2><p>The garden of the broken image part, paragraph 1, held the quiet and the dark and the light of the evening; nobody in the house spoke of the crimson heron because the old story said that the bird sang only to the lonely.</p><p><img id="opt" src="$imageName" alt="optional"/></p>"""),
+      ),
+      listOf(FixtureToc("c0.xhtml", null, "Broken image part")),
+    )
+    val target = runBlocking {
+      app.library.addFolder(dir.path)
+      app.library.rescan()
+      val found = app.library.books.first().first { File(it.path).parentFile?.name == "broken-image-books" }
+      app.library.setBookPrefs(found.id, ReaderPrefs(mode = ReadMode.Scroll))
+      found
+    }
+
+    val broken = java.util.concurrent.atomic.AtomicBoolean(false)
+    com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = { url, stream ->
+      if (url.endsWith(".png")) {
+        broken.set(true)
+        // Bytes no image decoder accepts: the frame must settle on the error path.
+        java.io.ByteArrayInputStream(ByteArray(64) { 0x42 })
+      } else stream
+    }
+    try {
+      open { vm.read(target.id) }
+      // Readiness waits for the image to complete (load or error), so by the time it is
+      // reached the image has necessarily been requested.
+      val ready = runBlocking { session().navigator?.awaitWholeBookReadiness() == true }
+      assertTrue("the book must actually request its image", broken.get())
+      assertTrue("whole-book readiness despite the broken image", ready)
+      val state = runBlocking { session().navigator?.readiness?.value }
+      assertFalse("a broken optional image must not fail the book: $state", state is EpubNavigatorFragment.Readiness.Failed)
+      assertNull("a broken optional image must not warn", vm.state.value.toast)
+    } finally {
+      com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = null
+      // The folder stays registered for the rest of this class's run; @Before removes
+      // every other folder before the next test, so no teardown race with the scanner.
+    }
   }
 
   @Test fun `an unresolved target in continuous scroll mode also falls back without an underline`() {
@@ -116,6 +265,64 @@ class ReaderTargetTest {
     awaitToast("Exact passage unavailable")
     assertTrue(awaitUnderlined(timeoutMs = 1_000, href = hrefOf(real), ok = { true }).isEmpty())
     shoot("target-unresolved-scroll")
+  }
+
+  @Test fun `a slow but healthy scroll startup still resolves its exact target`() {
+    // Hold one real resource response beyond the old five-second navigator deadline, release it,
+    // and verify the target lands underlined WITHOUT the unresolved-target toast: loading duration
+    // alone must never trigger the fallback.
+    runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = ReadMode.Scroll)) }
+    val snippet = firstSnippet(phrase())
+    val fileName = hrefOf(snippet.target).removeFragment().toString().substringAfterLast('/')
+
+    val release = java.util.concurrent.CountDownLatch(1)
+    val held = java.util.concurrent.atomic.AtomicBoolean(false)
+    val seen = java.util.concurrent.ConcurrentLinkedQueue<String>()
+    com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = { url, stream ->
+      seen.add(url)
+      Log.e("SlowStart", "gate saw: $url")
+      if (url.endsWith(fileName)) {
+        held.set(true)
+        // Serve the real bytes, but only after the old deadline has clearly passed.
+        // The bytes are buffered up front (resources are small); the reader thread
+        // blocks on the latch when the WebView asks for the body, which is fine: it
+        // happens off the main thread inside the serving pipeline.
+        val bytes = stream.use { it.readBytes() }
+        object : java.io.InputStream() {
+          private var started = false
+          private var at = 0
+          override fun read(): Int {
+            if (!started) { release.await(); started = true }
+            if (at >= bytes.size) return -1
+            return bytes[at++].toInt() and 0xFF
+          }
+          override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (!started) { release.await(); started = true }
+            if (at >= bytes.size) return -1
+            val n = minOf(len, bytes.size - at)
+            System.arraycopy(bytes, at, b, off, n)
+            at += n
+            return n
+          }
+        }
+      } else stream
+    }
+    try {
+      open { vm.openTextHit(snippet.target) }
+      // Hold the gate until the reader is attached (the reader must be *preparing*, not failed).
+      scenario.onActivity { }
+      Thread.sleep(5_500) // the old navigator deadline, and then some
+      release.countDown()
+      awaitCondition("held resource released") { held.get() && release.count == 0L }
+      Log.e("SlowStart", "intercepted: $seen")
+
+      val underlined = awaitUnderlined(timeoutMs = 30_000, href = hrefOf(snippet.target)) { it.isNotEmpty() }
+      assertEquals(normalize(snippet.target.highlight), normalize(underlined.first()))
+      assertNull("a slow book must not fall back because of its loading time", vm.state.value.toast)
+      shoot("target-slow-scroll")
+    } finally {
+      com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = null
+    }
   }
 
   @Test fun `an explicit target replaces the saved position for that opening only`() {
@@ -230,6 +437,57 @@ class ReaderTargetTest {
     app.library.searchBookPage(book.id, parsed).snippets.first()
   }
 
+  /**
+   * Every match of [query] in the book, in book order, so a test can pick two far apart.
+   * Pages through the real search entry point.
+   */
+  private fun allSnippets(query: String): List<Snippet> = runBlocking {
+    val parsed = FtsQuery.parse(query) as FtsQuery.Result.Query
+    val all = mutableListOf<Snippet>()
+    var after = -1
+    do {
+      val page = app.library.searchBookPage(book.id, parsed, after)
+      all += page.snippets
+      after = page.nextAfterSeq ?: -1
+    } while (after != -1 && all.size < 400)
+    all.ifEmpty { error("no snippets for $query") }
+  }
+
+  /**
+   * The number of decoration boxes actually rendered in [href]'s document, as opposed to
+   * the decorations merely registered in Readium's JS model. Before the per-resource
+   * initialization ran in a frame, `getDecorations(...).items` was populated while the
+   * host box stayed empty and nothing was drawn — an assertion on `items` alone cannot
+   * catch that.
+   */
+  private fun awaitRenderedDecorationBoxes(href: Url, timeoutMs: Long = 8_000): Int {
+    val script = "(function(){" +
+      " var hosts = document.querySelectorAll('[data-group=\"search\"]');" +
+      " var boxes = 0; for (var i = 0; i < hosts.length; i++) { boxes += hosts[i].children.length; }" +
+      " var styles = ''; for (var s = 0; s < document.styleSheets.length; s++) { try { styles += (document.styleSheets[s].ownerNode.textContent || ''); } catch (e) { } }" +
+      " return JSON.stringify({ boxes: boxes, styled: styles.indexOf('--underline-color') >= 0 }); })()"
+    var last = 0
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+      val raw = runBlocking(Dispatchers.Main) {
+        val nav = session().navigator ?: return@runBlocking null
+        runCatching { withTimeoutOrNull(2_000) { nav.evaluateJavascript(script, href) } }.getOrNull()
+      }
+      if (raw != null) {
+        var v: Any = JSONTokener(raw).nextValue()
+        var guard = 0
+        while (v is String && guard++ < 4) v = JSONTokener(v).nextValue()
+        val json = v as? JSONObject
+        if (json != null) {
+          last = json.optInt("boxes", 0)
+          if (last > 0 && json.optBoolean("styled")) return last
+        }
+      }
+      Thread.sleep(150)
+    }
+    return last
+  }
+
   /** A locator near the start of the book; the test only needs it to be somewhere other than the target. */
   private fun savedStart(): String = runBlocking {
     val publication = app.publicationLoader.open(File(book.path)).getOrNull()!!
@@ -270,6 +528,41 @@ class ReaderTargetTest {
     val raw = runCatching { withTimeoutOrNull(2_000) { if (href != null) nav.evaluateJavascript(script, href) else nav.evaluateJavascript(script) } }.getOrNull() ?: return@runBlocking emptyList()
     val json = JSONTokener(raw).nextValue() as? String ?: return@runBlocking emptyList()
     JSONArray(json).let { a -> List(a.length()) { a.getString(it) } }
+  }
+
+  /**
+   * Where the search underline sits in the outer viewport: its top in CSS px and the viewport
+   * height. The frame is same-origin with the shell, so it can report its own place in the
+   * outer document — an underline that is scrolled out of sight is not "positioned visibly".
+   */
+  private fun awaitUnderlinedInViewport(href: Url, timeoutMs: Long = 12_000): Pair<Double, Double> {
+    val script = "(function(){" +
+      " var items = window.readium ? window.readium.getDecorations('search').items : [];" +
+      " if (!items.length) return null;" +
+      " var r = items[0].range.getBoundingClientRect();" +
+      " var frameEl = window.frameElement;" +
+      " var local = r.top + window.pageYOffset;" +
+      " var frameTop = frameEl.getBoundingClientRect().top + window.parent.pageYOffset;" +
+      " return JSON.stringify({ top: frameTop + local - window.parent.pageYOffset, viewport: window.parent.innerHeight }); })()"
+    var found: Pair<Double, Double>? = null
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+      val raw = runBlocking(Dispatchers.Main) {
+        val nav = session().navigator ?: return@runBlocking null
+        runCatching { withTimeoutOrNull(2_000) { nav.evaluateJavascript(script, href) } }.getOrNull()
+      }
+      if (raw != null) {
+        var v: Any = JSONTokener(raw).nextValue()
+        var guard = 0
+        while (v is String && guard++ < 4) v = JSONTokener(v).nextValue()
+        (v as? JSONObject)?.let { found = it.optDouble("top", 0.0) to it.optDouble("viewport", 0.0) }
+      }
+      // has a real one before judging whether the underline is visible.
+      val measured = found
+      if (measured != null && measured.second > 0.0) return measured
+      Thread.sleep(150)
+    }
+    throw AssertionError("no search underline measured in ${href.removeFragment()}")
   }
 
   private fun awaitToast(part: String) = awaitCondition("toast containing '$part'", 6_000) { vm.state.value.toast?.contains(part) == true }

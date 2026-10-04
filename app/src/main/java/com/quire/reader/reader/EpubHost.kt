@@ -103,6 +103,9 @@ fun EpubHost(
               // Chapter changes come from the vertical scroll column; sideways swipes
               // must not turn pages.
               disablePageTurnsWhileScrolling = true
+              // The reading fonts. The continuous-scroll shell and its script are served
+              // on the publication origin by WebViewServer's reserved route, so they do
+              // not need an assets-host entry.
               servedAssets = listOf("fonts/.*")
               decorationTemplates = HtmlDecorationTemplates.defaultTemplates()
               ReaderFontList.forEach { font ->
