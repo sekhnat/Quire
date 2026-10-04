@@ -14,7 +14,8 @@ import org.jsoup.select.NodeVisitor
  * Readium reports each text element with a `cssSelector` made by jsoup's `Element.cssSelector()` over `Jsoup.parse(html)`.
  * That selector names the nearest element with an id, which is rarely the anchor the contents point at (`<a id="ch2">`
  * inside a heading, an empty `<a id="x"/>` before it, an `id` on a wrapper). So the resource is parsed the same way here,
- * every element gets the same selector string, and positions are compared instead of selector text.
+ * every element gets the same selector string, and positions are compared instead of selector text. The HTML is first
+ * passed through [normalizeHtml], as the indexer does before Readium parses it, so both see the same document.
  *
  * A position is a counter over elements and non-blank text nodes in document order. An element sits at the position of
  * its first text, because that is where its text starts; an anchor sits where its element opens, so an element whose
@@ -38,7 +39,7 @@ class ResourceOrder private constructor(
     fun parse(html: String): ResourceOrder? {
       if (html.length > MAX_CHARS) return null
       return try {
-        val body = Jsoup.parse(html).body()
+        val body = Jsoup.parse(normalizeHtml(html)).body()
         Builder().also { NodeTraversor.traverse(it, body) }.build()
       } catch (e: RuntimeException) {
         null
