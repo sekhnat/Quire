@@ -1,6 +1,6 @@
 # Design: HTML normalisation and partial-coverage reporting for the text index
 
-Status: IMPLEMENTED (plan: docs/superpowers/plans/2026-10-04-html-normalisation-partial-coverage.md).
+Status: IMPLEMENTED (plan: docs/superpowers/plans/2026-10-04-html-normalisation-partial-coverage.md). Supersedes `PLAN_FALLBACK_EXTRACTOR.md`; the hand-rolled fallback extractor described there is not built (see Decisions). Follows the library text index (`2026-10-03-library-text-index-design.md`); the 1,500-book scale run it waited for is complete (`2026-10-04-library-text-index-scale-results.md`).
 
 ## Problem
 
