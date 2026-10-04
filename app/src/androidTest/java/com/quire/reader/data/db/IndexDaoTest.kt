@@ -218,7 +218,7 @@ class IndexDaoTest : DbTestCase() {
 
     val coverage = f.db.index().observeCoverage().first()
 
-    // Of 7 readable books: done, truncated and damaged are searchable, and the last two are partial; the stale one waits like the pending one.
+    // Of 7 readable books: done, truncated and damaged are searchable; truncated and damaged are partial; the stale one waits like the pending one.
     assertEquals(IndexCoverage(eligible = 7, searchable = 3, failed = 1, skipped = 1, partial = 2), coverage)
     assertTrue(pending.id in f.db.index().eligibleBooks().map { it.id })
   }

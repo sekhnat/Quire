@@ -1,5 +1,6 @@
 package com.quire.reader.data.index
 
+import com.quire.reader.reader.normalizeHtml
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
