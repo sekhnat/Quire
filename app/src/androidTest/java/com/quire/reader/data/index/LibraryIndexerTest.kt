@@ -261,4 +261,52 @@ class LibraryIndexerTest : DbTestCase() {
     assertEquals(1, f.indexer.runBatch(deadline).processed)
     assertEquals(1, f.db.hits("highbury").size)
   }
+
+  /** Three chapters of sixty paragraphs (about 4 KB each, past the 2 KB where jsoup starts misreading `<title/>`), every resource with [head] in its `<head>`; the last chapter mentions a quokka. */
+  private fun headed(name: String, head: String, corrupt: Set<String> = emptySet()): File {
+    val resources = (0 until 3).map { c ->
+      val paragraphs = (0 until 60).joinToString("") { "<p>Paragraph $it of chapter $c tells how the keeper counted gulls.</p>" }
+      FixtureResource("c$c.xhtml", "<h2>Chapter $c</h2>$paragraphs" + (if (c == 2) "<p>The final chapter mentions a quokka.</p>" else ""), head)
+    }
+    return EpubFixtures.write(File(epubDir, "$name.epub"), resources, resources.mapIndexed { c, r -> FixtureToc(r.name, null, "Chapter $c") }, corrupt)
+  }
+
+  @Test fun `a book whose chapters have a self-closing title is indexed as fully as one with a closed title`() = runBlocking {
+    val f = fixture()
+    val selfClosing = f.add("SelfClosing", headed("self-closing", head = "<title/>"))
+    val closed = f.add("Closed", headed("closed", head = "<title>T</title>"))
+
+    f.indexer.runBatch(deadline)
+
+    val state = f.db.stateOf(selfClosing.id)!!
+    assertEquals(IndexStateEntity.STATUS_DONE, state.status)
+    assertEquals(0, state.unreadableResources)
+    assertEquals(f.db.chunkTexts(closed.id), f.db.chunkTexts(selfClosing.id))
+    assertTrue(f.db.chunkTexts(selfClosing.id).any { it.contains("quokka") })
+  }
+
+  @Test fun `a book with one unreadable chapter is indexed from the rest and says so`() = runBlocking {
+    val f = fixture()
+    val book = f.add("Damaged", headed("damaged", head = "<title>T</title>", corrupt = setOf("c1.xhtml")))
+
+    f.indexer.runBatch(deadline)
+
+    val state = f.db.stateOf(book.id)!!
+    assertEquals(IndexStateEntity.STATUS_DONE, state.status)
+    assertEquals(1, state.unreadableResources)
+    assertFalse(state.truncated)
+    assertTrue(f.db.chunkTexts(book.id).any { it.contains("quokka") })
+    val chapters = f.db.openHelper.writableDatabase.rows("SELECT DISTINCT chapter FROM text_chunk WHERE bookId = ?", book.id).map { it[0] }.toSet()
+    assertEquals(setOf("Chapter 0", "Chapter 2"), chapters)
+  }
+
+  @Test fun `a book none of whose chapters can be read fails instead of being skipped`() = runBlocking {
+    val f = fixture()
+    val book = f.add("Ruined", headed("ruined", head = "<title>T</title>", corrupt = setOf("c0.xhtml", "c1.xhtml", "c2.xhtml")))
+
+    assertEquals(1, f.indexer.runBatch(deadline).processed)
+
+    assertEquals(IndexStateEntity.STATUS_FAILED, f.db.stateOf(book.id)!!.status)
+    assertEquals(0, f.db.chunkCount(book.id))
+  }
 }

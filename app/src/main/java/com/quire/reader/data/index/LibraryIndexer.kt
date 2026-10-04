@@ -2,6 +2,7 @@ package com.quire.reader.data.index
 
 import android.content.Context
 import android.os.Process
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -38,7 +39,6 @@ import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.content.Content
-import org.readium.r2.shared.publication.services.content.content
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.getOrElse
 import java.io.File
@@ -223,6 +223,7 @@ class LibraryIndexer(
       bookId = book.id, mtime = book.mtime, sizeBytes = book.sizeBytes, status = IndexStateEntity.STATUS_DONE,
       completedAt = System.currentTimeMillis(), chunkCount = rows.size, textBytes = chunks.sumOf { it.text.utf8Length().toLong() },
       truncated = extraction.truncated,
+      unreadableResources = (extraction.result as? Extracted.Text)?.unreadableResources ?: 0,
     )
     return db.index().replaceBook(book.id, book.mtime, book.sizeBytes, rows, state)
   }
@@ -233,8 +234,8 @@ class LibraryIndexer(
     try {
       val chunks = ArrayList<IndexChunk>()
       val chunker = TextChunker()
-      val content = publication.content() ?: return Extraction(Extracted.Text(0))
-      val iterator = content.iterator()
+      val content = IndexContent(publication)
+      val iterator = content.iterator
       val chapters = chapterLabeler(publication)
       var currentHref = ""
       var currentOrder: ResourceOrder? = null
@@ -253,13 +254,23 @@ class LibraryIndexer(
         if (chunker.truncated) break
       }
       chunks += chunker.finish()
-      return Extraction(Extracted.Text(chunks.size), chunks, chunker.truncated)
+      // The resource the size cap stopped in was only partly read, so it says nothing about how much text it holds.
+      logSparse(file, if (chunker.truncated) content.tallies.dropLast(1) else content.tallies)
+      val unreadable = content.tallies.count { it.readFailed }
+      return Extraction(extracted(chunks.size, content.tallies.size, unreadable), chunks, chunker.truncated)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       return Extraction(Extracted.Unreadable)
     } finally {
       publication.close()
+    }
+  }
+
+  /** Evidence of misreads other than the ones [normalizeHtml] repairs, for a later look; nothing is decided from it. */
+  private fun logSparse(file: File, tallies: List<ResourceTally>) {
+    tallies.filter { isSparse(it.bytes, it.yieldedChars) }.forEach {
+      Log.i(TAG, "sparse resource: ${file.path} ${it.href}: ${it.yieldedChars} chars from ${it.bytes} bytes")
     }
   }
 
@@ -316,5 +327,7 @@ class LibraryIndexer(
   companion object {
     /** The unique WorkManager chain every indexing request joins. */
     const val WORK_NAME = "indexing-chain"
+
+    private const val TAG = "LibraryIndexer"
   }
 }
