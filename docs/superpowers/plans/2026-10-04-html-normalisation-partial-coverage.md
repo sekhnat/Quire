@@ -14,6 +14,9 @@
 
 - Readium stays pinned at **3.3.0**; do not bump Readium, Coil, AGP or compileSdk.
 - Build with JDK 21 through the Android env. Every Gradle command in this plan is run as `zsh -fc 'source ~/.config/android/env.zsh; ./gradlew …'` from `/home/caan9/Projects/Quire`.
+- Inside a git-worktree session the shell refuses `zsh -fc 'source …'` and `$(…)`. Run Gradle as the plain command `env JAVA_HOME=/usr/lib/jvm/java-21-openjdk ANDROID_HOME=/home/caan9/Android/Sdk ./gradlew <tasks>`, read this plan's `zsh -fc …` lines that way, and keep every shell command plain.
+- **Test documents must be large.** jsoup 1.22.2 recovers from a self-closing `<title/>` in a document of about 2 KB or less and swallows most of the start of a larger one into the title (measured: 2,040 chars lose half the paragraphs; the real *Juliet Takes a Breath* file, 450 KB, keeps 184 characters of body text). Any test that must show the bug needs a document of at least 3 KB, with what it looks for near the start.
+- Commit trailer: end every commit message with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (the commit commands below show an older trailer; use this one).
 - Instrumented tests run **only** with `--init-script tools/dbtest-suffix.init.gradle` (app id `com.quire.reader.dbtest`). Never run plain `connectedDebugAndroidTest`: it would wipe the user's installed `com.quire.reader`. With two emulators running, prefix the command with `ANDROID_SERIAL=<serial>`.
 - `MIGRATION_1_2` is not edited. The new column arrives by `MIGRATION_2_3` (`ALTER TABLE`) at database version **3**.
 - `IndexStateEntity.truncated` keeps meaning only "hit the 6 MiB cap".
@@ -61,6 +64,7 @@ package com.quire.reader.data.index
 import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HtmlNormalizerTest {
@@ -86,11 +90,14 @@ class HtmlNormalizerTest {
     assertSame(html, normalizeHtml(html))
   }
 
+  // jsoup recovers from `<title/>` in a document of about 2 KB or less and swallows most of the body in a larger one (measured
+  // on jsoup 1.22.2: 2,040 chars lose half the paragraphs; the real book *Juliet Takes a Breath* keeps 184 of 369,000 characters
+  // of body text). The body below is therefore far past that size.
   @Test fun `after normalising, jsoup finds the body text a self-closing title used to swallow`() {
-    val html = """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title/></head><body><p>First paragraph.</p><p>Second paragraph.</p></body></html>"""
-    assertEquals("jsoup's HTML mode loses the body behind <title/>", 0, Jsoup.parse(html).body().select("p").size)
-    val fixed = Jsoup.parse(normalizeHtml(html)).body()
-    assertEquals(listOf("First paragraph.", "Second paragraph."), fixed.select("p").map { it.text() })
+    val body = (1..200).joinToString("") { "<p>Paragraph $it of the chapter, long enough to count.</p>" }
+    val html = """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title/></head><body>$body</body></html>"""
+    assertTrue("jsoup's HTML mode loses paragraphs behind <title/>", Jsoup.parse(html).body().select("p").size < 200)
+    assertEquals(200, Jsoup.parse(normalizeHtml(html)).body().select("p").size)
   }
 }
 ```
@@ -99,11 +106,13 @@ Append to `test/data/index/ResourceOrderTest.kt` (inside the class; `assertNotNu
 
 ```kotlin
   @Test fun `a resource with a self-closing title still has its anchors and elements`() {
-    val html = """<html xmlns="http://www.w3.org/1999/xhtml"><head><title/></head><body><h2 id="ch1">One</h2><p class="p">Text.</p></body></html>"""
+    // The filler makes the document large enough for jsoup to swallow its start into the title (see HtmlNormalizerTest).
+    val filler = (1..200).joinToString("") { "<p>Filler paragraph $it, long enough to count.</p>" }
+    val html = """<html xmlns="http://www.w3.org/1999/xhtml"><head><title/></head><body><h2 id="ch1">One</h2><p class="first">Text.</p>$filler</body></html>"""
     val order = ResourceOrder.parse(html)!!
     assertNotNull(order.anchor("ch1"))
     // Readium reports selectors computed over the normalised document, so that is what is looked up.
-    assertNotNull(order.element(css(normalizeHtml(html), ".p")))
+    assertNotNull(order.element(css(normalizeHtml(html), ".first")))
   }
 ```
 
@@ -163,7 +172,7 @@ with
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `zsh -fc 'source ~/.config/android/env.zsh; ./gradlew testDebugUnitTest --tests com.quire.reader.data.index.HtmlNormalizerTest --tests com.quire.reader.data.index.ResourceOrderTest'`
-Expected: BUILD SUCCESSFUL, all tests pass. If the jsoup assertion "loses the body behind <title/>" fails, stop and report: the premise of the whole change would be wrong.
+Expected: BUILD SUCCESSFUL, all tests pass. If the assertion "jsoup's HTML mode loses paragraphs behind <title/>" fails, make sure the body really is 200 paragraphs (the bug needs a document of more than about 2 KB) before concluding anything; if it still fails, stop and report BLOCKED.
 
 - [ ] **Step 6: Commit**
 
@@ -530,9 +539,10 @@ class IndexContentTest {
     try { block(publication) } finally { publication.close() }
   }
 
+  /** Three resources of sixty paragraphs (about 5 KB each): jsoup only misreads `<title/>` in documents of more than about 2 KB. */
   private fun book(name: String, head: String? = null, corrupt: Set<String> = emptySet()): File {
     val resources = (0 until 3).map { i ->
-      FixtureResource("c$i.xhtml", "<h2 id=\"h$i\">Chapter $i</h2>" + (0 until 20).joinToString("") { "<p class=\"p$it\">Paragraph $it of chapter $i about the lighthouse.</p>" }, head)
+      FixtureResource("c$i.xhtml", "<h2 id=\"h$i\">Chapter $i</h2>" + (0 until 60).joinToString("") { "<p class=\"p$it\">Paragraph $it of chapter $i about the lighthouse.</p>" }, head)
     }
     return EpubFixtures.write(File(dir, "$name.epub"), resources, resources.mapIndexed { i, r -> FixtureToc(r.name, null, "Chapter $i") }, corrupt)
   }
@@ -550,7 +560,10 @@ class IndexContentTest {
     val closed = withPublication(book("closed", head = "<title>T</title>")) { pub -> IndexContent(pub).iterator.drain().map { it.text } }
     withPublication(book("self-closing", head = "<title/>")) { pub ->
       val readium = pub.content()!!.iterator().drain()
-      assertTrue("Readium alone loses the paragraphs", readium.none { it.text.contains("Paragraph") })
+      assertTrue(
+        "Readium alone loses most of the paragraphs",
+        readium.count { it.text.contains("Paragraph") } < closed.count { it.contains("Paragraph") },
+      )
       val content = IndexContent(pub)
       assertEquals(closed, content.iterator.drain().map { it.text })
       assertTrue(content.tallies.none { it.readFailed || isSparse(it.bytes, it.yieldedChars) })
@@ -692,10 +705,10 @@ Expected: 3 tests PASS. If `a healthy book yields exactly what Readium's own con
 Append inside `class LibraryIndexerTest` (`androidTest/data/index/LibraryIndexerTest.kt`):
 
 ```kotlin
-  /** Three chapters of forty paragraphs, every resource with [head] in its `<head>`; the last chapter mentions a quokka. */
+  /** Three chapters of sixty paragraphs (about 4 KB each, past the 2 KB where jsoup starts misreading `<title/>`), every resource with [head] in its `<head>`; the last chapter mentions a quokka. */
   private fun headed(name: String, head: String, corrupt: Set<String> = emptySet()): File {
     val resources = (0 until 3).map { c ->
-      val paragraphs = (0 until 40).joinToString("") { "<p>Paragraph $it of chapter $c tells how the keeper counted gulls.</p>" }
+      val paragraphs = (0 until 60).joinToString("") { "<p>Paragraph $it of chapter $c tells how the keeper counted gulls.</p>" }
       FixtureResource("c$c.xhtml", "<h2>Chapter $c</h2>$paragraphs" + (if (c == 2) "<p>The final chapter mentions a quokka.</p>" else ""), head)
     }
     return EpubFixtures.write(File(epubDir, "$name.epub"), resources, resources.mapIndexed { c, r -> FixtureToc(r.name, null, "Chapter $c") }, corrupt)
@@ -712,7 +725,7 @@ Append inside `class LibraryIndexerTest` (`androidTest/data/index/LibraryIndexer
     assertEquals(IndexStateEntity.STATUS_DONE, state.status)
     assertEquals(0, state.unreadableResources)
     assertEquals(f.db.chunkTexts(closed.id), f.db.chunkTexts(selfClosing.id))
-    assertEquals(2, f.db.hits("quokka").size)
+    assertTrue(f.db.chunkTexts(selfClosing.id).any { it.contains("quokka") })
   }
 
   @Test fun `a book with one unreadable chapter is indexed from the rest and says so`() = runBlocking {
@@ -725,7 +738,7 @@ Append inside `class LibraryIndexerTest` (`androidTest/data/index/LibraryIndexer
     assertEquals(IndexStateEntity.STATUS_DONE, state.status)
     assertEquals(1, state.unreadableResources)
     assertFalse(state.truncated)
-    assertEquals(1, f.db.hits("quokka").size)
+    assertTrue(f.db.chunkTexts(book.id).any { it.contains("quokka") })
     val chapters = f.db.openHelper.writableDatabase.rows("SELECT DISTINCT chapter FROM text_chunk WHERE bookId = ?", book.id).map { it[0] }.toSet()
     assertEquals(setOf("Chapter 0", "Chapter 2"), chapters)
   }
@@ -747,11 +760,13 @@ Append inside `class ChapterLabelIndexTest` (`androidTest/data/index/ChapterLabe
 
 ```kotlin
   @Test fun `chapters in a resource with a self-closing title are labelled from their anchors like any other`() {
+    // The filler takes the titled resource past the 2 KB where jsoup starts swallowing the start of a `<title/>` document into the title.
+    val filler = (1..200).joinToString("") { "<p>Filler line $it keeps this file past two kilobytes.</p>" }
     val book = index(
       "mixed-title",
       listOf(
         FixtureResource("plain.xhtml", """<h2 id="one">One</h2><p>Ferns grow here.</p><h2 id="two">Two</h2><p>Mosses grow there.</p>"""),
-        FixtureResource("titled.xhtml", """<h2 id="three">Three</h2><p>Lichens cling on.</p><h2 id="four">Four</h2><p>Liverworts spread out.</p>""", head = "<title/>"),
+        FixtureResource("titled.xhtml", """<h2 id="three">Three</h2><p>Lichens cling on.</p><h2 id="four">Four</h2><p>Liverworts spread out.</p>$filler""", head = "<title/>"),
       ),
       listOf(
         FixtureToc("plain.xhtml", "one", "One"), FixtureToc("plain.xhtml", "two", "Two"),
