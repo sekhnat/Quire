@@ -300,7 +300,7 @@ internal class ContinuousChapterLayout(
   private var maximumVelocity = 0
   private var isDragging = false
   private var activePointerId = -1
-  private var lastTouchY = 0f
+  private val drag = DragTracker()
   private var downTouchX = 0f
   private var downTouchY = 0f
 
@@ -419,7 +419,6 @@ internal class ContinuousChapterLayout(
         activePointerId = event.getPointerId(0)
         downTouchX = event.x
         downTouchY = event.y
-        lastTouchY = event.y
         isDragging = false
         velocityTracker?.recycle()
         velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
@@ -442,7 +441,7 @@ internal class ContinuousChapterLayout(
             val top = chapterTop(touched.index)
             y = (top + touched.webView.scrollY).coerceIn(0, maxScrollY())
           }
-          lastTouchY = pointerY
+          drag.start(pointerY)
           isDragging = true
           return true
         }
@@ -464,9 +463,7 @@ internal class ContinuousChapterLayout(
         velocityTracker?.addMovement(event)
         val pointerIndex = event.findPointerIndex(activePointerId)
         if (pointerIndex < 0 || !isDragging) return true
-        val pointerY = event.getY(pointerIndex)
-        val delta = (lastTouchY - pointerY).roundToInt()
-        lastTouchY = pointerY
+        val delta = drag.step(event.getY(pointerIndex))
         if (delta != 0) {
           // Finger up (positive) scrolls forward through the book.
           dragBy(delta)
