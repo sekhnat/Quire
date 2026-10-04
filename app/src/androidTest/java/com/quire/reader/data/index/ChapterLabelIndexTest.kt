@@ -162,4 +162,24 @@ class ChapterLabelIndexTest : DbTestCase() {
     assertEquals("Part Two", book.chapterOf("secondparttitleword"))
     assertEquals("Chapter 4", book.chapterOf("figfour"))
   }
+
+  @Test fun `chapters in a resource with a self-closing title are labelled from their anchors like any other`() {
+    // The filler takes the titled resource past the 2 KB where jsoup starts swallowing the start of a `<title/>` document into the title.
+    val filler = (1..200).joinToString("") { "<p>Filler line $it keeps this file past two kilobytes.</p>" }
+    val book = index(
+      "mixed-title",
+      listOf(
+        FixtureResource("plain.xhtml", """<h2 id="one">One</h2><p>Ferns grow here.</p><h2 id="two">Two</h2><p>Mosses grow there.</p>"""),
+        FixtureResource("titled.xhtml", """<h2 id="three">Three</h2><p>Lichens cling on.</p><h2 id="four">Four</h2><p>Liverworts spread out.</p>$filler""", head = "<title/>"),
+      ),
+      listOf(
+        FixtureToc("plain.xhtml", "one", "One"), FixtureToc("plain.xhtml", "two", "Two"),
+        FixtureToc("titled.xhtml", "three", "Three"), FixtureToc("titled.xhtml", "four", "Four"),
+      ),
+    )
+    assertEquals("One", book.chapterOf("ferns"))
+    assertEquals("Two", book.chapterOf("mosses"))
+    assertEquals("Three", book.chapterOf("lichens"))
+    assertEquals("Four", book.chapterOf("liverworts"))
+  }
 }

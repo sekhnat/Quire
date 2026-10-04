@@ -3,13 +3,14 @@ package com.quire.reader.data.index
 import java.io.File
 import java.util.zip.CRC32
 import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 /** One XHTML chapter of a generated test EPUB; [title] is its table-of-contents label and [body] the markup inside `<body>`. */
 class FixtureChapter(val title: String, val body: String)
 
-/** An XHTML file of a generated test EPUB, in reading order; [body] is the markup inside `<body>`. */
-class FixtureResource(val name: String, val body: String)
+/** An XHTML file of a generated test EPUB, in reading order; [body] is the markup inside `<body>`, and [head], when given, the markup inside `<head>` (default: a `<title>`). */
+class FixtureResource(val name: String, val body: String, val head: String? = null)
 
 /** A table-of-contents line pointing at [resource] (and the anchor [fragment] in it), with [children] nested under it. */
 class FixtureToc(val resource: String, val fragment: String?, val title: String, val children: List<FixtureToc> = emptyList())
@@ -23,8 +24,8 @@ object EpubFixtures {
   fun write(file: File, chapters: List<FixtureChapter>): File =
     write(file, chapters.mapIndexed { i, c -> FixtureResource("c$i.xhtml", c.body) }, chapters.mapIndexed { i, c -> FixtureToc("c$i.xhtml", null, c.title) })
 
-  /** An EPUB of [resources] in reading order whose contents are [toc] (nested as given). */
-  fun write(file: File, resources: List<FixtureResource>, toc: List<FixtureToc>): File {
+  /** An EPUB of [resources] in reading order whose contents are [toc] (nested as given); the resources named in [corrupt] cannot be read. */
+  fun write(file: File, resources: List<FixtureResource>, toc: List<FixtureToc>, corrupt: Set<String> = emptySet()): File {
     file.parentFile?.mkdirs()
     ZipOutputStream(file.outputStream()).use { zip ->
       // The mimetype entry must come first and be stored uncompressed.
@@ -40,9 +41,10 @@ object EpubFixtures {
         "OEBPS/content.opf",
         """<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:uuid:fixture</dc:identifier><dc:title>Fixture</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2026-01-01T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>$manifest</manifest><spine>$spine</spine></package>""",
       )
-      zip.entry("OEBPS/nav.xhtml", xhtml("Contents", """<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc">${tocList(toc)}</nav>"""))
-      resources.forEach { zip.entry("OEBPS/${it.name}", xhtml(it.name, it.body)) }
+      zip.entry("OEBPS/nav.xhtml", xhtml("<title>Contents</title>", """<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc">${tocList(toc)}</nav>"""))
+      resources.forEach { zip.entry("OEBPS/${it.name}", xhtml(it.head ?: "<title>${it.name}</title>", it.body)) }
     }
+    corrupt.forEach { corruptEntry(file, "OEBPS/$it") }
     return file
   }
 
@@ -55,8 +57,27 @@ object EpubFixtures {
   /** A file that is not a zip archive at all. */
   fun writeCorrupt(file: File): File = file.apply { parentFile?.mkdirs(); writeBytes(ByteArray(2_048) { (it * 31).toByte() }) }
 
-  private fun xhtml(title: String, body: String) =
-    """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>$title</title></head><body>$body</body></html>"""
+  private fun xhtml(head: String, body: String) =
+    """<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head>$head</head><body>$body</body></html>"""
+
+  /**
+   * Overwrites the compressed bytes of [entryName] in place: the archive and its directory stay valid, but reading that
+   * entry fails, because 0xFF starts a deflate block of the reserved type, which inflaters reject.
+   */
+  private fun corruptEntry(file: File, entryName: String) {
+    val size = ZipFile(file).use { zip -> requireNotNull(zip.getEntry(entryName)) { "no entry $entryName" }.compressedSize.toInt() }
+    val bytes = file.readBytes()
+    val name = entryName.toByteArray()
+    val header = (0 until bytes.size - 30 - name.size).first { i ->
+      bytes[i] == 0x50.toByte() && bytes[i + 1] == 0x4b.toByte() && bytes[i + 2] == 0x03.toByte() && bytes[i + 3] == 0x04.toByte() &&
+        u16(bytes, i + 26) == name.size && bytes.copyOfRange(i + 30, i + 30 + name.size).contentEquals(name)
+    }
+    val data = header + 30 + name.size + u16(bytes, header + 28)
+    bytes.fill(0xFF.toByte(), data, data + size)
+    file.writeBytes(bytes)
+  }
+
+  private fun u16(b: ByteArray, at: Int) = (b[at].toInt() and 0xFF) or ((b[at + 1].toInt() and 0xFF) shl 8)
 
   private fun ZipOutputStream.entry(name: String, content: String) {
     putNextEntry(ZipEntry(name)); write(content.toByteArray()); closeEntry()
