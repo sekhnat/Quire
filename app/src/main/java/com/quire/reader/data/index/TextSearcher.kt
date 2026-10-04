@@ -62,7 +62,7 @@ class TextSearcher(
         val chunk = chunks[row.id] ?: return@mapNotNull null
         snippet(state, chunk.seq, chunk.chapter, chunk.progression, chunk.text, chunk.mapping, row.offsets)
       }
-      BookTextResult(book.toBook(now), PassageCount(rank.passages, capped), state.truncated, snippets)
+      BookTextResult(book.toBook(now), PassageCount(rank.passages, capped), state.gap, snippets)
     }
     return TextSearchResult(results, perBook.size, capped, incomplete, commonPrefix)
   }
@@ -142,11 +142,11 @@ class TextSearcher(
 
   /** The next page of [bookId]'s matches after chunk [afterSeq] (-1 for the first), unaffected by the library examine cap. */
   suspend fun page(query: FtsQuery.Result.Query, bookId: Long, afterSeq: Int = -1): BookTextPage {
-    val state = search.indexedBooks(listOf(bookId)).firstOrNull() ?: return BookTextPage(emptyList(), null, truncated = false)
+    val state = search.indexedBooks(listOf(bookId)).firstOrNull() ?: return BookTextPage(emptyList(), null, IndexGap.None)
     val rows: List<PageRow> = search.bookMatches(query.match, bookId, afterSeq, pageSize + 1)
     val page = rows.take(pageSize)
     val snippets = page.mapNotNull { snippet(state, it.seq, it.chapter, it.progression, it.text, it.mapping, it.offsets) }
-    return BookTextPage(snippets, if (rows.size > pageSize) page.last().seq else null, state.truncated)
+    return BookTextPage(snippets, if (rows.size > pageSize) page.last().seq else null, state.gap)
   }
 
   /** The snippet for one matching chunk, or null when its stored mapping no longer fits its text. */
@@ -175,3 +175,5 @@ class TextSearcher(
     const val BROAD_FILTER_PROBE_BOOKS = 8
   }
 }
+
+private val IndexedBook.gap: IndexGap get() = IndexGap.of(truncated, unreadableResources > 0)

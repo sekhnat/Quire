@@ -33,7 +33,7 @@ class TextSearcherTest : DbTestCase() {
   }
 
   /** Indexes [paragraphs] as the indexer would: through the real chunker, one source element each. */
-  private fun Fixture.index(book: BookEntity, paragraphs: List<String>, chapter: String = "Chapter One", truncated: Boolean = false): List<IndexChunk> {
+  private fun Fixture.index(book: BookEntity, paragraphs: List<String>, chapter: String = "Chapter One", truncated: Boolean = false, unreadable: Int = 0): List<IndexChunk> {
     val elements = paragraphs.map {
       SourceElement("ch1.xhtml", it, false, """{"href":"ch1.xhtml","type":"application/xhtml+xml","locations":{"progression":0.25}}""", 0.25, chapter)
     }
@@ -44,7 +44,7 @@ class TextSearcherTest : DbTestCase() {
         primaryEndByte = it.primaryEndByte, text = it.text, mapping = it.mappingJson, progression = it.progression,
       )
     }
-    runBlocking { db.index().replaceBook(book.id, book.mtime, book.sizeBytes, rows, doneState(book, book.id, rows.size, truncated, rows.sumOf { it.text.toByteArray().size }.toLong())) }
+    runBlocking { db.index().replaceBook(book.id, book.mtime, book.sizeBytes, rows, doneState(book, book.id, rows.size, truncated, rows.sumOf { it.text.toByteArray().size }.toLong(), unreadable)) }
     return chunks
   }
 
@@ -419,16 +419,22 @@ class TextSearcherTest : DbTestCase() {
     assertFalse(snippet.target.isCurrentFor(78, 4242))
   }
 
-  @Test fun `a truncated index is reported with its book`() {
+  @Test fun `each book reports why its index may be missing text`() {
     val f = fixture()
-    val partial = f.add("Partial")
+    val capped = f.add("Capped")
+    val damaged = f.add("Damaged")
     val whole = f.add("Whole")
-    f.index(partial, listOf("The heron stood alone."), truncated = true)
+    f.index(capped, listOf("The heron stood alone."), truncated = true)
+    f.index(damaged, listOf("The heron stood alone."), unreadable = 2)
     f.index(whole, listOf("The heron stood alone."))
 
     val result = f.search("heron")
 
-    assertEquals(mapOf("Partial" to true, "Whole" to false), result.books.associate { it.book.title to it.truncated })
+    assertEquals(
+      mapOf("Capped" to IndexGap.FirstPartOnly, "Damaged" to IndexGap.PartsUnreadable, "Whole" to IndexGap.None),
+      result.books.associate { it.book.title to it.gap },
+    )
+    assertEquals(IndexGap.PartsUnreadable, runBlocking { TextSearcher(f.db).page(query("heron"), damaged.id) }.gap)
   }
 
   @Test fun `show all pages a single book in reading order without gaps or repeats whatever else is indexed`() {
@@ -480,7 +486,7 @@ class TextSearcherTest : DbTestCase() {
 
     val page = runBlocking { TextSearcher(f.db).page(query("heron"), book.id) }
 
-    assertEquals(BookTextPage(emptyList(), null, truncated = false), page)
+    assertEquals(BookTextPage(emptyList(), null, IndexGap.None), page)
   }
 
   @Test fun `odd input never throws whether it parses to a query or not`() {

@@ -48,8 +48,8 @@ import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.SnippetStyle
 import com.quire.reader.ui.Tag
 import com.quire.reader.ui.TextSearchStatus
-import com.quire.reader.ui.TRUNCATED_BOOK_NOTE
 import com.quire.reader.ui.UiState
+import com.quire.reader.ui.cardNote
 import com.quire.reader.ui.hiddenSnippets
 import com.quire.reader.ui.indexStatusText
 import com.quire.reader.ui.passageLabel
@@ -150,8 +150,8 @@ private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> 
       }
       QText(passageLabel(result.passages), 11.5f, color = Nq.accent300, tabular = true, maxLines = 1)
     }
-    if (result.truncated) {
-      QText(TRUNCATED_BOOK_NOTE, 11.5f, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp), color = Nq.neutral500)
+    cardNote(result.gap)?.let { note ->
+      QText(note, 11.5f, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp), color = Nq.neutral500)
     }
     shown.forEach { snippet ->
       Column(

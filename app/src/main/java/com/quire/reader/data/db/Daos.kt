@@ -136,9 +136,10 @@ data class EligibleBook(val id: Long, val path: String, val mtime: Long, val siz
 
 /**
  * How much of the library is searchable. Every count covers readable books only, and `searchable`, `failed`
- * and `skipped` count a book only while its index state still matches the book's current signature.
+ * and `skipped` count a book only while its index state still matches the book's current signature. `partial`
+ * counts searchable books whose index is missing text (size cap or unreadable resources).
  */
-data class IndexCoverage(val eligible: Int, val searchable: Int, val failed: Int, val skipped: Int, val truncated: Int)
+data class IndexCoverage(val eligible: Int, val searchable: Int, val failed: Int, val skipped: Int, val partial: Int)
 
 @Dao
 abstract class IndexDao(private val database: RoomDatabase) {
@@ -159,7 +160,7 @@ abstract class IndexDao(private val database: RoomDatabase) {
            COALESCE(SUM(s.status = 'done'), 0) AS searchable,
            COALESCE(SUM(s.status = 'failed'), 0) AS failed,
            COALESCE(SUM(s.status = 'skipped'), 0) AS skipped,
-           COALESCE(SUM(s.status = 'done' AND s.truncated = 1), 0) AS truncated
+           COALESCE(SUM(s.status = 'done' AND (s.truncated = 1 OR s.unreadableResources > 0)), 0) AS partial
     FROM book b LEFT JOIN index_state s ON s.bookId = b.id AND s.mtime = b.mtime AND s.sizeBytes = b.sizeBytes
     WHERE b.readable = 1
     """,
