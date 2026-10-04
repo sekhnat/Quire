@@ -1,5 +1,6 @@
 package com.quire.reader.data.index
 
+import com.quire.reader.reader.normalizeHtml
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Manifest

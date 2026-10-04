@@ -12,6 +12,7 @@
 package com.quire.reader.navigator.epub.css
 
 import androidx.core.net.toUri
+import com.quire.reader.reader.normalizeHtml
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
@@ -38,7 +39,8 @@ internal data class ReadiumCss(
     // FIXME: Replace existing attributes instead of adding new ones
     @Throws
     internal fun injectHtml(html: String): String {
-        val document = Jsoup.parse(html)
+        // jsoup swallows the body behind a self-closing <title/>, so the lang attributes would be read from an empty body.
+        val document = Jsoup.parse(normalizeHtml(html))
         val content = StringBuilder(html)
         injectStyles(content)
         injectCssProperties(content)

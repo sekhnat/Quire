@@ -254,7 +254,8 @@ class LibraryIndexer(
         if (chunker.truncated) break
       }
       chunks += chunker.finish()
-      // The resource the size cap stopped in was only partly read, so it says nothing about how much text it holds.
+      // The chunker flushes lazily, so the size cap trips on the first element of the NEXT resource. That resource is the last
+      // tally: it was opened last and only partly yielded, so it says nothing about how much text it holds and is left out here.
       logSparse(file, if (chunker.truncated) content.tallies.dropLast(1) else content.tallies)
       val unreadable = content.tallies.count { it.readFailed }
       return Extraction(extracted(chunks.size, content.tallies.size, unreadable), chunks, chunker.truncated)

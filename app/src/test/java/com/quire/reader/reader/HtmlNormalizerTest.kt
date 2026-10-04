@@ -1,4 +1,4 @@
-package com.quire.reader.data.index
+package com.quire.reader.reader
 
 import org.jsoup.Jsoup
 import org.junit.Assert.assertEquals
