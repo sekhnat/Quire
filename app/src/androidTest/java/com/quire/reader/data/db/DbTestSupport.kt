@@ -1,6 +1,8 @@
 package com.quire.reader.data.db
 
 import android.content.Context
+import androidx.room.useReaderConnection
+import androidx.room.useWriterConnection
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
@@ -18,6 +20,7 @@ abstract class DbTestCase {
   protected val target: Context = instrumentation.targetContext
   private val files = mutableListOf<File>()
   private val databases = mutableListOf<QuireDatabase>()
+  private val indexes = mutableListOf<IndexDatabase>()
 
   protected fun tempDbFile(): File =
     File(File(target.cacheDir, "db-tests").apply { mkdirs() }, "text-index-test-${UUID.randomUUID()}.db").also { files += it }
@@ -26,8 +29,12 @@ abstract class DbTestCase {
   protected fun open(file: File = tempDbFile()): QuireDatabase =
     QuireDatabase.create(target, file.absolutePath).also { databases += it }
 
+  /** Opens a throwaway index database (the bundled-SQLite `quire-index.db` of the app). */
+  protected fun openIndex(file: File = tempDbFile()): IndexDatabase = IndexDatabase.create(target, file.absolutePath).also { indexes += it }
+
   @After fun deleteDatabases() {
     databases.forEach { runCatching { it.close() } }
+    indexes.forEach { runCatching { it.close() } }
     files.forEach { f -> listOf("", "-wal", "-shm", "-journal").forEach { File(f.path + it).delete() } }
   }
 
@@ -36,23 +43,44 @@ abstract class DbTestCase {
 
   protected fun SupportSQLiteDatabase.count(sql: String, vararg args: Any): Int = rows(sql, *args).single().single()!!.toInt()
 
-  /** Ids of the chunks whose text matches [term] in the full-text table. */
-  protected fun QuireDatabase.hits(term: String): List<Long> =
-    openHelper.writableDatabase.rows("SELECT docid FROM text_chunk_fts WHERE text_chunk_fts MATCH ? ORDER BY docid", term).map { it[0]!!.toLong() }
+  /** Rows of [sql] on the index database, every column as text. */
+  protected fun IndexDatabase.rows(sql: String, vararg args: Any): List<List<String?>> = runBlocking {
+    useReaderConnection { c ->
+      c.usePrepared(sql) { st ->
+        args.forEachIndexed { i, a -> when (a) { is Long -> st.bindLong(i + 1, a); is Int -> st.bindLong(i + 1, a.toLong()); else -> st.bindText(i + 1, a.toString()) } }
+        buildList { while (st.step()) add((0 until st.getColumnCount()).map { if (st.isNull(it)) null else st.getText(it) }) }
+      }
+    }
+  }
 
-  protected fun QuireDatabase.chunkCount(bookId: Long? = null): Int =
-    openHelper.writableDatabase.count(if (bookId == null) "SELECT COUNT(*) FROM text_chunk" else "SELECT COUNT(*) FROM text_chunk WHERE bookId = $bookId")
+  protected fun IndexDatabase.count(sql: String, vararg args: Any): Int = rows(sql, *args).single().single()!!.toInt()
 
-  protected fun QuireDatabase.chunkTexts(bookId: Long): List<String> =
-    openHelper.writableDatabase.rows("SELECT text FROM text_chunk WHERE bookId = ? ORDER BY seq", bookId).map { it[0]!! }
+  /** Ids of the chunks whose text matches [match] in the main full-text table. */
+  protected fun IndexDatabase.hits(match: String): List<Long> = rows("SELECT rowid FROM chunk_fts WHERE chunk_fts MATCH ? ORDER BY rowid", match).map { it[0]!!.toLong() }
 
-  /** The stored locator-mapping JSON of every chunk of [bookId], in seq order. */
-  protected fun QuireDatabase.chunkMappings(bookId: Long): List<String> =
-    openHelper.writableDatabase.rows("SELECT mapping FROM text_chunk WHERE bookId = ? ORDER BY seq", bookId).map { it[0]!! }
+  protected fun IndexDatabase.chunkCount(bookId: Long? = null): Int =
+    count(if (bookId == null) "SELECT COUNT(*) FROM chunk" else "SELECT COUNT(*) FROM chunk WHERE book_id = $bookId")
 
-  protected fun QuireDatabase.stateOf(bookId: Long): IndexStateEntity? =
-    openHelper.writableDatabase.rows("SELECT mtime, sizeBytes, status, completedAt, chunkCount, textBytes, truncated, unreadableResources FROM index_state WHERE bookId = ?", bookId)
-      .singleOrNull()?.let { IndexStateEntity(bookId, it[0]!!.toLong(), it[1]!!.toLong(), it[2]!!, it[3]!!.toLong(), it[4]!!.toInt(), it[5]!!.toLong(), it[6] == "1", it[7]!!.toInt()) }
+  protected fun IndexDatabase.chunkTexts(bookId: Long): List<String> = rows("SELECT text FROM chunk WHERE book_id = ? ORDER BY seq", bookId).map { it[0]!! }
+
+  protected fun IndexDatabase.stateOf(bookId: Long): IndexStateEntity? = runBlocking { states().of(bookId) }
+
+  /** Rows in every full-text and side table, to show that nothing is left behind. */
+  protected fun IndexDatabase.footprint(): Map<String, Int> = listOf("chunk", "seam", "book_string", "index_state").associateWith { count("SELECT COUNT(*) FROM $it") } +
+    mapOf(
+      "chunk_fts" to count("SELECT COUNT(*) FROM chunk_fts_docsize"),
+      "seam_fts" to count("SELECT COUNT(*) FROM seam_fts_docsize"),
+      "cjk_fts" to count("SELECT COUNT(*) FROM cjk_fts_docsize"),
+    )
+
+  /** Runs FTS5's own consistency check on the external-content tables; throws if they disagree with their content. */
+  protected fun IndexDatabase.checkIntegrity() = runBlocking {
+    useWriterConnection { c ->
+      c.usePrepared("INSERT INTO chunk_fts(chunk_fts, rank) VALUES('integrity-check', 1)") { it.step() }
+      c.usePrepared("INSERT INTO seam_fts(seam_fts, rank) VALUES('integrity-check', 1)") { it.step() }
+      c.usePrepared("INSERT INTO cjk_fts(cjk_fts) VALUES('integrity-check')") { it.step() }
+    }
+  }
 
   protected fun folder(db: QuireDatabase): Long = runBlocking { db.folders().insert(FolderEntity(path = "/sdcard/Books")) }
 
@@ -60,17 +88,5 @@ abstract class DbTestCase {
     BookEntity(
       path = "/sdcard/Books/$name.epub", folderId = folderId, sizeBytes = size, mtime = mtime, title = name, sortTitle = name,
       author = "Author", primaryAuthor = "Author", authorSort = "Author", addedAt = addedAt, readable = readable,
-    )
-
-  protected fun chunk(bookId: Long, seq: Int, text: String) =
-    TextChunkEntity(
-      bookId = bookId, seq = seq, chapter = "Chapter ${seq + 1}", href = "ch$seq.xhtml", tokenStart = seq * 100, tokenEnd = seq * 100 + 99,
-      primaryEndByte = text.toByteArray().size, text = text, mapping = "[]", progression = seq / 10.0,
-    )
-
-  protected fun doneState(book: BookEntity, bookId: Long, chunks: Int, truncated: Boolean = false, textBytes: Long = 0, unreadableResources: Int = 0) =
-    IndexStateEntity(
-      bookId, book.mtime, book.sizeBytes, IndexStateEntity.STATUS_DONE, completedAt = 1_000, chunkCount = chunks, textBytes = textBytes,
-      truncated = truncated, unreadableResources = unreadableResources,
     )
 }

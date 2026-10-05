@@ -4,6 +4,10 @@ import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.BookTagEntity
 import com.quire.reader.data.db.DbTestCase
+import com.quire.reader.data.index.IndexStore
+import com.quire.reader.data.index.RoomIndexSql
+import com.quire.reader.data.index.SourceElement
+import com.quire.reader.data.index.TextChunker
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.data.db.QuireDatabase
@@ -102,7 +106,10 @@ class LibraryIdentityTest : DbTestCase() {
     f.scan()
     val before = f.db.books().byId(f.live().single().id)!!
     f.read(before.id)
-    f.db.index().replaceBook(before.id, before.mtime, before.sizeBytes, listOf(chunk(before.id, 0, "dark and stormy night")), doneState(before, before.id, chunks = 1))
+    val index = openIndex()
+    val store = IndexStore(RoomIndexSql(index))
+    val chunks = TextChunker.chunk(listOf(SourceElement("c0.xhtml", "dark and stormy night", false, "application/xhtml+xml", 0.0, 0.0, "One"))).chunks
+    store.replaceBook(before.id, before.mtime, before.sizeBytes, chunks, truncated = false, unreadableResources = 0)
 
     move(file, File(lib, "shelf/Novel (renamed).epub"))
     f.scan()
@@ -111,8 +118,10 @@ class LibraryIdentityTest : DbTestCase() {
     assertTrue(after.path.endsWith("shelf/Novel (renamed).epub"))
     assertNull(after.missingSince)
     f.assertHistory(before.id)
-    assertNotNull(f.db.stateOf(before.id))
-    assertEquals(1, f.db.hits("stormy").size)
+    // The book kept its id, so the sweep that follows every scan keeps its text.
+    assertEquals(0, store.retainOnly(f.db.books().presentIds()))
+    assertNotNull(index.stateOf(before.id))
+    assertEquals(1, index.hits("stormy").size)
     assertEquals(1, f.live().size)
   }
 

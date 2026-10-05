@@ -11,9 +11,9 @@ import androidx.work.WorkManager
 import androidx.work.await
 import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.db.EligibleBook
+import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.IndexStateEntity
 import com.quire.reader.data.db.QuireDatabase
-import com.quire.reader.data.db.TextChunkEntity
 import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.reader.PublicationLoader
 import kotlinx.coroutines.CoroutineScope
@@ -54,10 +54,14 @@ import kotlin.coroutines.cancellation.CancellationException
 class LibraryIndexer(
   context: Context,
   private val db: QuireDatabase,
+  indexDb: IndexDatabase,
   private val loader: PublicationLoader,
   private val settings: SettingsStore,
   private val scope: CoroutineScope,
 ) {
+  private val store = IndexStore(RoomIndexSql(indexDb))
+  val catalog = IndexCatalog(db, indexDb)
+
   private val app = context.applicationContext
   private val workManager by lazy { WorkManager.getInstance(app) }
 
@@ -84,7 +88,7 @@ class LibraryIndexer(
       ActivityInputs(enabled, permission, reader, running, charging, workQueued = false, eligible = 0, pending = 0)
     }
     val queued = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).map { infos -> infos.any { it.state == WorkInfo.State.ENQUEUED } }
-    combine(flags, queued, db.index().observeCoverage()) { f, queuedWork, c ->
+    combine(flags, queued, catalog.observeCoverage()) { f, queuedWork, c ->
       deriveActivity(f.copy(workQueued = queuedWork, eligible = c.eligible, pending = c.eligible - c.searchable - c.failed - c.skipped))
     }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), IndexActivity.Idle)
   }
@@ -122,7 +126,21 @@ class LibraryIndexer(
   internal suspend fun clearIndex(cancelWork: suspend () -> Unit = {}) {
     epoch.incrementAndGet()
     cancelWork()
-    mutex.withLock { withContext(NonCancellable) { db.index().clearAll() } }
+    mutex.withLock {
+      withContext(NonCancellable) {
+        store.clearAll()
+        store.incrementalVacuum()
+      }
+    }
+  }
+
+  /**
+   * Forgets the indexed text of books that left the library (deleted, or missing). The index is a separate database, so
+   * nothing cascades to it: this sweep is how it follows. Cheap enough to run before every batch.
+   */
+  suspend fun sweep() {
+    val removed = store.retainOnly(db.books().presentIds())
+    if (removed > 0) store.incrementalVacuum()
   }
 
   private suspend fun enqueueIfAllowed() {
@@ -156,13 +174,15 @@ class LibraryIndexer(
 
   private suspend fun batch(deadlineMillis: Long): BatchResult {
     val startEpoch = epoch.get()
+    withContext(NonCancellable) { dropLegacyIndex(db)?.let { Log.i(TAG, "dropped the old index from ${QuireDatabase.FILE_NAME} in $it ms") } }
+    sweep()
     val setAside = HashSet<Long>()
     var processed = 0
     while (true) {
       currentCoroutineContext().ensureActive()
       if (epoch.get() != startEpoch) return BatchResult(processed, BatchStop.Superseded)
       if (_readerBusy.value) return BatchResult(processed, BatchStop.ReaderBusy)
-      val book = db.index().eligibleBooks().firstOrNull { it.id !in setAside } ?: return BatchResult(processed, BatchStop.Drained)
+      val book = catalog.eligibleBooks().firstOrNull { it.id !in setAside } ?: return BatchResult(processed, BatchStop.Drained)
       if (System.currentTimeMillis() >= deadlineMillis) return BatchResult(processed, BatchStop.Deadline)
       when (indexBook(book, startEpoch)) {
         Step.Settled -> processed++
@@ -190,8 +210,8 @@ class LibraryIndexer(
     val written = withContext(NonCancellable) {
       when (settlement) {
         Settlement.Publish -> publish(book, extraction)
-        Settlement.MarkFailed -> db.index().markTerminal(book.id, book.mtime, book.sizeBytes, IndexStateEntity.STATUS_FAILED)
-        Settlement.MarkSkipped -> db.index().markTerminal(book.id, book.mtime, book.sizeBytes, IndexStateEntity.STATUS_SKIPPED)
+        Settlement.MarkFailed -> markTerminal(book, IndexStateEntity.STATUS_FAILED)
+        Settlement.MarkSkipped -> markTerminal(book, IndexStateEntity.STATUS_SKIPPED)
         Settlement.Discard -> false
       }
     }
@@ -206,22 +226,21 @@ class LibraryIndexer(
   private fun isUnchanged(file: File, book: EligibleBook): Boolean =
     file.isFile && file.lastModified() == book.mtime && file.length() == book.sizeBytes
 
+  /** Whether [book] is still in the library with the file signature it was read from; the index is only written if so. */
+  private suspend fun stillCurrent(book: EligibleBook): Boolean =
+    db.books().byId(book.id)?.let { it.mtime == book.mtime && it.sizeBytes == book.sizeBytes && it.missingSince == null } == true
+
   private suspend fun publish(book: EligibleBook, extraction: Extraction): Boolean {
-    val chunks = extraction.chunks
-    val rows = chunks.map {
-      TextChunkEntity(
-        // TEMPORARY until the index moves to its own database: no overlap, so a chunk owns all of its text.
-        bookId = book.id, seq = it.seq, chapter = it.chapter, href = it.href, tokenStart = 0, tokenEnd = 0,
-        primaryEndByte = it.text.utf8Length(), text = it.text, mapping = "", progression = it.progression,
-      )
-    }
-    val state = IndexStateEntity(
-      bookId = book.id, mtime = book.mtime, sizeBytes = book.sizeBytes, status = IndexStateEntity.STATUS_DONE,
-      completedAt = System.currentTimeMillis(), chunkCount = rows.size, textBytes = chunks.sumOf { it.text.utf8Length().toLong() },
-      truncated = extraction.truncated,
-      unreadableResources = (extraction.result as? Extracted.Text)?.unreadableResources ?: 0,
-    )
-    return db.index().replaceBook(book.id, book.mtime, book.sizeBytes, rows, state)
+    if (!stillCurrent(book)) return false
+    val unreadable = (extraction.result as? Extracted.Text)?.unreadableResources ?: 0
+    store.replaceBook(book.id, book.mtime, book.sizeBytes, extraction.chunks, extraction.truncated, unreadable)
+    return true
+  }
+
+  private suspend fun markTerminal(book: EligibleBook, status: String): Boolean {
+    if (!stillCurrent(book)) return false
+    store.markTerminal(book.id, book.mtime, book.sizeBytes, status)
+    return true
   }
 
   /** Reads the whole book into chunks. Always closes the publication; cancellation propagates. */

@@ -9,6 +9,7 @@ import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.IndexActivity
 import com.quire.reader.data.index.IndexTarget
+import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.OpeningPosition
@@ -106,6 +107,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       val done = settings.onboardingDone.first()
       edit { copy(screen = if (done) Screen.Library else Screen.Onboard, hasAccess = StoragePaths.hasAllFilesAccess(), useCalibre = true) }
     }
+    viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
   }
 
   fun toast(text: String) {
@@ -178,6 +180,10 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun setQuery(q: String) = edit { copy(query = q, view = LibView.Books) }
   fun setSearchScope(scope: SearchScope) = edit { copy(searchScope = scope) }
   fun setTextLibraryQuery(q: String) = edit { copy(textLibraryQuery = q, view = LibView.Books) }
+  fun setTextSearchOrder(order: SearchOrder) {
+    edit { copy(textSearchOrder = order) }
+    viewModelScope.launch { settings.setTextSearchOrder(order) }
+  }
   fun openImport(open: Boolean) = edit { copy(importOpen = open) }
   fun openSort(open: Boolean) = edit { copy(sortOpen = open) }
   fun setSortAscending(asc: Boolean) = edit { copy(sortAscending = asc) }

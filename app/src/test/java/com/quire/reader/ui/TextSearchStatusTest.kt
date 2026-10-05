@@ -34,7 +34,7 @@ class TextSearchStatusTest {
     val searched = mutableListOf<String>()
     val inputs = MutableStateFlow(input(""))
     val seen = mutableListOf<TextSearchStatus>()
-    val job = launch { textSearchStatus(inputs) { q, _ -> searched += matchOf(q); flowOf(result(1)) }.collect { seen += it } }
+    val job = launch { textSearchStatus(inputs) { q, _, _ -> searched += matchOf(q); flowOf(result(1)) }.collect { seen += it } }
     runCurrent(); assertEquals(TextSearchStatus.Idle, seen.last())
     inputs.value = input("a"); runCurrent(); assertEquals(TextSearchStatus.TooShort, seen.last())
     inputs.value = input("?!…"); runCurrent(); assertEquals(TextSearchStatus.TooShort, seen.last())
@@ -47,7 +47,7 @@ class TextSearchStatusTest {
   @Test fun `an over-long query is reported at once without waiting or searching`() = runTest {
     val searched = mutableListOf<String>()
     val seen = mutableListOf<TextSearchStatus>()
-    val job = launch { textSearchStatus(MutableStateFlow(input(List(65) { "w$it" }.joinToString(" ")))) { q, _ -> searched += matchOf(q); flowOf(result(1)) }.collect { seen += it } }
+    val job = launch { textSearchStatus(MutableStateFlow(input(List(65) { "w$it" }.joinToString(" ")))) { q, _, _ -> searched += matchOf(q); flowOf(result(1)) }.collect { seen += it } }
     runCurrent()
     assertEquals(listOf<TextSearchStatus>(TextSearchStatus.OverLimit), seen)
     advanceUntilIdle()
@@ -57,7 +57,7 @@ class TextSearchStatusTest {
 
   @Test fun `a query searches only after the debounce and shows searching until results arrive`() = runTest {
     val seen = mutableListOf<TextSearchStatus>()
-    val job = launch { textSearchStatus(MutableStateFlow(input("pemberley"))) { _, _ -> flow { delay(100); emit(result(1, 2)) } }.collect { seen += it } }
+    val job = launch { textSearchStatus(MutableStateFlow(input("pemberley"))) { _, _, _ -> flow { delay(100); emit(result(1, 2)) } }.collect { seen += it } }
     advanceTimeBy(249); runCurrent()
     assertEquals(emptyList<TextSearchStatus>(), seen)
     advanceTimeBy(1); runCurrent()
@@ -70,7 +70,7 @@ class TextSearchStatusTest {
   @Test fun `typing again within the debounce searches only for the last text`() = runTest {
     val searched = mutableListOf<String>()
     val inputs = MutableStateFlow(input("pem"))
-    val job = launch { textSearchStatus(inputs) { q, _ -> searched += matchOf(q); flowOf(result(1)) }.collect { } }
+    val job = launch { textSearchStatus(inputs) { q, _, _ -> searched += matchOf(q); flowOf(result(1)) }.collect { } }
     advanceTimeBy(200); inputs.value = input("pemb")
     advanceTimeBy(200); inputs.value = input("pembe")
     advanceUntilIdle()
@@ -82,7 +82,7 @@ class TextSearchStatusTest {
     val inputs = MutableStateFlow(input("old query"))
     val seen = mutableListOf<TextSearchStatus>()
     val job = launch {
-      textSearchStatus(inputs) { q, _ ->
+      textSearchStatus(inputs) { q, _, _ ->
         flow {
           if (matchOf(q).contains("old")) { delay(5_000); emit(result(1)) } else { delay(10); emit(result(2)) }
         }
@@ -98,7 +98,7 @@ class TextSearchStatusTest {
 
   @Test fun `results stay live as the database changes and a search with no books is no match`() = runTest {
     val seen = mutableListOf<TextSearchStatus>()
-    val job = launch { textSearchStatus(MutableStateFlow(input("pemberley"))) { _, _ -> flow { emit(result()); emit(result(7)) } }.collect { seen += it } }
+    val job = launch { textSearchStatus(MutableStateFlow(input("pemberley"))) { _, _, _ -> flow { emit(result()); emit(result(7)) } }.collect { seen += it } }
     advanceUntilIdle()
     assertEquals(listOf(TextSearchStatus.Searching, TextSearchStatus.NoMatch(result()), TextSearchStatus.Results(result(7))), seen)
     job.cancel()
@@ -107,7 +107,7 @@ class TextSearchStatusTest {
   @Test fun `changing a filter searches again with the new filter`() = runTest {
     val filters = mutableListOf<TextSearchFilters>()
     val inputs = MutableStateFlow(input("pemberley"))
-    val job = launch { textSearchStatus(inputs) { _, f -> filters += f; flowOf(result(1)) }.collect { } }
+    val job = launch { textSearchStatus(inputs) { _, f, _ -> filters += f; flowOf(result(1)) }.collect { } }
     advanceUntilIdle()
     inputs.value = input("pemberley", TextSearchFilters(status = TextStatusFilter.Reading))
     advanceUntilIdle()
@@ -126,7 +126,7 @@ class TextSearchStatusTest {
   @Test fun `an empty result that may be incomplete is reported as no match carrying that fact`() = runTest {
     val partial = TextSearchResult(emptyList(), 0, capped = true, incomplete = true)
     val seen = mutableListOf<TextSearchStatus>()
-    val job = launch { textSearchStatus(MutableStateFlow(input("pemberley"))) { _, _ -> flowOf(partial) }.collect { seen += it } }
+    val job = launch { textSearchStatus(MutableStateFlow(input("pemberley"))) { _, _, _ -> flowOf(partial) }.collect { seen += it } }
     advanceUntilIdle()
     assertEquals(TextSearchStatus.NoMatch(partial), seen.last())
     assertTrue((seen.last() as TextSearchStatus.NoMatch).result.incomplete)

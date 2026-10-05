@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
+import com.quire.reader.data.index.dropLegacyIndex
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -13,7 +14,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Runs the version 1 -> 4, 2 -> 4 and 3 -> 4 migrations and the FTS triggers on the device's own SQLite, over a real file. */
+/**
+ * Runs the version 1 -> 5, 2 -> 5, 3 -> 5 and 4 -> 5 migrations on the device's own SQLite, over a real file, and the
+ * one-off removal of the index that version 5 moved out of `quire.db`.
+ */
 class TextIndexMigrationTest : DbTestCase() {
   private val v1Tables = listOf("folder", "book", "book_tag", "book_state", "bookmark", "highlight")
 
@@ -63,8 +67,8 @@ class TextIndexMigrationTest : DbTestCase() {
   }
 
   /**
-   * Builds a version 2 (or, with [version] 3, a version 3) database file the way an installed app of that version left it:
-   * the v1 tables and seed, the migrations up to [version], and one indexed book.
+   * Builds a version 2, 3 or 4 database file the way an installed app of that version left it: the v1 tables and seed,
+   * the migrations up to [version], and one indexed book.
    */
   private fun createV2File(version: Int = 2): File {
     val file = tempDbFile()
@@ -74,6 +78,7 @@ class TextIndexMigrationTest : DbTestCase() {
         v1Seed.forEach(db::execSQL)
         QuireDatabase.MIGRATION_1_2.migrate(db)
         if (version >= 3) QuireDatabase.MIGRATION_2_3.migrate(db)
+        if (version >= 4) QuireDatabase.MIGRATION_3_4.migrate(db)
         db.execSQL(
           "INSERT INTO text_chunk (bookId, seq, chapter, href, tokenStart, tokenEnd, primaryEndByte, text, mapping, progression) " +
             "VALUES (1, 0, 'Chapter 1', 'ch1.xhtml', 0, 4, 31, 'Jonathan kept a careful journal', '[]', 0.0)",
@@ -108,7 +113,7 @@ class TextIndexMigrationTest : DbTestCase() {
 
     val db = open(file)
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(4, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(5, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
     // Later versions only append columns, so the v1 columns come first and must hold exactly what they held.
     val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid").map { it.take(before.getValue(t).first().size) } }
 
@@ -117,23 +122,43 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
   }
 
-  @Test fun `migration from version 2 keeps the index and reads every state as fully readable`() = runBlocking {
-    val db = open(createV2File())
-    val sqlite = db.openHelper.writableDatabase
-    assertEquals(4, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
-    val state = db.stateOf(1)!!
-    assertEquals(IndexStateEntity.STATUS_DONE, state.status)
-    assertEquals(1, state.chunkCount)
-    assertEquals(0, state.unreadableResources)
-    assertEquals(1, db.hits("journal").size)
-    assertEquals(emptyList<EligibleBook>(), db.index().eligibleBooks().filter { it.id == 1L })
-    assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
+  private val legacyTriggers = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'room_fts_content_sync_text_chunk_fts%'"
+  private val legacyTables = "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('text_chunk', 'text_chunk_fts', 'index_state', 'text_chunk_fts_terms')"
+
+  @Test fun `migration from versions 2 to 4 leaves the old index inert, and its one-off removal keeps every user row`() = runBlocking {
+    for (version in 2..4) {
+      val file = createV2File(version)
+      val before = dumpV1Tables(file)
+      val db = open(file)
+      val sqlite = db.openHelper.writableDatabase
+      assertEquals(5, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+      // Nothing writes to the old tables any more, but dropping them is left to the background.
+      assertEquals(0, sqlite.count(legacyTriggers))
+      assertTrue(sqlite.count(legacyTables) >= 3)
+      sqlite.execSQL("INSERT INTO book (path, folderId, sizeBytes, mtime, title, sortTitle, author, primaryAuthor, authorSort, calibreRating, addedAt, pageEstimate, source, readable) VALUES ('/x.epub', 1, 1, 1, 'X', 'X', 'A', 'A', 'A', 0, 1, 0, 'file', 1)")
+
+      assertTrue(dropLegacyIndex(db) != null)
+      assertEquals(null, dropLegacyIndex(db))
+
+      assertEquals(0, sqlite.count(legacyTables))
+      val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid").map { it.take(before.getValue(t).first().size) } }
+      assertEquals(before, after.mapValues { (t, rows) -> if (t == "book") rows.dropLast(1) else rows }) // less the book added above
+      assertEquals(listOf(1L, 2L, 3L), db.books().observeAll().first().map { it.id }.sorted())
+      assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
+      db.close()
+    }
+  }
+
+  @Test fun `a new install has none of the old index tables and nothing to drop`() {
+    val db = open()
+    assertEquals(0, db.openHelper.writableDatabase.count(legacyTables))
+    assertEquals(null, dropLegacyIndex(db))
   }
 
   @Test fun `migration from version 3 keeps every book in the library with its history and identity still to be read`() = runBlocking {
     val db = open(createV2File(version = 3))
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(4, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(5, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
     assertEquals(
       listOf(listOf<String?>(null, null, null, null), listOf<String?>(null, null, null, null)),
       sqlite.rows("SELECT calibreUuid, epubUid, fingerprint, missingSince FROM book ORDER BY id"),
@@ -143,7 +168,6 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals(listOf(false, false), db.books().knownFiles().sortedBy { it.id }.map { it.missing })
     assertEquals(emptyList<MissingBookRow>(), db.books().observeMissing().first())
     assertEquals(2, db.annotations().observeHighlights(1).first().size)
-    assertEquals(1, db.stateOf(1)!!.chunkCount)
     assertEquals(listOf("index_book_calibreUuid", "index_book_epubUid", "index_book_fingerprint"),
       sqlite.rows("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'book' AND name IN ('index_book_calibreUuid', 'index_book_epubUid', 'index_book_fingerprint') ORDER BY name").map { it[0] })
     assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
@@ -164,69 +188,5 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals(listOf("to-reread"), row.userTagList)
     // AUTOINCREMENT continues past the seeded ids rather than reusing them.
     assertEquals(3L, db.annotations().addBookmark(BookmarkEntity(bookId = 1, locatorJson = "{}", label = "new", progress = 0.9f, createdAt = 1)))
-  }
-
-  @Test fun `migration adds empty index tables that eligibility already understands`() = runBlocking {
-    val db = migrated()
-    assertEquals(0, db.chunkCount())
-    assertEquals(0, db.openHelper.writableDatabase.count("SELECT COUNT(*) FROM index_state"))
-    // Only the readable seeded book needs indexing; the unreadable one is never queued.
-    assertEquals(listOf(1L), db.index().eligibleBooks().map { it.id })
-  }
-
-  @Test fun `full-text rows follow chunk insert update and delete on the migrated database`() = runBlocking {
-    val db = migrated()
-    val sqlite = db.openHelper.writableDatabase
-    val book = db.books().byId(1)!!
-    assertTrue(db.index().replaceBook(1, book.mtime, book.sizeBytes, listOf(chunk(1, 0, "The Count welcomed Jonathan to Transylvania"), chunk(1, 1, "Mina wrote in her journal")), doneState(book, 1, 2)))
-    val ids = sqlite.rows("SELECT id FROM text_chunk WHERE bookId = 1 ORDER BY seq").map { it[0]!!.toLong() }
-
-    assertEquals(listOf(ids[0]), db.hits("transylvania"))
-    assertEquals(listOf(ids[1]), db.hits("journal"))
-    assertEquals("prefix queries are case-folded", listOf(ids[0]), db.hits("TRANSYLV*"))
-
-    sqlite.execSQL("UPDATE text_chunk SET text = 'Lucy slept by the window' WHERE id = ${ids[0]}")
-    assertEquals(emptyList<Long>(), db.hits("transylvania"))
-    assertEquals(listOf(ids[0]), db.hits("window"))
-    assertEquals(listOf(ids[1]), db.hits("journal"))
-
-    sqlite.execSQL("DELETE FROM text_chunk WHERE id = ${ids[1]}")
-    assertEquals(emptyList<Long>(), db.hits("journal"))
-    assertEquals(listOf(ids[0]), db.hits("window"))
-    sqlite.execSQL("INSERT INTO text_chunk_fts(text_chunk_fts) VALUES('integrity-check')")
-  }
-
-  @Test fun `deleting a book removes its chunks and full-text rows and index state and nothing else`() = runBlocking {
-    val db = open(createV1File())
-    val folderId = db.folders().all().first().id
-    val other = bookEntity(folderId, "Other", addedAt = 5)
-    val otherId = db.books().save(other, emptyList())
-    val dracula = db.books().byId(1)!!
-    db.index().replaceBook(1, dracula.mtime, dracula.sizeBytes, listOf(chunk(1, 0, "Quincey arrived with a bowie knife")), doneState(dracula, 1, 1))
-    db.index().replaceBook(otherId, other.mtime, other.sizeBytes, listOf(chunk(otherId, 0, "Quincey is a name in another book")), doneState(other, otherId, 1))
-    assertEquals(2, db.hits("quincey").size)
-
-    db.books().delete(listOf(1L))
-
-    assertEquals(0, db.chunkCount(1))
-    assertEquals(null, db.stateOf(1))
-    assertEquals(1, db.hits("quincey").size)
-    assertEquals(1, db.chunkCount(otherId))
-    assertEquals(otherId, db.openHelper.writableDatabase.rows("SELECT bookId FROM text_chunk").single().single()!!.toLong())
-    assertTrue(db.stateOf(otherId) != null)
-    db.openHelper.writableDatabase.execSQL("INSERT INTO text_chunk_fts(text_chunk_fts) VALUES('integrity-check')")
-  }
-
-  @Test fun `removing a folder cascades through its books to the index`() = runBlocking {
-    val db = migrated()
-    val dracula = db.books().byId(1)!!
-    db.index().replaceBook(1, dracula.mtime, dracula.sizeBytes, listOf(chunk(1, 0, "Whitby harbour")), doneState(dracula, 1, 1))
-    assertEquals(1, db.hits("whitby").size)
-
-    db.folders().delete(1L)
-
-    assertEquals(emptyList<Long>(), db.hits("whitby"))
-    assertEquals(0, db.chunkCount())
-    assertEquals(null, db.stateOf(1))
   }
 }

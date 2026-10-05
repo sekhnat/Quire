@@ -10,9 +10,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
   entities = [
     FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
-    TextChunkEntity::class, TextChunkFts::class, IndexStateEntity::class,
   ],
-  version = 4,
+  version = 5,
   exportSchema = false,
 )
 abstract class QuireDatabase : RoomDatabase() {
@@ -20,7 +19,6 @@ abstract class QuireDatabase : RoomDatabase() {
   abstract fun books(): BookDao
   abstract fun states(): StateDao
   abstract fun annotations(): AnnotationDao
-  abstract fun index(): IndexDao
   abstract fun search(): SearchDao
 
   companion object {
@@ -78,19 +76,25 @@ abstract class QuireDatabase : RoomDatabase() {
     }
 
     /**
-     * Read-only view of the full-text index's terms with their document counts, for judging how common a word prefix is
-     * before searching for it (see `TextSearcher`). It holds no data of its own and is not a Room entity, so it is created
-     * whenever the database opens, which covers new installs and every migration alike.
+     * Moves the library text index out to [IndexDatabase]. Only the sync triggers are dropped here, which is instant: the
+     * old tables can hold gigabytes, and dropping them is left to a one-off cleanup in the background ([LEGACY_INDEX_TABLES]).
      */
-    const val FTS_TERMS_TABLE = "text_chunk_fts_terms"
-    private const val CREATE_FTS_TERMS = "CREATE VIRTUAL TABLE IF NOT EXISTS `$FTS_TERMS_TABLE` USING fts4aux(`text_chunk_fts`)"
+    val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        listOf("BEFORE_UPDATE", "BEFORE_DELETE", "AFTER_UPDATE", "AFTER_INSERT").forEach {
+          db.execSQL("DROP TRIGGER IF EXISTS room_fts_content_sync_text_chunk_fts_$it")
+        }
+      }
+    }
+
+    /** The tables of the index as it was before [MIGRATION_4_5], in the order they can be dropped. */
+    val LEGACY_INDEX_TABLES = listOf("text_chunk_fts_terms", "text_chunk_fts", "text_chunk", "index_state")
 
     const val FILE_NAME = "quire.db"
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
-        .addCallback(object : Callback() { override fun onOpen(db: SupportSQLiteDatabase) = db.execSQL(CREATE_FTS_TERMS) })
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
         .build()
   }
 }

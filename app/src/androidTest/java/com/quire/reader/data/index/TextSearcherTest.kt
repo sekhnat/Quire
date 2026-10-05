@@ -3,8 +3,9 @@ package com.quire.reader.data.index
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.BookStateEntity
 import com.quire.reader.data.db.DbTestCase
+import com.quire.reader.data.db.IndexDatabase
+import com.quire.reader.data.db.IndexStateEntity
 import com.quire.reader.data.db.QuireDatabase
-import com.quire.reader.data.db.TextChunkEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -16,11 +17,18 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** The library text search against a real FTS4 table: counting, ownership, validity, filters, caps and paging. */
+/** The library text search against real FTS5 tables: counting, seams, validity, filters, caps, ranking, CJK and paging. */
 class TextSearcherTest : DbTestCase() {
-  private class Fixture(val db: QuireDatabase, val folderId: Long)
+  private class Fixture(val db: QuireDatabase, val index: IndexDatabase, val folderId: Long) {
+    val store = IndexStore(RoomIndexSql(index))
+    fun searcher(maxExamined: Int = MAX_COUNTED_PASSAGES, perBookMax: Int = TextSearcher.PER_BOOK_SEARCH_MAX, maxPrefixDocuments: Int = MAX_PREFIX_DOCUMENTS) =
+      TextSearcher(db, index, store, maxExamined = maxExamined, perBookMax = perBookMax, maxPrefixDocuments = maxPrefixDocuments)
+  }
 
-  private fun fixture(): Fixture = open().let { Fixture(it, folder(it)) }
+  private fun fixture(): Fixture = open().let { Fixture(it, openIndex(), folder(it)) }
+
+  /** Long enough that two paragraphs never share a chunk, short enough that one is never split. */
+  private val pad = "pad ".repeat(TextChunker.MAX_CHARS / 8 + 10)
 
   private fun query(input: String): FtsQuery.Result.Query = FtsQuery.parse(input) as FtsQuery.Result.Query
 
@@ -34,17 +42,9 @@ class TextSearcherTest : DbTestCase() {
 
   /** Indexes [paragraphs] as the indexer would: through the real chunker, one source element each. */
   private fun Fixture.index(book: BookEntity, paragraphs: List<String>, chapter: String = "Chapter One", truncated: Boolean = false, unreadable: Int = 0): List<IndexChunk> {
-    val elements = paragraphs.map {
-      SourceElement("ch1.xhtml", it, false, """{"href":"ch1.xhtml","type":"application/xhtml+xml","locations":{"progression":0.25}}""", 0.25, chapter)
-    }
+    val elements = paragraphs.map { SourceElement("ch1.xhtml", it, false, "application/xhtml+xml", 0.25, 0.25, chapter) }
     val chunks = TextChunker.chunk(elements).chunks
-    val rows = chunks.map {
-      TextChunkEntity(
-        bookId = book.id, seq = it.seq, chapter = it.chapter, href = it.href, tokenStart = it.tokenStart, tokenEnd = it.tokenEnd,
-        primaryEndByte = it.primaryEndByte, text = it.text, mapping = it.mappingJson, progression = it.progression,
-      )
-    }
-    runBlocking { db.index().replaceBook(book.id, book.mtime, book.sizeBytes, rows, doneState(book, book.id, rows.size, truncated, rows.sumOf { it.text.toByteArray().size }.toLong(), unreadable)) }
+    runBlocking { store.replaceBook(book.id, book.mtime, book.sizeBytes, chunks, truncated, unreadable) }
     return chunks
   }
 
@@ -52,8 +52,12 @@ class TextSearcherTest : DbTestCase() {
     db.states().put(BookStateEntity(book.id, status = BookStateEntity.STATUS_READING, lastOpenedAt = at))
   }
 
-  private fun Fixture.search(input: String, filters: TextSearchFilters = TextSearchFilters.None, max: Int = MAX_COUNTED_PASSAGES, perBookMax: Int = TextSearcher.PER_BOOK_SEARCH_MAX, now: Long = 1_000_000_000L) =
-    runBlocking { TextSearcher(db, maxExamined = max, perBookMax = perBookMax).search(query(input), filters, now) }
+  private fun Fixture.search(
+    input: String, filters: TextSearchFilters = TextSearchFilters.None, max: Int = MAX_COUNTED_PASSAGES, perBookMax: Int = TextSearcher.PER_BOOK_SEARCH_MAX,
+    now: Long = 1_000_000_000L, order: SearchOrder = SearchOrder.Library,
+  ) = runBlocking { searcher(maxExamined = max, perBookMax = perBookMax).search(query(input), filters, order, now) }
+
+  private fun Fixture.page(input: String, bookId: Long, afterSeq: Int = -1) = runBlocking { searcher().page(query(input), bookId, afterSeq) }
 
   private fun TextSearchResult.titles() = books.map { it.book.title }
 
@@ -67,9 +71,9 @@ class TextSearcherTest : DbTestCase() {
     val tieB = f.add("TieB")
     val tieC = f.add("TieC")
     val none = f.add("None")
-    f.index(many, List(5) { "The heron stood in the reeds number $it. " + "pad ".repeat(200) })
+    f.index(many, List(5) { "The heron stood in the reeds number $it. " + pad })
     f.index(few, listOf("A heron flew over the reeds."))
-    for (b in listOf(tieA, tieB, tieC)) f.index(b, List(2) { "Another heron waits here. " + "pad ".repeat(200) })
+    for (b in listOf(tieA, tieB, tieC)) f.index(b, List(2) { "Another heron waits here. " + pad })
     f.index(none, listOf("Nothing about birds appears in this book."))
     f.open(tieB, at = 900)
     f.open(tieC, at = 50)
@@ -86,35 +90,46 @@ class TextSearcherTest : DbTestCase() {
     val f = fixture()
     val book = f.add("Echo")
     // Each paragraph is long enough to be a passage of its own.
-    val long = "heron ".repeat(60) + "filler ".repeat(60)
-    f.index(book, listOf(long, long, "no match in this one " + "pad ".repeat(200)))
+    val long = "heron ".repeat(60) + pad
+    f.index(book, listOf(long, long, "no match in this one " + pad))
 
     val result = f.search("heron")
 
     assertEquals(2, result.books.single().passages.value)
   }
 
-  @Test fun `a phrase at a chunk boundary is found exactly once and belongs to the chunk it starts in`() {
+  @Test fun `a phrase across the split of a long element is found once, for the chunk after the split`() {
     val f = fixture()
     val book = f.add("Boundaries")
-    val chunks = f.index(book, List(8) { e -> List(150) { "w${e * 150 + it}" }.joinToString(" ") })
-    assertTrue(chunks.size >= 4)
-    fun words(c: IndexChunk) = Tokenizer.tokenize(c.text).map { c.text.substring(it.startChar, it.endChar) }
-
-    for (i in 0 until chunks.size - 1) {
-      // Starts in the last primary token of chunk i and ends in the context copied from chunk i + 1.
-      val last = chunks[i].tokenEnd - chunks[i].tokenStart - 1
-      val straddling = "\"${words(chunks[i])[last]} ${words(chunks[i])[last + 1]}\""
-      // Starts at the head of chunk i + 1, whose text is also copied into chunk i as context.
-      val head = "\"${words(chunks[i + 1])[0]} ${words(chunks[i + 1])[1]}\""
-
-      for ((phrase, owner) in listOf(straddling to i, head to i + 1)) {
+    val words = List(1200) { "w$it" }
+    val chunks = f.index(book, listOf(words.joinToString(" ")))
+    assertTrue(chunks.size >= 3)
+    var start = 0
+    for (c in chunks.drop(1)) {
+      start += Tokenizer.tokenize(chunks[c.seq - 1].text).size
+      assertTrue("chunk ${c.seq} continues the split element", c.seam != null)
+      for (before in listOf(1, 5, 32, 63)) {
+        val phrase = "\"" + words.subList(start - before, start + 1).joinToString(" ") + "\""
         val result = f.search(phrase)
         assertEquals("$phrase is one passage", 1, result.books.single().passages.value)
-        assertEquals("$phrase belongs to chunk $owner", owner, result.books.single().snippets.single().seq)
-        assertEquals(listOf(owner), runBlocking { TextSearcher(f.db).page(query(phrase), book.id) }.snippets.map { it.seq })
+        val snippet = result.books.single().snippets.single()
+        assertEquals("$phrase belongs to chunk ${c.seq}", c.seq, snippet.seq)
+        assertEquals(listOf(c.seq), f.page(phrase, book.id).snippets.map { it.seq })
       }
+      // Wholly inside one chunk, the same words are found in that chunk alone.
+      assertEquals(c.seq, f.search("\"${words[start]} ${words[start + 1]}\"").books.single().snippets.single().seq)
     }
+  }
+
+  @Test fun `a phrase or AND query across two whole elements in different chunks is not found, as documented`() {
+    val f = fixture()
+    val book = f.add("Two paragraphs")
+    val chunks = f.index(book, listOf("First paragraph ends with alpha. " + pad + " omega", "beta starts the second paragraph. " + pad))
+    assertEquals(2, chunks.size)
+    assertTrue(chunks.none { it.seam != null })
+    assertEquals(emptyList<String>(), f.search("\"omega beta\"").titles())
+    assertEquals(emptyList<String>(), f.search("alpha second ").titles())
+    assertEquals(listOf("Two paragraphs"), f.search("\"ends with alpha\"").titles())
   }
 
   @Test fun `a book changed since it was indexed is not searched until it is indexed again`() {
@@ -151,14 +166,14 @@ class TextSearcherTest : DbTestCase() {
     runBlocking { f.db.books().delete(listOf(gone.id)) }
 
     assertEquals(listOf("Kept"), f.search("heron").titles())
-    assertEquals(emptyList<Snippet>(), runBlocking { TextSearcher(f.db).page(query("heron"), gone.id) }.snippets)
+    assertEquals(emptyList<Snippet>(), f.page("heron", gone.id).snippets)
   }
 
   @Test fun `a failed or skipped book has no text to match`() {
     val f = fixture()
     val book = f.add("Skipped")
     f.index(book, listOf("The heron stood alone."))
-    runBlocking { f.db.index().markTerminal(book.id, book.mtime, book.sizeBytes, "skipped") }
+    runBlocking { f.store.markTerminal(book.id, book.mtime, book.sizeBytes, "skipped") }
     assertEquals(emptyList<String>(), f.search("heron").titles())
   }
 
@@ -212,8 +227,8 @@ class TextSearcherTest : DbTestCase() {
   @Test fun `the examine cap bounds the sample and flags counts as lower bounds while small result sets stay exact`() {
     val f = fixture()
     val books = List(4) { f.add("Book $it") }
-    books.forEach { f.index(it, List(6) { i -> "A heron here number $i. " + "pad ".repeat(200) }) }
-    val total = f.db.chunkCount()
+    books.forEach { f.index(it, List(6) { i -> "A heron here number $i. " + pad }) }
+    val total = f.index.chunkCount()
 
     val exact = f.search("heron", max = 1000)
     assertFalse(exact.capped)
@@ -231,8 +246,8 @@ class TextSearcherTest : DbTestCase() {
     val f = fixture()
     val early = f.add("Early", author = "Early Author")
     val late = f.add("Late", author = "Late Author")
-    f.index(early, List(10) { "A heron here number $it. " + "pad ".repeat(200) })
-    f.index(late, List(3) { "A heron there number $it. " + "pad ".repeat(200) })
+    f.index(early, List(10) { "A heron here number $it. " + pad })
+    f.index(late, List(3) { "A heron there number $it. " + pad })
 
     val result = f.search("heron", TextSearchFilters(author = "Late Author"), max = 5)
 
@@ -245,8 +260,8 @@ class TextSearcherTest : DbTestCase() {
     val f = fixture()
     val early = f.add("Early", author = "Early Author")
     val late = f.add("Late", author = "Late Author")
-    f.index(early, List(30) { "A heron here number $it. " + "pad ".repeat(200) })
-    f.index(late, List(3) { "A heron there number $it. " + "pad ".repeat(200) })
+    f.index(early, List(30) { "A heron here number $it. " + pad })
+    f.index(late, List(3) { "A heron there number $it. " + pad })
 
     val result = f.search("heron", TextSearchFilters(author = "Late Author"), max = 2)
 
@@ -256,71 +271,51 @@ class TextSearcherTest : DbTestCase() {
     assertEquals(3, f.search("heron", TextSearchFilters(author = "Late Author"), max = 5).books.single().passages.value)
   }
 
-  @Test fun `a broad filter on a common word still finds the allowed books by searching them individually`() {
+  @Test fun `a broad filter is streamed across the library and is exact when the scan stays within its limit`() {
     val f = fixture()
     val other = f.add("Other", author = "Other Author")
     val late = f.add("Late", author = "Late Author")
-    f.index(other, List(30) { "A heron here number $it. " + "pad ".repeat(200) })
-    f.index(late, List(3) { "A heron there number $it. " + "pad ".repeat(200) })
-    val filter = TextSearchFilters(author = "Late Author")
+    f.index(other, List(5) { "A heron here number $it. " + pad })
+    f.index(late, List(3) { "A heron there number $it. " + pad })
 
-    // 33 matches overall is more than eight times the cap of four, so the scan route is not taken.
-    val result = f.search("heron", filter, max = 4, perBookMax = 0)
+    val result = f.search("heron", TextSearchFilters(author = "Late Author"), max = 5, perBookMax = 0) // 8 matches, under 5 x 8
 
-    assertEquals(listOf("Late"), result.titles())
     assertEquals(3, result.books.single().passages.value)
+    assertFalse(result.incomplete)
     assertFalse(result.capped)
-    assertFalse(result.incomplete)
   }
 
-  @Test fun `a broad filter on a rare word is scanned in full and is exact`() {
+  @Test fun `a broad filter that cannot be scanned fully says so instead of reporting no match`() {
     val f = fixture()
     val other = f.add("Other", author = "Other Author")
-    val late = f.add("Late", author = "Late Author")
-    f.index(other, List(5) { "A heron here number $it. " + "pad ".repeat(200) })
-    f.index(late, List(3) { "A heron there number $it. " + "pad ".repeat(200) })
-
-    val result = f.search("heron", TextSearchFilters(author = "Late Author"), max = 5, perBookMax = 0) // 8 matches, under 40
-
-    assertEquals(3, result.books.single().passages.value)
-    assertFalse(result.incomplete)
-  }
-
-  @Test fun `a broad filter that cannot be searched fully says so instead of reporting no match`() {
-    val f = fixture()
-    val other = f.add("Other", author = "Other Author")
-    val empty1 = f.add("Empty1", author = "Group")
-    val empty2 = f.add("Empty2", author = "Group")
     val holder = f.add("Holder", author = "Group")
-    f.index(other, List(30) { "A heron here number $it. " + "pad ".repeat(200) })
-    f.index(empty1, listOf("Nothing relevant."))
-    f.index(empty2, listOf("Nothing relevant either."))
-    f.index(holder, listOf("A heron in the third book."))
+    f.index(other, List(30) { "A heron here number $it. " + pad })
+    f.index(holder, listOf("A heron in the group's book."))
     val filter = TextSearchFilters(author = "Group")
 
-    val partial = runBlocking { TextSearcher(f.db, maxExamined = 2, perBookMax = 0, probeBooks = 2).search(query("heron"), filter, 0L) }
+    val partial = runBlocking { f.searcher(maxExamined = 2, perBookMax = 0).search(query("heron"), filter, now = 0L) } // stops after 16 rows
     assertEquals(emptyList<String>(), partial.titles())
     assertTrue("an empty result that may be missing books must say so", partial.incomplete)
 
-    val full = runBlocking { TextSearcher(f.db, maxExamined = 2, perBookMax = 0, probeBooks = 3).search(query("heron"), filter, 0L) }
-    assertEquals(listOf("Holder"), full.titles())
-    assertFalse(full.incomplete)
+    val narrow = runBlocking { f.searcher(maxExamined = 2).search(query("heron"), filter, now = 0L) } // one book: searched inside its own range
+    assertEquals(listOf("Holder"), narrow.titles())
+    assertFalse(narrow.incomplete)
   }
 
   private fun Fixture.prefixCorpus(): Triple<BookEntity, BookEntity, BookEntity> {
     val a = add("A"); val b = add("B"); val c = add("C")
-    index(a, listOf("Pemberley was a fine house. " + "pad ".repeat(200), "The pem was exact here. " + "pad ".repeat(200)))
-    index(b, listOf("Pembroke stood nearby. " + "pad ".repeat(200)))
-    index(c, listOf("Pemmican is food. " + "pad ".repeat(200), "Nothing here. " + "pad ".repeat(200)))
+    index(a, listOf("Pemberley was a fine house. " + pad, "The pem was exact here. " + pad))
+    index(b, listOf("Pembroke stood nearby. " + pad))
+    index(c, listOf("Pemmican is food. " + pad, "Nothing here. " + pad))
     return Triple(a, b, c)
   }
 
-  /** How many chunks hold a term starting with [prefix], as the index itself counts them (a chunk also repeats the start of the next one). */
+  /** How many chunks hold a term starting with [prefix], as the index itself counts them. */
   private fun Fixture.prefixDocuments(prefix: String): Int =
-    db.openHelper.writableDatabase.count("SELECT COALESCE(SUM(documents), 0) FROM text_chunk_fts_terms WHERE col = '*' AND term >= ? AND term < ?", prefix, prefixRangeEnd(prefix))
+    index.count("SELECT COALESCE(SUM(doc), 0) FROM chunk_terms WHERE term >= ? AND term < ?", prefix, prefixRangeEnd(prefix))
 
   private fun Fixture.searchWith(input: String, maxPrefixDocuments: Int): TextSearchResult =
-    runBlocking { TextSearcher(db, maxPrefixDocuments = maxPrefixDocuments).search(query(input), TextSearchFilters.None, 0L) }
+    runBlocking { searcher(maxPrefixDocuments = maxPrefixDocuments).search(query(input), TextSearchFilters.None, now = 0L) }
 
   @Test fun `a prefix that is not too common runs as a prefix`() {
     val f = fixture()
@@ -355,7 +350,7 @@ class TextSearcherTest : DbTestCase() {
   @Test fun `accented and capitalised typing is measured against the folded index terms`() {
     val f = fixture()
     val a = f.add("A")
-    f.index(a, listOf("Zürich lay beyond. " + "pad ".repeat(200), "Zurbaran painted. " + "pad ".repeat(200)))
+    f.index(a, listOf("Zürich lay beyond. " + pad, "Zurbaran painted. " + pad))
 
     val documents = f.prefixDocuments("zur")
     assertTrue(documents >= 2)
@@ -366,7 +361,7 @@ class TextSearcherTest : DbTestCase() {
   @Test fun `terms are counted across pages and the limit is crossed only by exceeding it`() {
     val f = fixture()
     val a = f.add("A")
-    f.index(a, List(40) { "wo$it begins here. " + "pad ".repeat(200) }) // 40 terms, one chunk each, more than one page of terms
+    f.index(a, List(40) { "wo$it begins here. " + pad }) // 40 terms, one chunk each, more than one page of terms
 
     val documents = f.prefixDocuments("wo")
     assertTrue(documents >= 40)
@@ -380,7 +375,7 @@ class TextSearcherTest : DbTestCase() {
 
     assertEquals(null, f.searchWith("pem ", maxPrefixDocuments = 1).prefixDowngraded)
     assertEquals(null, f.searchWith("\"pem\"", maxPrefixDocuments = 1).prefixDowngraded)
-    val page = runBlocking { TextSearcher(f.db, maxPrefixDocuments = 1).page(query("pem"), b.id) }
+    val page = runBlocking { f.searcher(maxPrefixDocuments = 1).page(query("pem"), b.id) }
     assertEquals(1, page.snippets.size) // pembroke, found by the prefix
   }
 
@@ -398,7 +393,7 @@ class TextSearcherTest : DbTestCase() {
   @Test fun `each book shows its first five matches in reading order with excerpt chapter and a navigable target`() {
     val f = fixture()
     val book = f.add("Heron Book", mtime = 77, size = 4242)
-    f.index(book, List(8) { "Number $it begins and a heron stands in the reeds. " + "pad ".repeat(200) }, chapter = "The Marsh")
+    f.index(book, List(8) { "Number $it begins and a heron stands in the reeds. " + pad }, chapter = "The Marsh")
 
     val shown = f.search("heron").books.single()
 
@@ -434,7 +429,7 @@ class TextSearcherTest : DbTestCase() {
       mapOf("Capped" to IndexGap.FirstPartOnly, "Damaged" to IndexGap.PartsUnreadable, "Whole" to IndexGap.None),
       result.books.associate { it.book.title to it.gap },
     )
-    assertEquals(IndexGap.PartsUnreadable, runBlocking { TextSearcher(f.db).page(query("heron"), damaged.id) }.gap)
+    assertEquals(IndexGap.PartsUnreadable, f.page("heron", damaged.id).gap)
   }
 
   @Test fun `show all pages a single book in reading order without gaps or repeats whatever else is indexed`() {
@@ -442,10 +437,10 @@ class TextSearcherTest : DbTestCase() {
     val before = f.add("Before")
     val book = f.add("Target")
     val after = f.add("After")
-    f.index(before, List(30) { "A heron before number $it. " + "pad ".repeat(200) })
-    f.index(book, List(45) { "A heron target number $it. " + "pad ".repeat(200) })
-    f.index(after, List(30) { "A heron after number $it. " + "pad ".repeat(200) })
-    val searcher = TextSearcher(f.db)
+    f.index(before, List(30) { "A heron before number $it. " + pad })
+    f.index(book, List(45) { "A heron target number $it. " + pad })
+    f.index(after, List(30) { "A heron after number $it. " + pad })
+    val searcher = f.searcher()
 
     val pages = ArrayList<BookTextPage>()
     var cursor = -1
@@ -469,10 +464,10 @@ class TextSearcherTest : DbTestCase() {
     val f = fixture()
     val other = f.add("Other")
     val book = f.add("Big")
-    f.index(other, List(40) { "A heron elsewhere number $it. " + "pad ".repeat(200) })
-    f.index(book, List(30) { "A heron here number $it. " + "pad ".repeat(200) })
+    f.index(other, List(40) { "A heron elsewhere number $it. " + pad })
+    f.index(book, List(30) { "A heron here number $it. " + pad })
 
-    val page = runBlocking { TextSearcher(f.db, maxExamined = 5).page(query("heron"), book.id) }
+    val page = runBlocking { f.searcher(maxExamined = 5).page(query("heron"), book.id) }
 
     assertEquals(20, page.snippets.size)
     assertEquals(19, page.nextAfterSeq)
@@ -484,7 +479,7 @@ class TextSearcherTest : DbTestCase() {
     f.index(book, listOf("The heron stood alone."))
     runBlocking { f.db.books().update(book.copy(sizeBytes = book.sizeBytes + 1)) }
 
-    val page = runBlocking { TextSearcher(f.db).page(query("heron"), book.id) }
+    val page = f.page("heron", book.id)
 
     assertEquals(BookTextPage(emptyList(), null, IndexGap.None), page)
   }
@@ -498,12 +493,12 @@ class TextSearcherTest : DbTestCase() {
       "heron NOT hello", "(", ")", "'", "''", "\\", "%", "_", "\u0000heron", "heron\u0000", "🙂🙂", "日本語", "a\"b\"c\"d", "\"a\" \"b\" \"c\"", "\"heron", "e-mail", "100%",
       "ß", "ǅ", "́", "\"́\"", "heron ".repeat(60), "x ".repeat(70),
     )
-    val searcher = TextSearcher(f.db)
+    val searcher = f.searcher()
     for (input in inputs) {
       val parsed = FtsQuery.parse(input)
       if (parsed is FtsQuery.Result.Query) {
         runBlocking {
-          searcher.search(parsed, TextSearchFilters.None, 0L)
+          searcher.search(parsed, TextSearchFilters.None, now = 0L)
           searcher.page(parsed, book.id)
         }
       }
@@ -515,7 +510,7 @@ class TextSearcherTest : DbTestCase() {
     val f = fixture()
     val book = f.add("Live")
     val seen = java.util.Collections.synchronizedList(ArrayList<List<String>>())
-    val job = launch(Dispatchers.Default) { TextSearcher(f.db).observe(query("heron"), TextSearchFilters.None).collect { seen += it.titles() } }
+    val job = launch(Dispatchers.Default) { f.searcher().observe(query("heron"), TextSearchFilters.None).collect { seen += it.titles() } }
     suspend fun until(condition: () -> Boolean) = withTimeout(10_000) { while (!condition()) delay(20) }
 
     until { seen.isNotEmpty() }
@@ -526,5 +521,70 @@ class TextSearcherTest : DbTestCase() {
     f.db.books().delete(listOf(book.id))
     until { seen.last().isEmpty() }
     job.cancel()
+  }
+
+  @Test fun `relevance puts the book with the densest match first and library order counts passages`() {
+    val f = fixture()
+    val many = f.add("Many thin")
+    val dense = f.add("Dense")
+    f.index(many, List(6) { "A single heron flies over number $it. " + pad })
+    f.index(dense, listOf("heron heron heron heron, the heron of herons, heron upon heron."))
+
+    assertEquals(listOf("Dense", "Many thin"), f.search("heron", order = SearchOrder.Relevance).titles())
+    assertEquals(listOf("Many thin", "Dense"), f.search("heron", order = SearchOrder.Library).titles())
+    // Above the examine cap the count is not exact, so relevance falls back to the library order.
+    assertEquals(listOf("Many thin", "Dense"), f.search("heron", order = SearchOrder.Relevance, max = 7).titles())
+  }
+
+  @Test fun `CJK text is found by any substring of one, two or three characters, alone or with Latin words`() {
+    val f = fixture()
+    val zh = f.add("Journey")
+    val ja = f.add("Cat")
+    val ko = f.add("Lucky day")
+    f.index(zh, listOf("第一回 靈根育孕源流出 心性修持大道生。孫悟空在花果山。", "Chapter two 天下大勢，分久必合。"))
+    f.index(ja, listOf("吾輩は猫である。名前はまだ無い。"))
+    f.index(ko, listOf("새침하게 흐린 품이 눈이 올 듯하더니 아내에게 설렁탕을 사다 줄 수 있었다."))
+
+    assertEquals(listOf("Cat"), f.search("猫").titles())
+    assertEquals(listOf("Journey"), f.search("天下").titles())
+    assertEquals(listOf("Journey"), f.search("孫悟空").titles())
+    assertEquals(listOf("Journey"), f.search("悟空").titles()) // inside a run, which unicode61 alone could never find
+    assertEquals(emptyList<String>(), f.search("空孫").titles())
+    assertEquals(listOf("Journey"), f.search("chapter 天下").titles())
+    assertEquals(emptyList<String>(), f.search("chapter 猫").titles())
+    assertEquals(listOf("Lucky day"), f.search("아내").titles()) // a word with its particle attached
+    val snippet = f.search("名前").books.single().snippets.single()
+    assertEquals(listOf("名前"), snippet.spans.filter { it.hit }.map { it.text })
+    assertEquals(listOf("吾輩"), f.page("吾輩", ja.id).snippets.single().spans.filter { it.hit }.map { it.text })
+  }
+
+  @Test fun `a common single CJK character is matched exactly instead of as a prefix and the result says so`() {
+    val f = fixture()
+    val a = f.add("A")
+    f.index(a, listOf("猫が好き。" + pad, "黒猫" + pad, "猫" + pad))
+    val all = runBlocking { f.searcher(maxPrefixDocuments = 10).search(query("猫"), TextSearchFilters.None, now = 0L) }
+    assertEquals(null, all.prefixDowngraded)
+    assertEquals(3, all.books.single().passages.value)
+    val exact = runBlocking { f.searcher(maxPrefixDocuments = 1).search(query("猫"), TextSearchFilters.None, now = 0L) }
+    assertEquals("猫", exact.prefixDowngraded)
+    assertEquals(2, exact.books.single().passages.value) // where 猫 ends a run: 黒猫 and 猫
+  }
+
+  @Test fun `replacing a book with a changed file leaves no rows of the old text behind`() {
+    val f = fixture()
+    val book = f.add("Changing")
+    val long = List(1200) { "w$it" }.joinToString(" ")
+    f.index(book, listOf(long, "東京の夜。" + pad))
+    val first = f.index.footprint()
+    assertTrue(first.getValue("seam") > 0 && first.getValue("cjk_fts") > 0)
+
+    val changed = book.copy(mtime = book.mtime + 1)
+    runBlocking { f.db.books().update(changed) }
+    f.index(changed, listOf("A short replacement text."))
+
+    assertEquals(mapOf("chunk" to 1, "seam" to 0, "book_string" to 2, "index_state" to 1, "chunk_fts" to 1, "seam_fts" to 0, "cjk_fts" to 0), f.index.footprint())
+    f.index.checkIntegrity()
+    assertEquals(emptyList<Long>(), f.index.hits("w5"))
+    assertEquals(listOf("Changing"), f.search("replacement").titles())
   }
 }

@@ -30,7 +30,7 @@ object FtsQuery {
      * [match] is the expression for the main index (`chunk_fts`), null when the query is all CJK; [cjk] the one for the
      * bigram index (`cjk_fts`), null when it has no CJK. [prefix] is the final word as typed when it is a prefix, null
      * otherwise. [phrase] is true when the query is exactly one quoted phrase of two or more tokens: the only shape that is
-     * also looked for across the split of a long element.
+     * also looked for across the split of a long element. [cjkRuns] are the CJK runs as typed, for finding them in text.
      */
     data class Query(
       val match: String?,
@@ -38,9 +38,17 @@ object FtsQuery {
       val prefix: String? = null,
       val cjk: String? = null,
       val phrase: Boolean = false,
+      val cjkRuns: List<String> = emptyList(),
     ) : Result {
       /** The same query with the prefix matched exactly, which costs far less when the prefix is very common. */
       fun withoutPrefix(): Query = if (prefix == null) this else copy(match = match?.removeSuffix("*"), prefix = null)
+
+      /** The single CJK characters searched as prefixes (every gram they start). */
+      val cjkPrefixes: List<String> get() = cjkRuns.filter { it.codePointCount(0, it.length) == 1 }
+
+      /** The same query with single CJK characters matched only where they end a run or stand alone. */
+      fun withoutCjkPrefixes(): Query =
+        if (cjkPrefixes.isEmpty()) this else copy(cjk = cjkRuns.joinToString(" ") { CjkGrams.queryTerm(it).removeSuffix("*") })
     }
   }
 
@@ -53,6 +61,7 @@ object FtsQuery {
     val runs = input.split('"')
     val terms = ArrayList<String>()
     val cjkTerms = ArrayList<String>()
+    val cjkRuns = ArrayList<String>()
     var prefix: String? = null
     var tokenCount = 0
     var quotedRuns = 0
@@ -66,7 +75,7 @@ object FtsQuery {
       for (t in tokens) {
         val word = run.substring(t.startChar, t.endChar)
         if (CjkGrams.hasCjk(word)) {
-          CjkGrams.runs(word).forEach { cjkTerms += CjkGrams.queryTerm(it) }
+          CjkGrams.runs(word).forEach { cjkRuns += it; cjkTerms += CjkGrams.queryTerm(it) }
         } else {
           words += word
           ends += t.endChar
@@ -95,6 +104,7 @@ object FtsQuery {
       prefix = prefix,
       cjk = cjkTerms.takeIf { it.isNotEmpty() }?.joinToString(" "),
       phrase = phrase,
+      cjkRuns = cjkRuns,
     )
   }
 }
