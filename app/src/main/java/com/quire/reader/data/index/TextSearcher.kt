@@ -44,7 +44,7 @@ class TextSearcher(
     val commonPrefix = query.prefix?.takeIf { isCommonPrefix(it) }
     val sampled = sampleMatches(if (commonPrefix != null) query.withoutPrefix() else query, filters, recentSince)
     val (sample, capped, incomplete) = sampled
-    val rows = sample.filter { firstMatchByte(it.offsets)?.let { first -> first < it.primaryEndByte } == true }
+    val rows = sample // TEMPORARY: chunks no longer overlap, so every match is owned.
     if (rows.isEmpty()) return TextSearchResult(emptyList(), 0, capped, incomplete, commonPrefix)
 
     val perBook = rows.groupBy { it.bookId }
@@ -106,7 +106,7 @@ class TextSearcher(
   private suspend fun sampleMatches(query: FtsQuery.Result.Query, filters: TextSearchFilters, recentSince: Long): Sample {
     val status = filters.status?.name?.lowercase()
     suspend fun matches(cap: Int, minDocid: Long, maxDocid: Long) =
-      search.libraryMatches(query.match, cap, minDocid, maxDocid, filters.author, filters.series, filters.tag, status, recentSince)
+      search.libraryMatches(query.match.orEmpty(), cap, minDocid, maxDocid, filters.author, filters.series, filters.tag, status, recentSince)
 
     if (filters == TextSearchFilters.None) return matches(maxExamined, 0, Long.MAX_VALUE).let { Sample(it, it.size >= maxExamined) }
 
@@ -128,7 +128,7 @@ class TextSearcher(
 
     // A broad filter. If the query has few enough matches to read them all, one scan of the library is exact.
     val scanLimit = maxExamined * FILTERED_SCAN_FACTOR
-    val scan = search.scanBound(query.match, scanLimit)
+    val scan = search.scanBound(query.match.orEmpty(), scanLimit)
     val last = scan.lastDocid ?: return Sample(emptyList(), capped = false)
     if (scan.matchCount < scanLimit) return matches(maxExamined, 0, last).let { Sample(it, it.size >= maxExamined) }
 
@@ -143,16 +143,17 @@ class TextSearcher(
   /** The next page of [bookId]'s matches after chunk [afterSeq] (-1 for the first), unaffected by the library examine cap. */
   suspend fun page(query: FtsQuery.Result.Query, bookId: Long, afterSeq: Int = -1): BookTextPage {
     val state = search.indexedBooks(listOf(bookId)).firstOrNull() ?: return BookTextPage(emptyList(), null, IndexGap.None)
-    val rows: List<PageRow> = search.bookMatches(query.match, bookId, afterSeq, pageSize + 1)
+    val rows: List<PageRow> = search.bookMatches(query.match.orEmpty(), bookId, afterSeq, pageSize + 1)
     val page = rows.take(pageSize)
     val snippets = page.mapNotNull { snippet(state, it.seq, it.chapter, it.progression, it.text, it.mapping, it.offsets) }
     return BookTextPage(snippets, if (rows.size > pageSize) page.last().seq else null, state.gap)
   }
 
   /** The snippet for one matching chunk, or null when its stored mapping no longer fits its text. */
+  @Suppress("UNUSED_PARAMETER")
   private fun snippet(state: IndexedBook, seq: Int, chapter: String, progression: Double, text: String, mapping: String, offsets: String): Snippet? {
-    val segments = runCatching { MappingCodec.decode(mapping) }.getOrNull() ?: return null
-    val excerpt = buildExcerpt(text, segments, offsets) ?: return null
+    // TEMPORARY until the index moves to FTS5: snippets come back with highlight() and the binary mapping.
+    val excerpt = buildExcerpt(text, listOf(MappingSegment(0, text.length, null)), "", null, emptyList()) ?: return null
     val locator = excerpt.target.fullLocatorJson() ?: return null
     val target = IndexTarget(state.bookId, state.mtime, state.sizeBytes, locator, excerpt.target.highlight, progression)
     return Snippet(seq, chapter, excerpt.spans, target)

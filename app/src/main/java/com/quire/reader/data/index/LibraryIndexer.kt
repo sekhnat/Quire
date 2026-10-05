@@ -35,11 +35,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.publication.Locator
-import org.readium.r2.shared.publication.Link
-import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.publication.services.content.Content
-import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.getOrElse
 import java.io.File
 import java.util.concurrent.Executors
@@ -215,8 +210,9 @@ class LibraryIndexer(
     val chunks = extraction.chunks
     val rows = chunks.map {
       TextChunkEntity(
-        bookId = book.id, seq = it.seq, chapter = it.chapter, href = it.href, tokenStart = it.tokenStart, tokenEnd = it.tokenEnd,
-        primaryEndByte = it.primaryEndByte, text = it.text, mapping = it.mappingJson, progression = it.progression,
+        // TEMPORARY until the index moves to its own database: no overlap, so a chunk owns all of its text.
+        bookId = book.id, seq = it.seq, chapter = it.chapter, href = it.href, tokenStart = 0, tokenEnd = 0,
+        primaryEndByte = it.text.utf8Length(), text = it.text, mapping = "", progression = it.progression,
       )
     }
     val state = IndexStateEntity(
@@ -234,31 +230,20 @@ class LibraryIndexer(
     try {
       val chunks = ArrayList<IndexChunk>()
       val chunker = TextChunker()
-      val content = IndexContent(publication)
-      val iterator = content.iterator
-      val chapters = chapterLabeler(publication)
-      var currentHref = ""
-      var currentOrder: ResourceOrder? = null
+      val extractor = BookExtractor(publication)
       while (true) {
         currentCoroutineContext().ensureActive()
         if (_readerBusy.value || epoch.get() != startEpoch) return Extraction(Extracted.Interrupted)
-        val element = iterator.nextOrNull() ?: break
-        val text = element as? Content.TextElement ?: continue
-        val href = text.locator.href.removeFragment()
-        if (href.toString() != currentHref) {
-          currentHref = href.toString()
-          currentOrder = if (chapters.hasAnchors(currentHref)) resourceOrder(publication, href) else null
-        }
-        val source = text.toSource(chapters, currentOrder) ?: continue
+        val source = extractor.next() ?: break
         chunks += chunker.add(source)
         if (chunker.truncated) break
       }
       chunks += chunker.finish()
       // The chunker flushes lazily, so the size cap trips on the first element of the NEXT resource. That resource is the last
       // tally: it was opened last and only partly yielded, so it says nothing about how much text it holds and is left out here.
-      logSparse(file, if (chunker.truncated) content.tallies.dropLast(1) else content.tallies)
-      val unreadable = content.tallies.count { it.readFailed }
-      return Extraction(extracted(chunks.size, content.tallies.size, unreadable), chunks, chunker.truncated)
+      logSparse(file, if (chunker.truncated) extractor.tallies.dropLast(1) else extractor.tallies)
+      val unreadable = extractor.tallies.count { it.readFailed }
+      return Extraction(extracted(chunks.size, extractor.tallies.size, unreadable), chunks, chunker.truncated)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -274,56 +259,6 @@ class LibraryIndexer(
       Log.i(TAG, "sparse resource: ${file.path} ${it.href}: ${it.yieldedChars} chars from ${it.bytes} bytes")
     }
   }
-
-  private fun chapterLabeler(publication: Publication): ChapterLabeler {
-    fun Link.entries(): List<ChapterEntry> =
-      listOf(ChapterEntry(url().removeFragment().toString(), url().fragment?.takeIf { it.isNotEmpty() }, title.orEmpty())) + children.flatMap { it.entries() }
-    return ChapterLabeler(
-      readingOrder = publication.readingOrder.map { it.url().removeFragment().toString() },
-      entries = publication.tableOfContents.flatMap { it.entries() },
-    )
-  }
-
-  /**
-   * The document order of a resource whose chapters begin at anchors, read and parsed the way Readium's content iterator does,
-   * or null when it cannot be read (the chapters then fall back to matching selector text).
-   */
-  private suspend fun resourceOrder(publication: Publication, href: Url): ResourceOrder? {
-    val resource = publication.get(href) ?: return null
-    try {
-      val bytes = resource.read().getOrElse { return null }
-      return ResourceOrder.parse(String(bytes, Charsets.UTF_8))
-    } finally {
-      resource.close()
-    }
-  }
-
-  private fun Content.TextElement.toSource(chapters: ChapterLabeler, resourceOrder: ResourceOrder?): SourceElement? {
-    val text = segments.joinToString("") { it.text }
-    if (text.isBlank()) return null
-    val css = locator.locations.otherLocations["cssSelector"] as? String
-    val href = locator.href.removeFragment().toString()
-    val chapter = chapters.markFor(href, css, resourceOrder)
-    return SourceElement(
-      href = href,
-      text = text,
-      headingStart = isHeadingSelector(css),
-      locatorJson = slimLocator(locator).toJSON().toString(),
-      progression = locator.locations.totalProgression ?: 0.0,
-      chapter = chapter.label,
-      chapterStart = chapter.startsChapter,
-    )
-  }
-
-  /** Only what finds the element again: the stored text is the source of the highlight, so the large `text` part is dropped. The cssSelector is left out too — navigation finds the passage by its text — and only the progression position is kept. */
-  private fun slimLocator(locator: Locator): Locator =
-    Locator(
-      href = locator.href,
-      mediaType = locator.mediaType,
-      locations = Locator.Locations(
-        progression = locator.locations.progression,
-      ),
-    )
 
   companion object {
     /** The unique WorkManager chain every indexing request joins. */

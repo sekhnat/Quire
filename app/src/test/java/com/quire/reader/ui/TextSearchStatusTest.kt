@@ -28,7 +28,7 @@ class TextSearchStatusTest {
 
   private fun input(q: String, filters: TextSearchFilters = TextSearchFilters.None) = TextSearchInput(q, filters)
 
-  private fun matchOf(q: FtsQuery.Result.Query) = q.match
+  private fun matchOf(q: FtsQuery.Result.Query): String = q.match.orEmpty()
 
   @Test fun `blank input is idle and one-character or punctuation-only input is too short, with no search`() = runTest {
     val searched = mutableListOf<String>()
@@ -74,7 +74,7 @@ class TextSearchStatusTest {
     advanceTimeBy(200); inputs.value = input("pemb")
     advanceTimeBy(200); inputs.value = input("pembe")
     advanceUntilIdle()
-    assertEquals(listOf("\"pembe*\""), searched)
+    assertEquals(listOf("\"pembe\"*"), searched)
     job.cancel()
   }
 
@@ -84,7 +84,7 @@ class TextSearchStatusTest {
     val job = launch {
       textSearchStatus(inputs) { q, _ ->
         flow {
-          if (q.match.contains("old")) { delay(5_000); emit(result(1)) } else { delay(10); emit(result(2)) }
+          if (matchOf(q).contains("old")) { delay(5_000); emit(result(1)) } else { delay(10); emit(result(2)) }
         }
       }.collect { seen += it }
     }

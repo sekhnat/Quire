@@ -33,7 +33,7 @@ class BookSearchTest {
     val plan = planBookSearch("\"large handsome\" stone")
     assertEquals(BookSearchStatus.Searching, plan.ui.status)
     assertNotNull(plan.query)
-    assertEquals("\"large handsome\" \"stone*\"", plan.query!!.match)
+    assertEquals("\"large handsome\" \"stone\"*", plan.query!!.match)
   }
 
   @Test fun `an empty last page is no match and keeps the book's gap`() {

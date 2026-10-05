@@ -44,9 +44,15 @@ val rankBooks: Comparator<BookRank> =
  */
 const val MAX_PREFIX_DOCUMENTS = 200_000
 
-/** [word] as the index stores it: lower case with accents removed (SQLite's `unicode61` folding, to the extent the JVM matches it). */
-fun foldedTerm(word: String): String =
-  java.text.Normalizer.normalize(word, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase(java.util.Locale.ROOT)
+/**
+ * [word] as the index stores it: lower case with accents removed (SQLite's `unicode61 remove_diacritics 2` folding, to the
+ * extent the JVM matches it). Recomposed afterwards, because decomposing also splits Hangul syllables into jamo, which
+ * SQLite leaves whole.
+ */
+fun foldedTerm(word: String): String {
+  val stripped = java.text.Normalizer.normalize(word, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+  return java.text.Normalizer.normalize(stripped, java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT)
+}
 
 /** The prefix's term-range end: sorts after every term that starts with [prefix]. */
 fun prefixRangeEnd(prefix: String): String = prefix + "\uDBFF\uDFFF"
