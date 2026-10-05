@@ -182,6 +182,13 @@ abstract class BookDao {
   /** Brings a missing book back: its unchanged file was found again at its path, in [folderId]. */
   @Query("UPDATE book SET missingSince = NULL, folderId = :folderId WHERE id = :id") abstract suspend fun revive(id: Long, folderId: Long)
 
+  /**
+   * One-time backfill for books a cover-broken build stored without a cover: `mtime = -1` never matches a real file, so
+   * [com.quire.reader.data.scan.needsRead] sends every cover-less book (missing ones included, for when their file turns
+   * up again) through a full re-read exactly once; the re-read stores the real mtime and the row settles.
+   */
+  @Query("UPDATE book SET mtime = -1 WHERE coverPath IS NULL") abstract suspend fun queueCoverBackfill()
+
   @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NOT NULL") abstract suspend fun missingIdentities(): List<IdentityRow>
   @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NULL") abstract suspend fun liveIdentities(): List<IdentityRow>
 

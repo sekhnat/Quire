@@ -67,6 +67,17 @@ jobs:
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk "dist/quire-$VERSION_NAME.apk"
 
+      # Readium's ServicesBuilder keys its service registry by Class.getSimpleName();
+      # if R8 renamed those classes again the cover service would be dropped silently
+      # (see app/proguard-rules.pro). The keep rules must keep these names verbatim.
+      - name: Guard the Readium cover chain against R8 renaming
+        if: github.event_name != 'pull_request'
+        run: |
+          MAPPING=app/build/outputs/mapping/release/mapping.txt
+          for c in CoverService ResourceCoverService; do
+            grep -qE "^org\.readium\.r2\.shared\.publication\.services\.${c} -> org\.readium\.r2\.shared\.publication\.services\.${c}:$" "$MAPPING" \
+              || { echo "::error::${c} lost its original name in mapping.txt — the org.readium.r2 keep rules must have been dropped, and covers would stop extracting again."; exit 1; }
+          done
       - name: Name the debug APK
         if: github.event_name == 'pull_request'
         run: |
