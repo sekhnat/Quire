@@ -12,15 +12,46 @@ android {
         applicationId = "com.quire.reader"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes -PversionCode/-PversionName (e.g. the GitHub run number and tag);
+        // local builds fall back to these defaults.
+        versionCode = providers.gradleProperty("versionCode").getOrElse("1").toInt()
+        versionName = providers.gradleProperty("versionName").getOrElse("1.0")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        val signingEnv = mapOf(
+            "QUIRE_KEYSTORE_FILE" to providers.environmentVariable("QUIRE_KEYSTORE_FILE"),
+            "QUIRE_KEYSTORE_PASSWORD" to providers.environmentVariable("QUIRE_KEYSTORE_PASSWORD"),
+            "QUIRE_KEY_ALIAS" to providers.environmentVariable("QUIRE_KEY_ALIAS"),
+            "QUIRE_KEY_PASSWORD" to providers.environmentVariable("QUIRE_KEY_PASSWORD"),
+        )
+        val missing = signingEnv.filterValues { !it.isPresent }.keys
+        when {
+            missing.size == signingEnv.size ->
+                Unit // No signing env vars (local build): release falls back to the debug key below.
+            missing.isNotEmpty() ->
+                throw GradleException(
+                    "Incomplete release signing configuration, missing: ${missing.joinToString()}. " +
+                        "Set all four QUIRE_* variables (as CI does) or none of them " +
+                        "(local builds are then signed with the debug key).",
+                )
+            else ->
+                create("release") {
+                    storeFile = file(signingEnv.getValue("QUIRE_KEYSTORE_FILE").get())
+                    storePassword = signingEnv.getValue("QUIRE_KEYSTORE_PASSWORD").get()
+                    keyAlias = signingEnv.getValue("QUIRE_KEY_ALIAS").get()
+                    keyPassword = signingEnv.getValue("QUIRE_KEY_PASSWORD").get()
+                }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Debug key locally, release keystore in CI — keeps every artifact upgradeable.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

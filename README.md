@@ -78,7 +78,7 @@ If you used text search before books with self-closing `<title/>` tags were hand
 
 ## Install
 
-Every push builds a debug APK. Open the latest run on the [Actions tab](https://github.com/sekhnat/Quire/actions/workflows/build.yml), download the **quire-debug-apk** artifact, and install it. Tagged releases (`v*`) attach the APK to a [GitHub release](https://github.com/sekhnat/Quire/releases).
+Every push to `main` builds a **release-signed APK**: open the latest run on the [Actions tab](https://github.com/sekhnat/Quire/actions/workflows/build.yml), download the **quire-release-apk** artifact, and install it. A newer build installs over any older one without losing your library. Tagged releases (`v*`) attach the same APK to a [GitHub release](https://github.com/sekhnat/Quire/releases), along with the R8 `mapping.txt`. Pull-request runs still produce a debug APK. If you previously installed a debug build, you'll need to uninstall it once before the signed releases can take over.
 
 On first launch Quire asks for **All files access**. This is a single switch in Android's settings, and it is what lets Quire read your Calibre folder in place and notice new books. Nothing leaves your phone: Quire has no network features and no account.
 
@@ -91,7 +91,13 @@ You need JDK 21 and the Android SDK (platform 36, build tools 36.0.0).
 ./gradlew installDebug                # install on a connected device or emulator
 ```
 
-The APK lands in `app/build/outputs/apk/debug/app-debug.apk`.
+The debug APK lands in `app/build/outputs/apk/debug/app-debug.apk`.
+
+```sh
+./gradlew assembleRelease             # R8-minified release variant
+```
+
+The release APK lands in `app/build/outputs/apk/release/app-release.apk`. It is minified with R8 (see `app/proguard-rules.pro` for the keep rules). Without the `QUIRE_KEYSTORE_FILE`/`QUIRE_KEYSTORE_PASSWORD`/`QUIRE_KEY_ALIAS`/`QUIRE_KEY_PASSWORD` environment variables it is signed with the debug key; CI sets them from the repository secrets and signs with the release keystore. CI also passes `-PversionCode` (the run number) and `-PversionName` (the tag or `dev-<sha>`); locally these default to `1` and `1.0`.
 
 To try it on an emulator, grant access and put some books on the device:
 
