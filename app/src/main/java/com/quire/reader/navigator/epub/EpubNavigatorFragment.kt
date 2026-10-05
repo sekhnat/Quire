@@ -349,7 +349,15 @@ public class EpubNavigatorFragment internal constructor(
      * Returns null while that resource is not (yet) one of the loaded ones.
      */
     public suspend fun evaluateJavascript(script: String, href: Url): String? {
-        val page = scriptRunnerFor(href) ?: return null
+        continuousBook?.let { book ->
+            // Accept either the original href or a served URL, and load the document first if it
+            // is outside the surface's live window.
+            val original = AbsoluteUrl(href.toString())
+                ?.let { viewModel.server.servedUrlToLink(it)?.url()?.removeFragment() }
+                ?: href
+            return book.withFrame(original) { it.runJavaScriptSuspend(script) }
+        }
+        val page = loadedFragmentForHref(href) ?: return null
         page.awaitLoaded()
         return page.runJavaScriptSuspend(script)
     }
@@ -377,18 +385,6 @@ public class EpubNavigatorFragment internal constructor(
     public suspend fun scrollToDecoration(group: String, href: Url): Boolean {
         val book = continuousBook ?: return false
         return book.scrollToDecoration(group, href)
-    }
-
-    private fun scriptRunnerFor(href: Url): com.quire.reader.navigator.ScriptRunner? {
-        continuousBook?.let { book ->
-            // Accept either the original href or a served URL: canonicalize through the
-            // server mapping so tests/tools can address a resource the way a WebView does.
-            val original = AbsoluteUrl(href.toString())
-                ?.let { viewModel.server.servedUrlToLink(it)?.url()?.removeFragment() }
-                ?: href
-            return book.runnerFor(original)
-        }
-        return loadedFragmentForHref(href)
     }
 
     internal val viewModel: EpubNavigatorViewModel by viewModels {
@@ -443,6 +439,13 @@ public class EpubNavigatorFragment internal constructor(
 
             override fun onBookFailed(error: String) {
                 publishReadiness(Readiness.Failed(error))
+            }
+
+            override fun positionCount(index: Int): Int =
+                positionsByReadingOrder.getOrNull(index)?.size ?: 0
+
+            override fun onRendererGone(didCrash: Boolean) {
+                this@EpubNavigatorFragment.onRendererGone(didCrash)
             }
 
             override fun onProgressionChanged() {
@@ -806,6 +809,35 @@ public class EpubNavigatorFragment internal constructor(
                 reflowContinuousSurface()
             }
         }
+    }
+
+    private var lastRendererLossAt = 0L
+
+    /**
+     * The scroll surface's renderer process died, almost always because the system ran out of
+     * memory. The first loss rebuilds the surface at the current position; a second one within
+     * [RENDERER_LOSS_WINDOW_MS] means the book does not fit even in the bounded live window, and
+     * the reader is told instead of looping.
+     */
+    private fun onRendererGone(didCrash: Boolean) {
+        val root = view ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        val repeated = lastRendererLossAt != 0L && now - lastRendererLossAt < RENDERER_LOSS_WINDOW_MS
+        lastRendererLossAt = now
+        val locator = currentLocator.value
+        Log.w("ContinuousBook", "renderer lost (didCrash=$didCrash, repeated=$repeated); locator=${locator.href}")
+        if (repeated) {
+            publishReadiness(Readiness.Failed("The reader's renderer was lost twice"))
+            android.widget.Toast.makeText(
+                requireContext(),
+                "This book ran out of memory in scroll mode. Switch to pages in Display.",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
+        publishReadiness(Readiness.Preparing)
+        resetContainer(root)
+        go(locator)
     }
 
     /** Captures the reading anchor, remeasures all frames, restores once (task 5.1). */
@@ -1467,6 +1499,9 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     public companion object {
+
+        /** Two renderer losses closer together than this make the scroll surface give up. */
+        private const val RENDERER_LOSS_WINDOW_MS = 30_000L
 
         /**
          * Creates a factory for a dummy [EpubNavigatorFragment].
