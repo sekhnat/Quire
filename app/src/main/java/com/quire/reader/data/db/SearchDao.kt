@@ -76,7 +76,7 @@ abstract class SearchDao {
     FROM text_chunk_fts
     CROSS JOIN text_chunk c ON c.id = text_chunk_fts.docid
     CROSS JOIN index_state s ON s.bookId = c.bookId AND s.status = 'done'
-    CROSS JOIN book b ON b.id = c.bookId AND b.mtime = s.mtime AND b.sizeBytes = s.sizeBytes AND b.readable = 1
+    CROSS JOIN book b ON b.id = c.bookId AND b.mtime = s.mtime AND b.sizeBytes = s.sizeBytes AND b.readable = 1 AND b.missingSince IS NULL
     LEFT JOIN book_state st ON st.bookId = b.id
     WHERE text_chunk_fts MATCH :match
       AND text_chunk_fts.docid >= :minDocid AND text_chunk_fts.docid <= :maxDocid""" + FILTERS_SQL + """
@@ -94,7 +94,7 @@ abstract class SearchDao {
     SELECT b.id FROM book b
     CROSS JOIN index_state s ON s.bookId = b.id AND s.status = 'done' AND s.mtime = b.mtime AND s.sizeBytes = b.sizeBytes
     LEFT JOIN book_state st ON st.bookId = b.id
-    WHERE b.readable = 1""" + FILTERS_SQL + """
+    WHERE b.readable = 1 AND b.missingSince IS NULL""" + FILTERS_SQL + """
     ORDER BY s.completedAt, b.id
     """,
   )
@@ -138,7 +138,7 @@ abstract class SearchDao {
     FROM text_chunk_fts
     CROSS JOIN text_chunk c ON c.id = text_chunk_fts.docid
     CROSS JOIN index_state s ON s.bookId = c.bookId AND s.status = 'done'
-    CROSS JOIN book b ON b.id = c.bookId AND b.mtime = s.mtime AND b.sizeBytes = s.sizeBytes AND b.readable = 1
+    CROSS JOIN book b ON b.id = c.bookId AND b.mtime = s.mtime AND b.sizeBytes = s.sizeBytes AND b.readable = 1 AND b.missingSince IS NULL
     WHERE text_chunk_fts MATCH :match
       AND text_chunk_fts.docid >= (SELECT MIN(id) FROM text_chunk WHERE bookId = :bookId AND seq > :afterSeq)
       AND text_chunk_fts.docid <= (SELECT MAX(id) FROM text_chunk WHERE bookId = :bookId)

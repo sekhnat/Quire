@@ -33,6 +33,7 @@ class CoverStore(context: Context) {
   }.getOrNull()
 
   fun delete(path: String?) { if (path != null) File(path).delete() }
+  fun deleteAll(paths: List<String>) = paths.forEach(::delete)
 
   private fun sampleSize(width: Int): Int { var s = 1; while (width / (s * 2) >= TARGET_WIDTH) s *= 2; return s }
 

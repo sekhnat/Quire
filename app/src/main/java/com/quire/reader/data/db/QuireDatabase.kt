@@ -12,7 +12,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
     TextChunkEntity::class, TextChunkFts::class, IndexStateEntity::class,
   ],
-  version = 3,
+  version = 4,
   exportSchema = false,
 )
 abstract class QuireDatabase : RoomDatabase() {
@@ -59,6 +59,25 @@ abstract class QuireDatabase : RoomDatabase() {
     }
 
     /**
+     * Gives books identity keys and a missing state, so a vanished file no longer deletes its reading history. Columns are
+     * only added: rebuilding `book` would cascade-delete everything that hangs off it. Existing books get their keys on the
+     * next scan.
+     */
+    val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        listOf(
+          "ALTER TABLE `book` ADD COLUMN `calibreUuid` TEXT",
+          "ALTER TABLE `book` ADD COLUMN `epubUid` TEXT",
+          "ALTER TABLE `book` ADD COLUMN `fingerprint` TEXT",
+          "ALTER TABLE `book` ADD COLUMN `missingSince` INTEGER",
+          "CREATE INDEX IF NOT EXISTS `index_book_calibreUuid` ON `book` (`calibreUuid`)",
+          "CREATE INDEX IF NOT EXISTS `index_book_epubUid` ON `book` (`epubUid`)",
+          "CREATE INDEX IF NOT EXISTS `index_book_fingerprint` ON `book` (`fingerprint`)",
+        ).forEach(db::execSQL)
+      }
+    }
+
+    /**
      * Read-only view of the full-text index's terms with their document counts, for judging how common a word prefix is
      * before searching for it (see `TextSearcher`). It holds no data of its own and is not a Room entity, so it is created
      * whenever the database opens, which covers new installs and every migration alike.
@@ -70,7 +89,7 @@ abstract class QuireDatabase : RoomDatabase() {
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
         .addCallback(object : Callback() { override fun onOpen(db: SupportSQLiteDatabase) = db.execSQL(CREATE_FTS_TERMS) })
         .build()
   }
