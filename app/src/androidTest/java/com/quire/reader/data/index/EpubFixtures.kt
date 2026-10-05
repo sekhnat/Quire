@@ -188,6 +188,37 @@ object EpubFixtures {
     )
   }
 
+  // ── bounded-scroll fixture ───────────────────────────────────────────────
+
+  fun longHeading(chapter: Int) = "Long Chapter $chapter"
+
+  /** Chapters differ in length (20 to 59 paragraphs), so no height estimate is right for all of them. */
+  private fun longParagraphCount(chapter: Int) = 20 + (chapter * 13) % 40
+
+  /** The chapter of [writeLongBook] that holds `#far-target`, deep in its text. */
+  const val LONG_TARGET_CHAPTER = 33
+
+  /**
+   * A plain reflowable book with far more chapters than the scroll surface keeps live at once, each a few
+   * screens tall and of a different length. Chapter [LONG_TARGET_CHAPTER] carries `#far-target`; the TOC lists every chapter and that target.
+   */
+  fun writeLongBook(file: File, chapters: Int = 40): File {
+    val resources = (0 until chapters).map { c ->
+      FixtureResource(
+        "l$c.xhtml",
+        """<h2 id="h$c">${longHeading(c)}</h2>""" +
+          (1..longParagraphCount(c)).joinToString("") { p ->
+            val target = if (c == LONG_TARGET_CHAPTER && p == 35) " id=\"far-target\"" else ""
+            "<p$target>Chapter $c paragraph $p of the long fixture, where the quiet heron of the west field $c-$p keeps watch over the reeds and the slow water.</p>"
+          },
+        "<title>Long $c</title>",
+      )
+    }
+    val toc = (0 until chapters).map { FixtureToc("l$it.xhtml", null, longHeading(it)) } +
+      FixtureToc("l$LONG_TARGET_CHAPTER.xhtml", "far-target", "Far target")
+    return write(file, resources, toc)
+  }
+
   /** A solid [color] PNG of 24×24 px, built by hand (`java.awt` is unavailable on-device). */
   private fun png(color: String): ByteArray {
     // #rrggbb -> three channel bytes.

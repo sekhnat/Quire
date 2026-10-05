@@ -10,12 +10,19 @@
 // outer document owns the only scrollable range — native drag, fling and
 // touch-to-stop come for free, and chapter seams are not scroll edges.
 //
-// Preparation is book-wide: every frame is created eagerly, and the surface only
-// reports `Ready` once all documents, their Readium runtimes, the current CSS, the
-// decoration templates, the fonts and the static-image layout have settled and one
-// complete geometry table is committed. A required document or runtime failure is a
+// The book is one column of slots, one per resource, with one complete geometry table.
+// Only the slots near the viewport hold a live document (its Readium runtime, CSS, fonts
+// and decoded images); the rest are empty boxes of their measured height, or of an
+// estimate until a background pass has measured them, so memory is bounded by the window
+// and not by the size of the book. The surface reports `Ready` once the documents around
+// the starting position have settled. A required document failing before that is a
 // terminal book-loading error; a failed optional image settles with the normal
 // missing-image behavior.
+//
+// A document that leaves the window reports `frameEvicted` and its runner goes back to
+// not-loaded; loading it again re-runs the per-resource initialization. Anything that has
+// to address a resource that may not be live (a jump, a search underline, a selection)
+// pins it first, see [withFrame].
 //
 // Each frame gets one ScriptRunner bound to its original href, and a frame-local
 // adapter (`QuireBook`) through which Readium's injected scripts talk to the native
@@ -37,6 +44,7 @@ import android.view.ActionMode
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -115,20 +123,6 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
     companion object {
         private const val TAG = "ContinuousBook"
-        /** Captures the first block element visible at the viewport top, by tag+index. */
-        private const val ANCHOR_CAPTURE_JS = """
-            (function(){
-              var blocks = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote');
-              for (var i = 0; i < blocks.length; i++) {
-                var r = blocks[i].getBoundingClientRect();
-                if (r.bottom > 0) {
-                  return JSON.stringify({ selector: blocks[i].tagName + ':' + i, top: r.top + window.pageYOffset });
-                }
-              }
-              return JSON.stringify({ selector: '' });
-            })()
-        """
-
         /** Minimum interval between locator publications while the reader scrolls. */
         private const val PROGRESSION_NOTIFY_INTERVAL_MS = 120L
 
@@ -137,6 +131,12 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         private const val ANCHOR_RESTORE_SUFFIX = "'.split(':'); var blocks = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,li,blockquote'); var el = blocks[parts[1]]; if (!el) return -1; return el.getBoundingClientRect().top + window.pageYOffset; })()"
 
         private const val SETTLE_TIMEOUT_MS = 10_000L
+
+        /** See [resourceIndexAt]. */
+        private const val SEAM_TOLERANCE_CSS = 1.0
+
+        /** How long a jump or script waits for a document outside the live window to load. */
+        private const val FRAME_LOAD_TIMEOUT_MS = 20_000L
     }
 
     /** What the surface needs from the navigator's view model. */
@@ -167,8 +167,14 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
          * decorations render as empty boxes.
          */
         fun onResourceLoaded(link: Link)
+
+        /** The number of Readium positions in the resource at [index], to estimate its height. */
+        fun positionCount(index: Int): Int
         fun onBookReady()
         fun onBookFailed(error: String)
+
+        /** The WebView's renderer process was killed (memory) or crashed; the surface is unusable. */
+        fun onRendererGone(didCrash: Boolean)
         fun onProgressionChanged()
         fun onTap(point: PointF): Boolean
         fun onDrag(type: DragType, start: PointF, offset: PointF): Boolean
@@ -229,6 +235,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     /** Reader viewport height in CSS px, for anchor capture and clamping. */
     private var viewportHeightCss: Int = 0
 
+    /** The resource whose slot is scrolled to and loaded first. */
+    private var initialIndex = 0
+
     /** Pending initial jump, applied once the book becomes ready. */
     private var initialJump: (() -> Unit)? = null
 
@@ -277,6 +286,15 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                 host.shouldOverrideUrlLoading(request)
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                // Returning false (the default) would take the whole app down with the
+                // renderer. The surface is rebuilt, or given up on, by the navigator.
+                Log.w(TAG, "renderer process gone: didCrash=${detail.didCrash()}")
+                val gen = generation
+                post { if (gen == generation) navigator.bookHost.onRendererGone(detail.didCrash()) }
+                return true
+            }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
@@ -348,6 +366,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         generationAtPrepare = generation
         navigator.viewModel.server.injectsScrollFrameAdapter = true
         initialJump = initialLocator?.let { jumpFactory(it) }
+        initialIndex = initialLocator?.let { indexOfHref(it.href.removeFragment()) } ?: 0
     }
 
     /**
@@ -372,8 +391,12 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         resources.forEachIndexed { index, link ->
             val servedUrl = host.urlTo(link)
             val href = hrefs[index].toString()
-            js.append("QuireShellHost.addFrame($index, ${JSONObject.quote(servedUrl.toString())}, ${JSONObject.quote(href)});")
+            js.append(
+                "QuireShellHost.addFrame($index, ${JSONObject.quote(servedUrl.toString())}, " +
+                    "${JSONObject.quote(href)}, ${host.positionCount(index)});",
+            )
         }
+        js.append("QuireShellHost.initialWindow($initialIndex);")
         js.append("}")
         shell.evaluateJavascript(js.toString(), null)
     }
@@ -388,24 +411,23 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         // templates, saved decorations) exactly as the paged path does, so decorations are
         // styles the frame knows about before any of them is applied.
         navigator.bookHost.onResourceLoaded(resources[index])
-        // Settle images/fonts asynchronously; readiness waits for it.
-        scope.launch {
-            runner.settle()
-            maybeReady(gen)
-        }
+        // The shell settles fonts and images before it reports the frame.
+        scope.launch { runner.settle() }
     }
 
-    private fun maybeReady(gen: Int) {
+    /** A document left the live window: its runner is no longer addressable until it loads again. */
+    private fun onFrameEvicted(href: String, gen: Int) {
+        if (gen != generation) return
+        val index = indexOfHref(Url(href) ?: return) ?: return
+        runners.getOrNull(index)?.markUnloaded()
+    }
+
+    /** The shell's initial window settled: the documents around the start position are live. */
+    private fun markReady(gen: Int) {
         if (gen != generation) return
         if (_state.value != ContinuousBookState.Preparing) return
-        val unloaded = runners.count { !it.isLoaded.value }
-        val unsettled = runners.count { !it.settled.value }
-        if (unloaded > 0 || unsettled > 0) {
-            Log.d(TAG, "maybeReady: $unloaded unloaded, $unsettled unsettled")
-            return
-        }
         commitGeometry()
-        Log.d(TAG, "book ready: heights=$heights")
+        Log.d(TAG, "book ready: ${resources.size} resources, initial window at #$initialIndex")
         _state.value = ContinuousBookState.Ready
         navigator.bookHost.onBookReady()
         initialJump?.invoke()
@@ -441,6 +463,54 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         return runners[index]
     }
 
+    /**
+     * Runs [block] with the runner of [href] loaded, loading its document first if it is outside
+     * the live window and keeping it loaded until [block] returns. Null when the resource is not in
+     * the book, the surface is gone, or the document did not load in time.
+     */
+    suspend fun <T> withFrame(href: Url, block: suspend (FrameRunner) -> T): T? {
+        val index = indexOfHref(href) ?: return null
+        val runner = runners[index]
+        pinFrame(hrefs[index], true)
+        try {
+            if (withTimeoutOrNull(FRAME_LOAD_TIMEOUT_MS) { runner.awaitLoaded() } == null) {
+                Log.w(TAG, "withFrame: ${hrefs[index]} did not load in ${FRAME_LOAD_TIMEOUT_MS}ms")
+                return null
+            }
+            return block(runner)
+        } finally {
+            pinFrame(hrefs[index], false)
+        }
+    }
+
+    /** How many documents the shell currently holds (loading or live): the size of the live window. For tests. */
+    internal suspend fun liveFrameCount(): Int = withContext(Dispatchers.Main.immediate) {
+        suspendCoroutine { cont ->
+            shell.evaluateJavascript("window.QuireShellHost ? QuireShellHost.liveCount() : -1") { result ->
+                cont.resume(result?.trim()?.toIntOrNull() ?: -1)
+            }
+        }
+    }
+
+    /** How many resources the shell has measured so far; the background pass is done at the book's size. For tests. */
+    internal suspend fun measuredFrameCount(): Int = withContext(Dispatchers.Main.immediate) {
+        suspendCoroutine { cont ->
+            shell.evaluateJavascript("window.QuireShellHost ? QuireShellHost.measuredCount() : -1") { result ->
+                cont.resume(result?.trim()?.toIntOrNull() ?: -1)
+            }
+        }
+    }
+
+    /** Asks the shell to keep (or stop keeping) the document of [href] loaded. */
+    private fun pinFrame(href: Url, pinned: Boolean) {
+        val gen = generation
+        shell.post {
+            if (gen != generation) return@post
+            val call = if (pinned) "pin" else "unpin"
+            shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.$call(${JSONObject.quote(href.toString())});", null)
+        }
+    }
+
     /** The runner the outer viewport's reading position is in, once ready. */
     fun activeRunner(): FrameRunner? {
         if (_state.value != ContinuousBookState.Ready) return null
@@ -472,9 +542,16 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     /** True while a throttled locator publication is already scheduled. */
     private var progressionNotifyPending = false
 
-    /** The index of the resource whose span contains book position [y], or null before readiness. */
-    fun resourceIndexAt(y: Double): Int? {
+    /**
+     * The index of the resource whose span contains book position [scrollY], or null before readiness.
+     *
+     * The position is read [SEAM_TOLERANCE_CSS] below the viewport top: a jump to a chapter start can
+     * land a fraction of a pixel above the seam (scroll offsets are snapped to device pixels), and that
+     * must still report the chapter the reader is looking at, not the last page of the one before it.
+     */
+    fun resourceIndexAt(scrollY: Double): Int? {
         if (_state.value != ContinuousBookState.Ready) return null
+        val y = scrollY + SEAM_TOLERANCE_CSS
         // Half-open intervals [top, top+height); zero-height resources are skipped by
         // construction (their interval is empty); the book end clamps to the last
         // readable resource.
@@ -558,20 +635,28 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     /** Scrolls the first decoration of [group] in the resource at [href] into view. */
     suspend fun scrollToDecoration(group: String, href: Url): Boolean {
         if (_state.value != ContinuousBookState.Ready) return false
-        val runner = runnerFor(href) ?: return false
-        if (!runner.isLoaded.value) return false
-        val within = runner.offsetTopForDecoration(group) ?: return false
         val index = indexOfHref(href) ?: return false
-        val top = tops[index]
-        jumpToBookPosition(top + within - viewportHeightCss / 4.0)
-        return true
+        return withFrame(href) { runner ->
+            val within = runner.offsetTopForDecoration(group) ?: return@withFrame false
+            jumpToResourceOffset(hrefs[index], within - viewportHeightCss / 4.0)
+            true
+        } ?: false
     }
 
-    /** Immediate outer jump to a book position in CSS px. */
-    fun jumpToBookPosition(yCss: Double) {
-        val scale = context.resources.displayMetrics.density
-        shell.post { shell.scrollTo(0, (yCss * scale).toInt()) }
-        navigator.bookHost.onProgressionChanged()
+    /**
+     * Scrolls to [withinCss] inside the resource at [href]. The offset is resolved by the shell from
+     * its own slot heights, which are always current; the native table trails them by a geometry
+     * batch and is wrong right after the target's measurement rescaled the estimates above it.
+     */
+    private fun jumpToResourceOffset(href: Url, withinCss: Double) {
+        val gen = generation
+        shell.post {
+            if (gen != generation) return@post
+            shell.evaluateJavascript(
+                "window.QuireShellHost && QuireShellHost.scrollToOffset(${JSONObject.quote(href.toString())}, $withinCss);",
+                null,
+            )
+        }
     }
 
     /**
@@ -602,15 +687,15 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         val jump = pendingJump ?: return
         pendingJump = null
         val index = indexOfHref(jump.href) ?: return
-        val runner = runners[index]
         scope.launch {
-            runner.awaitLoaded()
-            if (_state.value != ContinuousBookState.Ready) return@launch
-            val resolved = jump.htmlId?.let { runner.offsetTopForId(it) }
-            val within = resolved
-                ?: (jump.progression.coerceIn(0.0, 1.0) * runner.contentHeight)
-            jump.decoration?.invoke(jump.href)
-            jumpToBookPosition(tops[index] + within)
+            withFrame(jump.href) { runner ->
+                if (_state.value != ContinuousBookState.Ready) return@withFrame
+                val resolved = jump.htmlId?.let { runner.offsetTopForId(it) }
+                val within = resolved
+                    ?: (jump.progression.coerceIn(0.0, 1.0) * runner.contentHeight)
+                jump.decoration?.invoke(jump.href)
+                jumpToResourceOffset(jump.href, within)
+            }
         }
     }
 
@@ -625,23 +710,27 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     /** Captures the anchor of what the reader currently sees. */
     suspend fun captureAnchor(): ReflowAnchor? {
         if (_state.value != ContinuousBookState.Ready) return null
-        val index = resourceIndexAt(outerScrollY()) ?: return null
-        val runner = runners[index]
-        val y = outerScrollY()
-        val local = y - tops[index]
-        // A text anchor: the first block element visible at the viewport top.
-        val anchorJson = runCatching { runner.runJavaScriptSuspend(ANCHOR_CAPTURE_JS) }.getOrNull()
-        val anchorHref = hrefs[index]
-        return when {
-            anchorJson != null && anchorJson != "null" -> {
-                val json = anchorJson.frameResultJson()
-                if (json != null && json.optString("selector").isNotEmpty()) {
-                    ReflowAnchor(anchorHref, json.optString("selector"), local, null)
-                } else {
-                    ReflowAnchor(anchorHref, null, local, local / (heights[index].takeIf { it > 0 } ?: 1.0))
-                }
+        // One shell evaluation answers where the reader is and which block is at the viewport top, from
+        // the shell's own heights (the native table trails them by a batch). It must be a single
+        // round trip: a reflow's style change is queued right behind it.
+        val position = shellCapture() ?: return null
+        val index = indexOfHref(Url(position.optString("href")) ?: return null) ?: return null
+        val local = position.optDouble("within")
+        val height = position.optDouble("height").takeIf { it > 0 } ?: 1.0
+        val selector = position.optJSONObject("anchor")?.optString("selector")?.takeIf { it.isNotEmpty() }
+        return if (selector != null) {
+            ReflowAnchor(hrefs[index], selector, local, null)
+        } else {
+            ReflowAnchor(hrefs[index], null, local, local / height)
+        }
+    }
+
+    /** The shell's `captureAnchor()` answer: `{href, within, height, anchor: {selector, top} | null}`. */
+    private suspend fun shellCapture(): JSONObject? = withContext(Dispatchers.Main.immediate) {
+        suspendCoroutine { cont ->
+            shell.evaluateJavascript("JSON.stringify(window.QuireShellHost ? QuireShellHost.captureAnchor() : null)") { result ->
+                cont.resume(result.frameResultJson())
             }
-            else -> ReflowAnchor(anchorHref, null, local, local / (heights[index].takeIf { it > 0 } ?: 1.0))
         }
     }
 
@@ -663,13 +752,13 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
                     ?.trim('"')
                     ?.toDoubleOrNull()
             }
-            val target = when {
-                anchorOffset != null && anchorOffset >= 0 -> tops[index] + anchorOffset
-                anchor?.localOffset != null && anchor.localOffset!! <= heights[index] -> tops[index] + anchor.localOffset!!
-                anchor?.progression != null -> tops[index] + anchor.progression!! * heights[index]
-                else -> tops[index]
+            val within = when {
+                anchorOffset != null && anchorOffset >= 0 -> anchorOffset
+                anchor?.localOffset != null && anchor.localOffset!! <= heights[index] -> anchor.localOffset!!
+                anchor?.progression != null -> anchor.progression!! * heights[index]
+                else -> 0.0
             }
-            jumpToBookPosition(target)
+            jumpToResourceOffset(hrefs[index], within)
         }
     }
 
@@ -699,8 +788,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         fun event(json: String) {
             val obj = runCatching { JSONObject(json) }.getOrNull() ?: return
             val gen = generation
-            Log.d(TAG, "shell event: $json")
+            if (!json.startsWith("{\"kind\":\"geometry\"")) Log.d(TAG, "shell event: ${json.take(200)}")
             when (obj.optString("kind")) {
+                "frameEvicted" -> post { onFrameEvicted(obj.optString("href"), gen) }
                 "frameLoaded" -> post {
                     val href = obj.optString("href")
                     val height = obj.optDouble("height", 0.0)
@@ -710,7 +800,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
                 }
                 "ready" -> post {
                     applyGeometry(obj.optJSONObject("heights") ?: JSONObject(), gen)
-                    maybeReady(gen)
+                    markReady(gen)
                 }
                 "error" -> post {
                     failBook(obj.optString("message", "a chapter failed to load"), gen)
@@ -801,15 +891,21 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
         @JavascriptInterface
         fun onSelectionStart(href: String) {
-            canonical(href) ?: return
-            selectionHref = canonical(href)
+            val origin = canonical(href) ?: return
+            // The selection's document must stay loaded for as long as the selection lives: the
+            // copy/highlight/note actions address it even if the user scrolls far away.
+            if (selectionHref != origin) {
+                selectionHref?.let { pinFrame(it, false) }
+                pinFrame(origin, true)
+            }
+            selectionHref = origin
         }
 
         @JavascriptInterface
         fun onSelectionEnd(href: String) {
             // Keep the originating href: the selection's document is the one the
             // copy/highlight/note actions must address, even if the user then scrolls.
-            selectionHref = canonical(href)
+            onSelectionStart(href)
         }
 
         @JavascriptInterface
@@ -834,6 +930,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
     /** Forgets the recorded selection origin (after the selection was cleared). */
     fun clearSelectionHref() {
+        selectionHref?.let { pinFrame(it, false) }
         selectionHref = null
     }
 
@@ -893,7 +990,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
             }
         }
         commitGeometry()
-        navigator.bookHost.onProgressionChanged()
+        if (_state.value == ContinuousBookState.Ready) notifyProgressionThrottled()
     }
 
     // ── disposal ────────────────────────────────────────────────────────────────
@@ -932,7 +1029,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         private val _loaded = MutableStateFlow(false)
         override val isLoaded: StateFlow<Boolean> = _loaded.asStateFlow()
 
-        /** Loaded AND settled: fonts/images laid out; required for book readiness. */
+        /** Loaded AND settled: the shell has laid out fonts and images; false again once the document is unloaded. */
         val settled = MutableStateFlow(false)
 
         /** Content height of this resource, in CSS px. */
@@ -946,6 +1043,12 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         fun markLoaded(height: Double) {
             contentHeight = height
             _loaded.value = true
+        }
+
+        /** Marks the document unloaded: it left the live window and must be loaded again to be addressed. */
+        fun markUnloaded() {
+            _loaded.value = false
+            settled.value = false
         }
 
         /**

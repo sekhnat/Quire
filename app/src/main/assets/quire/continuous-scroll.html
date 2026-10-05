@@ -3,11 +3,12 @@
   Quire's continuous-scroll book shell (openspec change eager-seamless-scroll).
 
   One outer document, served on the effective publication origin through a reserved,
-  collision-checked route in WebViewServer. Every reading-order resource is a
-  same-origin, full-content-height iframe in publication order. The outer document
-  owns the only scrollable range; frames have no borders, margins, reader-added
-  separators, inner scrollbars or viewport-height minimums. Reader chrome and insets
-  are applied once around this surface.
+  collision-checked route in WebViewServer. Every reading-order resource has a slot in
+  publication order; the slots near the viewport hold a same-origin, full-content-height
+  iframe and the rest are empty boxes of the right height (bounded-scroll-window). The
+  outer document owns the only scrollable range; frames have no borders, margins,
+  reader-added separators, inner scrollbars or viewport-height minimums. Reader chrome
+  and insets are applied once around this surface.
 
   The shell URL is internal: it never becomes a public locator. Frame URLs are the
   served original publication resource URLs, so relative assets, fragment resolution,
@@ -18,8 +19,12 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <style>
-  html, body { margin: 0; padding: 0; }
+  /* Native scroll anchoring is off: it does not follow documents swapped in and out of the
+     slots, so continuous-scroll.js moves the scroll position itself when a slot above the
+     viewport changes height. */
+  html, body { margin: 0; padding: 0; overflow-anchor: none; }
   body { background: transparent; }
+  .slot { display: block; margin: 0; padding: 0; overflow: hidden; }
   iframe {
     display: block;
     width: 100%;
