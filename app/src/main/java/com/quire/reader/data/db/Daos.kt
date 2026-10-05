@@ -44,21 +44,85 @@ data class BookRow(
 }
 
 /** Identity of a file already in the database, used to skip unchanged files on rescan. */
-data class KnownFile(val id: Long, val path: String, val folderId: Long, val sizeBytes: Long, val mtime: Long, val addedAt: Long, val coverPath: String?)
+data class KnownFile(
+  val id: Long, val path: String, val folderId: Long, val sizeBytes: Long, val mtime: Long, val addedAt: Long, val coverPath: String?,
+  /** The book is missing (its file vanished earlier, or its folder was removed); finding the file again brings it back. */
+  val missing: Boolean = false,
+  /** False for books stored before identity keys existed; a scan reads their keys without re-reading the book. */
+  val hasIdentity: Boolean = true,
+)
+
+/** A book's identity keys, for matching books whose file vanished to files found elsewhere (see `matchMoves`). */
+data class IdentityRow(
+  val id: Long,
+  val folderId: Long,
+  /** Needed to trust a shared EPUB identifier, which alone is too weak. */
+  val title: String,
+  val calibreUuid: String?,
+  val epubUid: String?,
+  val fingerprint: String?,
+  /** When the book was last opened, 0 if never: the most recently read of several missing books wins a contested file. */
+  val lastOpenedAt: Long = 0,
+  /** The book has reading history of its own (see [HAS_HISTORY_SQL]), so another book's history must not be moved onto it. */
+  val hasHistory: Boolean = false,
+)
+
+/** A missing book as Settings lists it. */
+data class MissingBookRow(
+  val id: Long,
+  val title: String,
+  val author: String,
+  val coverPath: String?,
+  val missingSince: Long,
+  val progress: Float?,
+  val bookmarks: Int,
+  val highlights: Int,
+)
+
+data class BookCover(val id: Long, val coverPath: String?)
+
+/** The result of [BookDao.removeFolder]: cover files to delete, and how many books stay behind as missing for their history. */
+data class FolderRemoval(val staleCovers: List<String>, val keptWithHistory: Int)
+
+/** The result of [BookDao.adopt]: the missing book's former cover file, when the book no longer uses it. */
+data class Adoption(val staleCover: String?)
+
+/**
+ * True when book `b` has reading history: a position, status, rating or reader settings, a bookmark, a highlight or a
+ * tag added in Quire. A book without history can be forgotten without losing anything the user did.
+ */
+private const val HAS_HISTORY_SQL = """(
+      EXISTS (SELECT 1 FROM book_state h WHERE h.bookId = b.id AND (h.lastOpenedAt > 0 OR h.progress > 0 OR h.status != 'unread'
+              OR h.userRating IS NOT NULL OR h.prefsJson IS NOT NULL OR h.locatorJson IS NOT NULL))
+      OR EXISTS (SELECT 1 FROM bookmark h WHERE h.bookId = b.id)
+      OR EXISTS (SELECT 1 FROM highlight h WHERE h.bookId = b.id)
+      OR EXISTS (SELECT 1 FROM book_tag h WHERE h.bookId = b.id AND h.origin = 'user'))"""
+
+/** The identity columns of a book `b` with its state `s`, as an [IdentityRow]. */
+private const val IDENTITY_ROWS_SQL = """
+    SELECT b.id, b.folderId, b.title, b.calibreUuid, b.epubUid, b.fingerprint, COALESCE(s.lastOpenedAt, 0) AS lastOpenedAt, $HAS_HISTORY_SQL AS hasHistory
+    FROM book b LEFT JOIN book_state s ON s.bookId = b.id
+    WHERE (b.calibreUuid IS NOT NULL OR b.epubUid IS NOT NULL OR b.fingerprint IS NOT NULL)"""
+
+/** SQLite's limit on bound arguments is 999 on older Android versions; longer id lists are split into chunks of this size. */
+const val MAX_SQL_ARGS = 500
 
 @Dao
 interface FolderDao {
-  @Query("SELECT * FROM folder ORDER BY path") fun observeAll(): Flow<List<FolderEntity>>
+  /** The folders in the library, not the removed ones kept for their missing books. */
+  @Query("SELECT * FROM folder WHERE watched = 1 ORDER BY path") fun observeAll(): Flow<List<FolderEntity>>
   @Query("SELECT * FROM folder ORDER BY path") suspend fun all(): List<FolderEntity>
   @Query("SELECT * FROM folder WHERE watched = 1 ORDER BY path") suspend fun watched(): List<FolderEntity>
   @Query("SELECT * FROM folder WHERE path = :path") suspend fun byPath(path: String): FolderEntity?
   @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insert(folder: FolderEntity): Long
   @Update suspend fun update(folder: FolderEntity)
+  /** Puts a removed folder back in the library; the next scan finds its missing books at their paths. */
+  @Query("UPDATE folder SET watched = 1 WHERE id = :id") suspend fun rewatch(id: Long)
   @Query("DELETE FROM folder WHERE id = :id") suspend fun delete(id: Long)
   @Query("UPDATE folder SET lastScanAt = :at WHERE id = :id") suspend fun markScanned(id: Long, at: Long)
 }
 
-/** The columns and joins of a [BookRow]; append a WHERE clause to narrow it. */
+/** The columns and joins of a [BookRow] for the books in the library (not missing ones); append an AND clause to narrow it. */
 private const val BOOK_ROWS_SQL = """
     SELECT b.id, b.path, b.folderId, b.title, b.sortTitle, b.author, b.primaryAuthor, b.authorSort, b.series, b.seriesIndex,
            b.pubYear, b.language, b.description, b.calibreRating, s.userRating AS userRating, b.sizeBytes, b.addedAt,
@@ -66,6 +130,7 @@ private const val BOOK_ROWS_SQL = """
            s.lastOpenedAt AS lastOpenedAt,
            (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
     FROM book b LEFT JOIN book_state s ON s.bookId = b.id
+    WHERE b.missingSince IS NULL
     """
 
 @Dao
@@ -73,13 +138,14 @@ abstract class BookDao {
   @Query(BOOK_ROWS_SQL)
   abstract fun observeAll(): Flow<List<BookRow>>
 
-  @Query("$BOOK_ROWS_SQL WHERE b.id IN (:ids)") abstract suspend fun rowsByIds(ids: List<Long>): List<BookRow>
+  @Query("$BOOK_ROWS_SQL AND b.id IN (:ids)") abstract suspend fun rowsByIds(ids: List<Long>): List<BookRow>
 
-  @Query("SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath FROM book") abstract suspend fun knownFiles(): List<KnownFile>
+  /** Every book with a path, missing ones included, so a file that comes back finds its row. */
+  @Query("SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath, missingSince IS NOT NULL AS missing, fingerprint IS NOT NULL AS hasIdentity FROM book")
+  abstract suspend fun knownFiles(): List<KnownFile>
   @Query("SELECT * FROM book WHERE id = :id") abstract suspend fun byId(id: Long): BookEntity?
-  @Query("SELECT COUNT(*) FROM book") abstract fun observeCount(): Flow<Int>
+  @Query("SELECT COUNT(*) FROM book WHERE missingSince IS NULL") abstract fun observeCount(): Flow<Int>
   @Query("DELETE FROM book WHERE id IN (:ids)") abstract suspend fun delete(ids: List<Long>)
-  @Query("SELECT coverPath FROM book WHERE folderId = :folderId AND coverPath IS NOT NULL") abstract suspend fun coverPathsIn(folderId: Long): List<String>
   @Query("UPDATE book SET pageEstimate = :pages WHERE id = :id") abstract suspend fun setPages(id: Long, pages: Int)
   @Query("UPDATE book SET readable = :readable WHERE id = :id") abstract suspend fun setReadable(id: Long, readable: Boolean)
 
@@ -104,6 +170,101 @@ abstract class BookDao {
 
   private suspend fun upsertKeepingId(book: BookEntity): Long =
     if (book.id != 0L) { update(book); book.id } else upsert(book)
+
+  // ── identity and missing books ───────────────────────────────────────────
+
+  @Query("UPDATE book SET calibreUuid = :calibreUuid, epubUid = :epubUid, fingerprint = :fingerprint WHERE id = :id")
+  abstract suspend fun setIdentity(id: Long, calibreUuid: String?, epubUid: String?, fingerprint: String?)
+
+  /** Marks books whose file vanished as missing; books already missing keep their original date. At most [MAX_SQL_ARGS] ids. */
+  @Query("UPDATE book SET missingSince = :at WHERE id IN (:ids) AND missingSince IS NULL") abstract suspend fun markMissing(ids: List<Long>, at: Long)
+
+  /** Brings a missing book back: its unchanged file was found again at its path, in [folderId]. */
+  @Query("UPDATE book SET missingSince = NULL, folderId = :folderId WHERE id = :id") abstract suspend fun revive(id: Long, folderId: Long)
+
+  @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NOT NULL") abstract suspend fun missingIdentities(): List<IdentityRow>
+  @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NULL") abstract suspend fun liveIdentities(): List<IdentityRow>
+
+  @Query("SELECT tag FROM book_tag WHERE bookId = :bookId AND origin = 'calibre'") protected abstract suspend fun calibreTags(bookId: Long): List<String>
+
+  /**
+   * Moves the missing book [missingId] onto the file of the live book [liveId], which must have no history of its own
+   * (the caller checks): the missing row takes the live row's file, metadata, identity and Calibre tags and keeps its id,
+   * `addedAt` and everything attached to it, and the live row is deleted. The text index stays when the file is the same
+   * (the signature still matches); otherwise the book is indexed again. Null, changing nothing, when either side has
+   * changed state in the meantime.
+   */
+  @Transaction
+  open suspend fun adopt(missingId: Long, liveId: Long): Adoption? {
+    val old = byId(missingId)?.takeIf { it.missingSince != null } ?: return null
+    val new = byId(liveId)?.takeIf { it.missingSince == null } ?: return null
+    val tags = calibreTags(liveId)
+    delete(listOf(liveId))
+    // Readium's real page count replaced the estimate on the old row; it still holds for the same file.
+    val sameFile = old.fingerprint != null && old.fingerprint == new.fingerprint
+    update(new.copy(id = old.id, addedAt = old.addedAt, pageEstimate = if (sameFile) old.pageEstimate else new.pageEstimate))
+    deleteTags(old.id, BookTagEntity.ORIGIN_CALIBRE)
+    insertTags(tags.map { BookTagEntity(old.id, it, BookTagEntity.ORIGIN_CALIBRE) })
+    return Adoption(staleCover = old.coverPath?.takeIf { it != new.coverPath })
+  }
+
+  @Query("SELECT b.id, b.coverPath FROM book b WHERE b.missingSince IS NOT NULL AND NOT $HAS_HISTORY_SQL")
+  protected abstract suspend fun missingWithoutHistory(): List<BookCover>
+
+  @Query("SELECT id, coverPath FROM book WHERE missingSince IS NOT NULL AND id IN (:ids)")
+  protected abstract suspend fun missingCovers(ids: List<Long>): List<BookCover>
+
+  @Query("DELETE FROM folder WHERE watched = 0 AND NOT EXISTS (SELECT 1 FROM book WHERE book.folderId = folder.id)")
+  protected abstract suspend fun deleteEmptyRemovedFolders()
+
+  /** Deletes the missing books that have no reading history, and removed folders left empty. Returns the cover files to delete. */
+  @Transaction
+  open suspend fun purgeMissing(): List<String> {
+    val gone = missingWithoutHistory()
+    gone.map { it.id }.chunked(MAX_SQL_ARGS).forEach { delete(it) }
+    deleteEmptyRemovedFolders()
+    return gone.mapNotNull { it.coverPath }
+  }
+
+  /** Deletes missing books for good, history included; books that are not missing are left alone. Returns the cover files to delete. */
+  @Transaction
+  open suspend fun forgetMissing(ids: List<Long>): List<String> {
+    val gone = ids.chunked(MAX_SQL_ARGS).flatMap { missingCovers(it) }
+    gone.map { it.id }.chunked(MAX_SQL_ARGS).forEach { delete(it) }
+    deleteEmptyRemovedFolders()
+    return gone.mapNotNull { it.coverPath }
+  }
+
+  @Query("SELECT id FROM book WHERE missingSince IS NOT NULL") abstract suspend fun missingIds(): List<Long>
+
+  @Query(
+    """
+    SELECT b.id, b.title, b.author, b.coverPath, b.missingSince, s.progress AS progress,
+           (SELECT COUNT(*) FROM bookmark x WHERE x.bookId = b.id) AS bookmarks,
+           (SELECT COUNT(*) FROM highlight x WHERE x.bookId = b.id) AS highlights
+    FROM book b LEFT JOIN book_state s ON s.bookId = b.id
+    WHERE b.missingSince IS NOT NULL
+    ORDER BY b.missingSince DESC, b.sortTitle
+    """,
+  )
+  abstract fun observeMissing(): Flow<List<MissingBookRow>>
+
+  @Query("UPDATE folder SET watched = 0 WHERE id = :folderId") protected abstract suspend fun unwatchFolder(folderId: Long)
+  @Query("UPDATE book SET missingSince = :at WHERE folderId = :folderId AND missingSince IS NULL") protected abstract suspend fun markFolderMissing(folderId: Long, at: Long)
+  @Query("SELECT COUNT(*) FROM book WHERE folderId = :folderId") protected abstract suspend fun countIn(folderId: Long): Int
+
+  /**
+   * Takes a folder out of the library without losing reading history: its books become missing, those without history are
+   * deleted, and the folder row stays (unwatched) while books with history still belong to it, so adding the folder again
+   * brings them back. The files on disk are not touched.
+   */
+  @Transaction
+  open suspend fun removeFolder(folderId: Long, at: Long): FolderRemoval {
+    unwatchFolder(folderId)
+    markFolderMissing(folderId, at)
+    val covers = purgeMissing()
+    return FolderRemoval(covers, keptWithHistory = countIn(folderId))
+  }
 }
 
 @Dao
@@ -148,7 +309,7 @@ abstract class IndexDao(private val database: RoomDatabase) {
     """
     SELECT b.id AS id, b.path AS path, b.mtime AS mtime, b.sizeBytes AS sizeBytes
     FROM book b LEFT JOIN index_state s ON s.bookId = b.id
-    WHERE b.readable = 1 AND (s.bookId IS NULL OR s.mtime != b.mtime OR s.sizeBytes != b.sizeBytes)
+    WHERE b.readable = 1 AND b.missingSince IS NULL AND (s.bookId IS NULL OR s.mtime != b.mtime OR s.sizeBytes != b.sizeBytes)
     ORDER BY b.addedAt DESC, b.id DESC
     """,
   )
@@ -162,7 +323,7 @@ abstract class IndexDao(private val database: RoomDatabase) {
            COALESCE(SUM(s.status = 'skipped'), 0) AS skipped,
            COALESCE(SUM(s.status = 'done' AND (s.truncated = 1 OR s.unreadableResources > 0)), 0) AS partial
     FROM book b LEFT JOIN index_state s ON s.bookId = b.id AND s.mtime = b.mtime AND s.sizeBytes = b.sizeBytes
-    WHERE b.readable = 1
+    WHERE b.readable = 1 AND b.missingSince IS NULL
     """,
   )
   abstract fun observeCoverage(): Flow<IndexCoverage>
@@ -170,18 +331,27 @@ abstract class IndexDao(private val database: RoomDatabase) {
   /** Chunk text bytes persisted across all books, including state kept for books whose file has since changed. */
   @Query("SELECT COALESCE(SUM(textBytes), 0) FROM index_state") abstract fun observeTextBytes(): Flow<Long>
 
-  @Query("SELECT COUNT(*) FROM book WHERE id = :bookId AND mtime = :mtime AND sizeBytes = :sizeBytes")
+  @Query("SELECT COUNT(*) FROM book WHERE id = :bookId AND mtime = :mtime AND sizeBytes = :sizeBytes AND missingSince IS NULL")
   protected abstract suspend fun matchingBooks(bookId: Long, mtime: Long, sizeBytes: Long): Int
   @Query("DELETE FROM text_chunk WHERE bookId = :bookId") protected abstract suspend fun deleteChunks(bookId: Long)
   @Insert protected abstract suspend fun insertChunks(chunks: List<TextChunkEntity>)
   @Insert(onConflict = OnConflictStrategy.REPLACE) protected abstract suspend fun putState(state: IndexStateEntity)
   @Query("DELETE FROM text_chunk") protected abstract suspend fun deleteAllChunks()
   @Query("DELETE FROM index_state") protected abstract suspend fun deleteAllStates()
+  @Query("DELETE FROM text_chunk WHERE bookId IN (SELECT id FROM book WHERE missingSince IS NOT NULL)") protected abstract suspend fun deleteMissingChunks()
+  @Query("DELETE FROM index_state WHERE bookId IN (SELECT id FROM book WHERE missingSince IS NOT NULL)") protected abstract suspend fun deleteMissingStates()
+
+  /** Drops the indexed text of missing books (search never shows them); a book that comes back is indexed again. */
+  @Transaction
+  open suspend fun forgetMissing() {
+    deleteMissingChunks()
+    deleteMissingStates()
+  }
 
   /**
    * Swaps a book's chunks for freshly extracted ones and records [state], all in one transaction, so readers
    * see either the previous index or the new one and a failure part-way leaves the previous one untouched.
-   * Returns false, writing nothing, when the book was removed or its file no longer has the signature
+   * Returns false, writing nothing, when the book was removed or went missing, or its file no longer has the signature
    * ([mtime], [sizeBytes]) the text was extracted from.
    */
   @Transaction

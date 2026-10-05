@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.db.IndexCoverage
+import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
 import com.quire.reader.reader.ReaderFontList
@@ -55,6 +56,9 @@ import com.quire.reader.ui.coverageIssues
 import com.quire.reader.ui.formatBytes
 import com.quire.reader.ui.indexStatusText
 import com.quire.reader.ui.reader.ReadingControls
+import java.text.DateFormat
+import java.util.Date
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(vm: QuireViewModel) {
@@ -68,8 +72,12 @@ fun SettingsScreen(vm: QuireViewModel) {
   val activity by vm.indexActivity.collectAsStateWithLifecycle()
   val textBytes by vm.indexedTextBytes.collectAsStateWithLifecycle()
   val databaseBytes by vm.databaseBytes.collectAsStateWithLifecycle()
+  val missing by vm.missingBooks.collectAsStateWithLifecycle()
   var confirmingDelete by remember { mutableStateOf(false) }
   BackHandler(enabled = confirmingDelete) { confirmingDelete = false }
+  /** Missing books the user asked to forget, waiting for confirmation; null when nothing is being confirmed. */
+  var forgetting by remember { mutableStateOf<List<MissingBookRow>?>(null) }
+  BackHandler(enabled = forgetting != null) { forgetting = null }
   // The database grows as books are indexed, so measure again whenever the searchable count changes.
   LaunchedEffect(coverage?.searchable) { vm.refreshDatabaseBytes() }
 
@@ -98,6 +106,8 @@ fun SettingsScreen(vm: QuireViewModel) {
         Toggle("Use Calibre metadata", "Series, tags and ratings from metadata.opf (applies on a full rescan)", useCalibre) { vm.setUseCalibreSetting(!useCalibre) }
       }
 
+      if (missing.isNotEmpty()) MissingBooks(missing) { forgetting = it }
+
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Kicker("Library search")
         Toggle("Index book text", "Lets you search inside books. Runs in the background and steps aside while you read.", indexing) { vm.setIndexingEnabledSetting(!indexing) }
@@ -120,6 +130,62 @@ fun SettingsScreen(vm: QuireViewModel) {
     }
   }
   DeleteIndexSheet(confirmingDelete, textBytes, onDismiss = { confirmingDelete = false }) { confirmingDelete = false; vm.deleteSearchIndex() }
+  ForgetMissingSheet(forgetting, onDismiss = { forgetting = null }) { rows ->
+    forgetting = null
+    if (rows.size == 1) vm.forgetMissing(rows.single().id) else vm.forgetAllMissing()
+  }
+  }
+}
+
+/** Books whose file is gone but whose reading history Quire keeps, each of which can be forgotten. */
+@Composable
+private fun MissingBooks(rows: List<MissingBookRow>, onForget: (List<MissingBookRow>) -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Kicker("Missing books")
+    QText(
+      "Their files are gone, but their reading history is kept. A book comes back with it when its file turns up again, even renamed or in another folder of your library.",
+      12.5f, color = Nq.neutral400, lh = 1.5f,
+    )
+    rows.forEach { row ->
+      Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          QText(row.title, 14f, maxLines = 1)
+          QText("${row.author} · ${missingDetail(row)}", 11.5f, color = Nq.neutral500, maxLines = 2, lh = 1.4f)
+        }
+        IconBtn(Ic.X, { onForget(listOf(row)) }, tint = Nq.neutral500, size = 32.dp, iconSize = 16.dp)
+      }
+    }
+    if (rows.size > 1) QButton("Forget all missing books", { onForget(rows) }, Modifier.fillMaxWidth().padding(top = 6.dp), icon = Ic.X, size = 12.5f, color = Nq.danger)
+  }
+}
+
+/** "Missing since 4 Oct 2026 · 42% read · 3 highlights · 1 bookmark". */
+private fun missingDetail(row: MissingBookRow): String = listOfNotNull(
+  "Missing since " + DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(row.missingSince)),
+  row.progress?.takeIf { it > 0f }?.let { "${(it * 100).roundToInt()}% read" },
+  row.highlights.takeIf { it > 0 }?.let { "$it ${if (it == 1) "highlight" else "highlights"}" },
+  row.bookmarks.takeIf { it > 0 }?.let { "$it ${if (it == 1) "bookmark" else "bookmarks"}" },
+).joinToString(" · ")
+
+/** The step before forgetting missing books: their history goes for good. */
+@Composable
+private fun ForgetMissingSheet(rows: List<MissingBookRow>?, onDismiss: () -> Unit, onConfirm: (List<MissingBookRow>) -> Unit) {
+  // Keep showing the last rows while the sheet animates out.
+  var shown by remember { mutableStateOf(rows.orEmpty()) }
+  if (rows != null) shown = rows
+  SheetHost(rows != null, onDismiss, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+    Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+      QText(if (shown.size == 1) "Forget “${shown.single().title}”?" else "Forget ${shown.size} missing books?", 17f, weight = 500, lh = 1.3f)
+      QText(
+        if (shown.size == 1) "Its reading position, bookmarks, highlights and notes are deleted. If the file turns up again, the book returns without them. Your files are not touched."
+        else "Their reading positions, bookmarks, highlights and notes are deleted. If the files turn up again, the books return without them. Your files are not touched.",
+        13f, color = Nq.neutral400, lh = 1.5f,
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        QButton("Cancel", onDismiss, Modifier.weight(1f), size = 13f, height = 42.dp)
+        QButton("Forget", { onConfirm(shown) }, Modifier.weight(1f), size = 13f, height = 42.dp, color = Nq.danger)
+      }
+    }
   }
 }
 

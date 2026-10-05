@@ -13,6 +13,10 @@ import androidx.room.PrimaryKey
 data class FolderEntity(
   @PrimaryKey(autoGenerate = true) val id: Long = 0,
   val path: String,
+  /**
+   * False once the user removed the folder from the library. The row stays while missing books that keep reading history
+   * still belong to it, so adding the folder again brings them back.
+   */
   val watched: Boolean = true,
   val lastScanAt: Long = 0,
 )
@@ -20,7 +24,7 @@ data class FolderEntity(
 /** One EPUB file plus the metadata read from Calibre's `metadata.opf` or the EPUB itself. */
 @Entity(
   tableName = "book",
-  indices = [Index("path", unique = true), Index("folderId")],
+  indices = [Index("path", unique = true), Index("folderId"), Index("calibreUuid"), Index("epubUid"), Index("fingerprint")],
   foreignKeys = [ForeignKey(FolderEntity::class, parentColumns = ["id"], childColumns = ["folderId"], onDelete = ForeignKey.CASCADE)],
 )
 data class BookEntity(
@@ -50,6 +54,15 @@ data class BookEntity(
   val source: String = SOURCE_FILE,
   /** False when the EPUB could not be opened (corrupt, DRM). */
   val readable: Boolean = true,
+  /** Identity keys that let a moved or renamed file keep this row; see [com.quire.reader.data.scan.BookIdentity]. */
+  val calibreUuid: String? = null,
+  val epubUid: String? = null,
+  val fingerprint: String? = null,
+  /**
+   * When the file was last seen missing; null while the book is in the library. A missing book is hidden everywhere but
+   * keeps its reading history, which reattaches when the file is found again at its path or under its identity.
+   */
+  val missingSince: Long? = null,
 ) {
   companion object {
     const val SOURCE_CALIBRE = "calibre"

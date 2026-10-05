@@ -9,6 +9,7 @@ import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.data.db.BookStateEntity
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
+import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.data.index.BookTextPage
 import com.quire.reader.data.index.FtsQuery
@@ -78,14 +79,39 @@ class LibraryRepository(
   suspend fun addFolder(path: String): Boolean = withContext(Dispatchers.IO) {
     val dir = File(path)
     if (!dir.isDirectory || !dir.canRead()) return@withContext false
-    db.folders().insert(FolderEntity(path = dir.absolutePath)) != -1L
+    ensureFolder(dir.absolutePath)
   }
 
-  /** Forgets a folder and its books. The files on disk are not touched. */
-  suspend fun removeFolder(id: Long) = withContext(Dispatchers.IO) {
-    db.books().coverPathsIn(id).forEach { covers.delete(it) }
-    db.folders().delete(id)
+  /**
+   * Puts [path] in the library; false if it already is. A folder removed earlier is put back with its id, so the next
+   * scan finds its missing books at their paths and their reading history returns.
+   */
+  private suspend fun ensureFolder(path: String): Boolean {
+    val existing = db.folders().byPath(path) ?: return db.folders().insert(FolderEntity(path = path)) != -1L
+    if (existing.watched) return false
+    db.folders().rewatch(existing.id)
+    return true
   }
+
+  /**
+   * Takes a folder out of the library. Books with reading history stay as missing books (see [missingBooks]) and come
+   * back if the folder is added again; the rest are forgotten. The files on disk are not touched. Returns how many books
+   * kept their history.
+   */
+  suspend fun removeFolder(id: Long): Int = withContext(Dispatchers.IO) {
+    val removal = db.books().removeFolder(id, System.currentTimeMillis())
+    covers.deleteAll(removal.staleCovers)
+    db.index().forgetMissing()
+    removal.keptWithHistory
+  }
+
+  /** Books whose file is gone but whose reading history is kept, most recently missed first. */
+  val missingBooks: Flow<List<MissingBookRow>> = db.books().observeMissing()
+
+  /** Deletes missing books and their reading history for good. */
+  suspend fun forgetMissing(ids: List<Long>) = withContext(Dispatchers.IO) { covers.deleteAll(db.books().forgetMissing(ids)) }
+
+  suspend fun forgetAllMissing() = forgetMissing(withContext(Dispatchers.IO) { db.books().missingIds() })
 
   /** Copies picked EPUBs into app storage (a folder that is always readable) and scans it. */
   suspend fun importFiles(uris: List<Uri>): Int = withContext(Dispatchers.IO) {
@@ -100,7 +126,7 @@ class LibraryRepository(
       }
     }
     if (copied > 0) {
-      db.folders().insert(FolderEntity(path = dir.absolutePath))
+      ensureFolder(dir.absolutePath)
       scanner.scan()
       indexer.request()
     }

@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.quire.reader.QuireApplication
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.IndexCoverage
+import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.IndexActivity
 import com.quire.reader.data.index.IndexTarget
@@ -32,6 +33,7 @@ import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.getOrElse
 import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.data.scan.FolderDiscovery
+import com.quire.reader.data.scan.ScanResult
 import com.quire.reader.data.scan.StoragePaths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -194,17 +196,17 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     viewModelScope.launch {
       if (!StoragePaths.hasAllFilesAccess()) { toast("Allow access to your files first"); return@launch }
       toast("Scanning…")
-      val r = repo.rescan()
-      toast(describe(r.added, r.removed, r.updated))
+      toast(describe(repo.rescan()))
     }
   }
 
-  private fun describe(added: Int, removed: Int, updated: Int): String = when {
-    added == 0 && removed == 0 && updated == 0 -> "Library is up to date"
+  private fun describe(r: ScanResult): String = when {
+    r.added == 0 && r.removed == 0 && r.updated == 0 && r.moved == 0 -> "Library is up to date"
     else -> listOfNotNull(
-      if (added > 0) "$added new ${if (added == 1) "book" else "books"}" else null,
-      if (updated > 0) "$updated updated" else null,
-      if (removed > 0) "$removed removed" else null,
+      if (r.added > 0) "${r.added} new ${if (r.added == 1) "book" else "books"}" else null,
+      if (r.updated > 0) "${r.updated} updated" else null,
+      if (r.moved > 0) "${r.moved} moved" else null,
+      if (r.removed > 0) "${r.removed} removed" else null,
     ).joinToString(" · ")
   }
 
@@ -222,7 +224,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     viewModelScope.launch {
       if (!settings.onboardingDone.first() || !StoragePaths.hasAllFilesAccess() || !settings.watchNewBooks.first()) return@launch
       val r = repo.rescan()
-      if (r.added > 0 || r.removed > 0) toast(describe(r.added, r.removed, r.updated))
+      if (r.added > 0 || r.removed > 0 || r.moved > 0) toast(describe(r))
     }
   }
 
@@ -231,11 +233,22 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       if (path == null || !repo.addFolder(path)) { toast("Quire can't add that folder"); return@launch }
       edit { copy(importOpen = false) }
       toast("Scanning…")
-      toast(repo.rescan().let { describe(it.added, it.removed, it.updated) })
+      toast(describe(repo.rescan()))
     }
   }
 
-  fun removeFolder(id: Long) = viewModelScope.launch { repo.removeFolder(id); toast("Folder removed from the library") }
+  fun removeFolder(id: Long) = viewModelScope.launch {
+    val kept = repo.removeFolder(id)
+    toast(if (kept == 0) "Folder removed from the library" else "Folder removed · ${books(kept)} with reading history kept under Missing books")
+  }
+
+  /** Books whose file is gone but whose reading history is kept; Settings lists them. */
+  val missingBooks: StateFlow<List<MissingBookRow>> = repo.missingBooks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+  fun forgetMissing(id: Long) = viewModelScope.launch { repo.forgetMissing(listOf(id)); toast("Reading history deleted") }
+  fun forgetAllMissing() = viewModelScope.launch { repo.forgetAllMissing(); toast("Reading history of missing books deleted") }
+
+  private fun books(n: Int) = "$n ${if (n == 1) "book" else "books"}"
 
   fun importFiles(uris: List<android.net.Uri>, fromOnboarding: Boolean = false) {
     if (uris.isEmpty()) return

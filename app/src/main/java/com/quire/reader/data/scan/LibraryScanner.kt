@@ -4,6 +4,8 @@ import android.util.Log
 import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.FolderEntity
+import com.quire.reader.data.db.KnownFile
+import com.quire.reader.data.db.MAX_SQL_ARGS
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.reader.PublicationLoader
 import org.readium.r2.shared.publication.services.cover
@@ -16,6 +18,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipFile
@@ -35,11 +38,17 @@ data class ScanProgress(
   val fraction: Float get() = when (phase) { ScanPhase.Done -> 1f; ScanPhase.Reading -> if (total == 0) 1f else processed.toFloat() / total; else -> 0f }
 }
 
-data class ScanResult(val added: Int, val updated: Int, val removed: Int, val unreadable: Int)
+/** What a scan changed. [removed] counts books whose file vanished; [moved] those found again under a new path or name. */
+data class ScanResult(val added: Int, val updated: Int, val removed: Int, val unreadable: Int, val moved: Int = 0)
+
+/** Work the scan hands to its readers: a full read of a new or changed file, or only reading the identity of a known one. */
+private data class ScanJob(val file: FoundFile, val existing: KnownFile?, val identityOnly: Boolean = false)
 
 /**
  * Keeps the database in step with the watched folders. Only new or changed files are read, in parallel,
- * and a failure on one file never stops the scan.
+ * and a failure on one file never stops the scan. A file that vanished never takes reading history with it:
+ * its book becomes missing, and takes over a file found elsewhere with the same identity (a Calibre rename, a
+ * move) or comes back when the file reappears.
  */
 class LibraryScanner(
   private val db: QuireDatabase,
@@ -70,13 +79,16 @@ class LibraryScanner(
     val done = AtomicInteger(0)
     val unreadable = AtomicInteger(0)
     val updated = AtomicInteger(0)
+    val identified = AtomicInteger(0)
+    val revived = AtomicInteger(0)
+    val newIds: MutableSet<Long> = ConcurrentHashMap.newKeySet()
     val walking = AtomicBoolean(true)
     fun publish(currentFile: String) = synchronized(_progress) {
       _progress.value = ScanProgress(if (walking.get()) ScanPhase.Finding else ScanPhase.Reading, found.get(), done.get(), queued.get(), currentFile)
     }
 
     // Walk the folders, reading each new or changed file as soon as it is found.
-    readWhileFinding<FoundFile>(
+    readWhileFinding<ScanJob>(
       PARALLELISM,
       walk = { emit ->
         for (folder in folders) {
@@ -87,42 +99,82 @@ class LibraryScanner(
             val file = FoundFile(f.absolutePath, folder.id, f.length(), f.lastModified())
             foundPaths += file.path
             val n = found.incrementAndGet()
-            if (needsRead(file, known[file.path])) { queued.incrementAndGet(); emit(file) }
+            val existing = known[file.path]
+            when {
+              needsRead(file, existing) -> { queued.incrementAndGet(); emit(ScanJob(file, existing)) }
+              else -> {
+                // An unchanged file of a missing book: it is back (a folder added again, a file put back).
+                if (existing!!.missing) { db.books().revive(existing.id, file.folderId); revived.incrementAndGet() }
+                if (!existing.hasIdentity) { queued.incrementAndGet(); emit(ScanJob(file, existing, identityOnly = true)) }
+              }
+            }
             if (n % 25 == 0) publish(relative(f, root))
           }
         }
         walking.set(false)
         publish("")
       },
-      read = { file ->
-        val existing = known[file.path]
-        if (existing != null) updated.incrementAndGet()
-        val ok = runCatching { readAndStore(file, folderById.getValue(file.folderId), existing?.id ?: 0L, existing?.addedAt, useCalibre) }
-          .onFailure { Log.w(TAG, "failed to read ${file.path}", it) }
-          .getOrDefault(false)
-        if (!ok) unreadable.incrementAndGet()
+      read = { job ->
+        val file = job.file
+        if (job.identityOnly) {
+          val id = BookIdentity.read(File(file.path))
+          db.books().setIdentity(job.existing!!.id, id.calibreUuid, id.epubUid, id.fingerprint)
+          identified.incrementAndGet()
+        } else {
+          val existing = job.existing
+          if (existing != null) updated.incrementAndGet()
+          val stored = runCatching { readAndStore(file, folderById.getValue(file.folderId), existing?.id ?: 0L, existing?.addedAt, useCalibre) }
+            .onFailure { Log.w(TAG, "failed to read ${file.path}", it) }
+            .getOrNull()
+          if (stored != null && existing == null) newIds += stored.id
+          if (stored?.readable != true) unreadable.incrementAndGet()
+        }
         done.incrementAndGet()
         publish(File(file.path).name)
       },
     )
 
-    // Only a finished walk shows which known books are gone.
-    val removedIds = removedIds(foundPaths, known, reachable)
-    val byId = known.values.associateBy { it.id }
-    removedIds.forEach { covers.delete(byId[it]?.coverPath) }
-    if (removedIds.isNotEmpty()) db.books().delete(removedIds)
-
+    // Only a finished walk shows which known books are gone. They become missing rather than deleted, take over a file
+    // that turned up elsewhere if one matches, and only those without reading history are then deleted.
     val now = System.currentTimeMillis()
+    val vanished = removedIds(foundPaths, known, reachable)
+    vanished.chunked(MAX_SQL_ARGS).forEach { db.books().markMissing(it, now) }
+    val moves = reconcile()
+    covers.deleteAll(db.books().purgeMissing())
+    db.index().forgetMissing()
+
     reachable.forEach { db.folders().markScanned(it, now) }
     val read = queued.get()
     _progress.value = ScanProgress(ScanPhase.Done, found.get(), read, read)
-    val added = read - updated.get()
-    Log.i(TAG, "scan done: ${found.get()} files, $read read, ${removedIds.size} removed, ${unreadable.get()} unreadable in ${System.currentTimeMillis() - startedAt} ms")
-    return ScanResult(added = added, updated = updated.get(), removed = removedIds.size, unreadable = unreadable.get())
+    // A move shows as a book added under the new path and one removed under the old; count it as a move instead.
+    val vanishedSet = vanished.toHashSet()
+    val movedNow = moves.count { it.liveId in newIds && it.missingId in vanishedSet }
+    val added = (newIds.size - movedNow).coerceAtLeast(0)
+    val removed = (vanished.size - movedNow).coerceAtLeast(0)
+    Log.i(
+      TAG,
+      "scan done: ${found.get()} files, ${read - identified.get()} read, ${identified.get()} identified, ${moves.size} moved, " +
+        "${revived.get()} back, ${vanished.size} vanished, ${unreadable.get()} unreadable in ${System.currentTimeMillis() - startedAt} ms",
+    )
+    return ScanResult(added = added, updated = updated.get(), removed = removed, unreadable = unreadable.get(), moved = moves.size)
   }
 
-  /** Returns false when the book was stored but could not be opened as an EPUB. */
-  private suspend fun readAndStore(file: FoundFile, folder: FolderEntity, existingId: Long, existingAddedAt: Long?, useCalibre: Boolean): Boolean {
+  /** Lets missing books take over the files of matching live books (see [matchMoves]). Returns the moves made. */
+  private suspend fun reconcile(): List<Move> {
+    val missing = db.books().missingIdentities()
+    if (missing.isEmpty()) return emptyList()
+    return matchMoves(missing, db.books().liveIdentities()).filter { move ->
+      val adoption = db.books().adopt(move.missingId, move.liveId) ?: return@filter false
+      covers.delete(adoption.staleCover)
+      Log.i(TAG, "book ${move.missingId} moved to the file of book ${move.liveId}")
+      true
+    }
+  }
+
+  private class Stored(val id: Long, val readable: Boolean)
+
+  /** Stores the book; [Stored.readable] is false when it was stored but could not be opened as an EPUB. */
+  private suspend fun readAndStore(file: FoundFile, folder: FolderEntity, existingId: Long, existingAddedAt: Long?, useCalibre: Boolean): Stored {
     val epub = File(file.path)
     val opfFile = File(epub.parentFile, "metadata.opf")
     var meta: OpfMetadata? = null
@@ -154,6 +206,7 @@ class LibraryScanner(
       titleSort = null, authors = emptyList(), authorSort = null, series = null, seriesIndex = null, tags = emptyList(),
       rating = 0, description = null, year = null, language = null, addedAtMillis = null,
     )
+    val identity = BookIdentity.read(epub)
     val author = m.authors.joinToString(" & ").ifEmpty { UNKNOWN_AUTHOR }
     val primary = m.authors.firstOrNull() ?: UNKNOWN_AUTHOR
     val entity = BookEntity(
@@ -178,9 +231,11 @@ class LibraryScanner(
       coverPath = coverPath,
       source = source,
       readable = readable,
+      calibreUuid = identity.calibreUuid,
+      epubUid = identity.epubUid,
+      fingerprint = identity.fingerprint,
     )
-    db.books().save(entity, m.tags)
-    return readable
+    return Stored(db.books().save(entity, m.tags), readable)
   }
 
   private suspend fun walk(root: File, onFile: suspend (File) -> Unit) {

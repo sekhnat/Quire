@@ -24,22 +24,20 @@ data class OpfMetadata(
   val addedAtMillis: Long?,
 )
 
+/** Identifiers of a book in an OPF; see [OpfParser.identifiers]. */
+data class OpfIdentifiers(
+  /** Calibre's book uuid (`opf:scheme="uuid"`, or the `uuid_id` identifier), without any `urn:uuid:` prefix. */
+  val uuid: String?,
+  /** The identifier the package's `unique-identifier` attribute points to. */
+  val uniqueId: String?,
+)
+
 object OpfParser {
   private const val NS_OPF = "http://www.idpf.org/2007/opf"
 
   /** Returns null when the stream is not a usable OPF (no title, not XML). */
   fun parse(input: InputStream): OpfMetadata? {
-    val doc = runCatching {
-      val factory = DocumentBuilderFactory.newInstance().apply {
-        isNamespaceAware = true
-        isExpandEntityReferences = false
-        // Hardening: OPFs never need a DOCTYPE. Not every parser supports the feature, so ignore failures.
-        runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
-      }
-      factory.newDocumentBuilder().parse(input)
-    }.getOrNull() ?: return null
-
-    val root = doc.documentElement ?: return null
+    val root = xmlRoot(input) ?: return null
     val metadata = children(root).firstOrNull { it.localName == "metadata" } ?: return null
 
     var title: String? = null
@@ -102,6 +100,33 @@ object OpfParser {
       addedAtMillis = metas["calibre:timestamp"]?.let(::parseIsoMillis),
     )
   }
+
+  /**
+   * The identifiers that say which book an OPF describes, read from a Calibre `metadata.opf` or an EPUB's own package
+   * document. Unlike [parse] this needs no title. Null when the stream is not XML or has no metadata.
+   */
+  fun identifiers(input: InputStream): OpfIdentifiers? {
+    val root = xmlRoot(input) ?: return null
+    val metadata = children(root).firstOrNull { it.localName == "metadata" } ?: return null
+    val ids = children(metadata).filter { it.localName == "identifier" }
+    fun text(el: Element) = el.textContent?.trim()?.takeIf { it.isNotEmpty() }
+    val uuid = ids.firstOrNull { attr(it, "scheme").equals("uuid", ignoreCase = true) || it.getAttribute("id") == "uuid_id" }
+      ?.let(::text)?.removePrefix("urn:uuid:")
+    val uniqueIdRef = root.getAttribute("unique-identifier")
+    val uniqueId = if (uniqueIdRef.isEmpty()) null else ids.firstOrNull { it.getAttribute("id") == uniqueIdRef }?.let(::text)
+    return OpfIdentifiers(uuid = uuid, uniqueId = uniqueId)
+  }
+
+  /** The document element, or null when [input] is not XML. */
+  internal fun xmlRoot(input: InputStream): Element? = runCatching {
+    val factory = DocumentBuilderFactory.newInstance().apply {
+      isNamespaceAware = true
+      isExpandEntityReferences = false
+      // Hardening: OPFs never need a DOCTYPE. Not every parser supports the feature, so ignore failures.
+      runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+    }
+    factory.newDocumentBuilder().parse(input).documentElement
+  }.getOrNull()
 
   /** Calibre writes `0101-01-01` for "no date"; anything outside a sane range is ignored. */
   internal fun parseYear(date: String?): Int? {

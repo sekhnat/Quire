@@ -65,6 +65,22 @@ class OpfParserTest {
   }
 
   @Test
+  fun `identifiers of a Calibre OPF give its uuid, which is also the unique identifier`() {
+    val ids = checkNotNull(javaClass.getResourceAsStream("/opf/calibre_series.opf")).use { OpfParser.identifiers(it) }
+    assertEquals(OpfIdentifiers(uuid = "0b0c5b2e-aaaa-bbbb-cccc-1234567890ab", uniqueId = "0b0c5b2e-aaaa-bbbb-cccc-1234567890ab"), ids)
+  }
+
+  @Test
+  fun `identifiers need no title, follow unique-identifier and drop the urn prefix of a uuid`() {
+    val xml = """<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="pub-id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <dc:identifier id="isbn">9780000000000</dc:identifier><dc:identifier id="pub-id">urn:isbn:123</dc:identifier>
+      <dc:identifier id="uuid_id">urn:uuid:abc-def</dc:identifier></metadata></package>"""
+    assertEquals(OpfIdentifiers(uuid = "abc-def", uniqueId = "urn:isbn:123"), OpfParser.identifiers(ByteArrayInputStream(xml.toByteArray())))
+    assertEquals(OpfIdentifiers(null, null), OpfParser.identifiers(ByteArrayInputStream(checkNotNull(javaClass.getResourceAsStream("/opf/minimal.opf")).readBytes())))
+    assertNull(OpfParser.identifiers(ByteArrayInputStream("not xml".toByteArray())))
+  }
+
+  @Test
   fun `rating rounds and clamps`() {
     fun rate(content: String) = OpfParser.parse(ByteArrayInputStream("""<package xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>T</dc:title><meta name="calibre:rating" content="$content"/></metadata></package>""".toByteArray()))!!.rating
     assertEquals(5, rate("10.0"))

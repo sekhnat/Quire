@@ -13,7 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Runs the version 1 -> 2 -> 3 and 2 -> 3 migrations and the FTS triggers on the device's own SQLite, over a real file. */
+/** Runs the version 1 -> 4, 2 -> 4 and 3 -> 4 migrations and the FTS triggers on the device's own SQLite, over a real file. */
 class TextIndexMigrationTest : DbTestCase() {
   private val v1Tables = listOf("folder", "book", "book_tag", "book_state", "bookmark", "highlight")
 
@@ -62,14 +62,18 @@ class TextIndexMigrationTest : DbTestCase() {
     return file
   }
 
-  /** Builds a version 2 database file the way an installed v2 app left it: the v1 tables and seed, the 1 -> 2 migration, and one indexed book. */
-  private fun createV2File(): File {
+  /**
+   * Builds a version 2 (or, with [version] 3, a version 3) database file the way an installed app of that version left it:
+   * the v1 tables and seed, the migrations up to [version], and one indexed book.
+   */
+  private fun createV2File(version: Int = 2): File {
     val file = tempDbFile()
-    val callback = object : SupportSQLiteOpenHelper.Callback(2) {
+    val callback = object : SupportSQLiteOpenHelper.Callback(version) {
       override fun onCreate(db: SupportSQLiteDatabase) {
         v1Schema.forEach(db::execSQL)
         v1Seed.forEach(db::execSQL)
         QuireDatabase.MIGRATION_1_2.migrate(db)
+        if (version >= 3) QuireDatabase.MIGRATION_2_3.migrate(db)
         db.execSQL(
           "INSERT INTO text_chunk (bookId, seq, chapter, href, tokenStart, tokenEnd, primaryEndByte, text, mapping, progression) " +
             "VALUES (1, 0, 'Chapter 1', 'ch1.xhtml', 0, 4, 31, 'Jonathan kept a careful journal', '[]', 0.0)",
@@ -104,8 +108,9 @@ class TextIndexMigrationTest : DbTestCase() {
 
     val db = open(file)
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(3, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
-    val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid") }
+    assertEquals(4, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    // Later versions only append columns, so the v1 columns come first and must hold exactly what they held.
+    val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid").map { it.take(before.getValue(t).first().size) } }
 
     assertEquals(before, after)
     assertTrue(sqlite.rows("PRAGMA foreign_key_check").isEmpty())
@@ -115,13 +120,32 @@ class TextIndexMigrationTest : DbTestCase() {
   @Test fun `migration from version 2 keeps the index and reads every state as fully readable`() = runBlocking {
     val db = open(createV2File())
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(3, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(4, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
     val state = db.stateOf(1)!!
     assertEquals(IndexStateEntity.STATUS_DONE, state.status)
     assertEquals(1, state.chunkCount)
     assertEquals(0, state.unreadableResources)
     assertEquals(1, db.hits("journal").size)
     assertEquals(emptyList<EligibleBook>(), db.index().eligibleBooks().filter { it.id == 1L })
+    assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
+  }
+
+  @Test fun `migration from version 3 keeps every book in the library with its history and identity still to be read`() = runBlocking {
+    val db = open(createV2File(version = 3))
+    val sqlite = db.openHelper.writableDatabase
+    assertEquals(4, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(
+      listOf(listOf<String?>(null, null, null, null), listOf<String?>(null, null, null, null)),
+      sqlite.rows("SELECT calibreUuid, epubUid, fingerprint, missingSince FROM book ORDER BY id"),
+    )
+    assertEquals(listOf(1L, 2L), db.books().observeAll().first().map { it.id }.sorted())
+    assertEquals(listOf(false, false), db.books().knownFiles().sortedBy { it.id }.map { it.hasIdentity })
+    assertEquals(listOf(false, false), db.books().knownFiles().sortedBy { it.id }.map { it.missing })
+    assertEquals(emptyList<MissingBookRow>(), db.books().observeMissing().first())
+    assertEquals(2, db.annotations().observeHighlights(1).first().size)
+    assertEquals(1, db.stateOf(1)!!.chunkCount)
+    assertEquals(listOf("index_book_calibreUuid", "index_book_epubUid", "index_book_fingerprint"),
+      sqlite.rows("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'book' AND name IN ('index_book_calibreUuid', 'index_book_epubUid', 'index_book_fingerprint') ORDER BY name").map { it[0] })
     assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
   }
 
