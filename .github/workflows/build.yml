@@ -39,15 +39,59 @@ jobs:
       - name: Build, test and lint
         run: ./gradlew assembleDebug test lint --stacktrace
 
-      - name: Name the APK
+      # Branch pushes, tags and manual dispatch build a release-signed APK so every
+      # published artifact installs over any older one. PRs (forks get no secrets)
+      # stick to the debug artifact.
+      - name: Build signed release APK
+        if: github.event_name != 'pull_request'
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          KEYSTORE="$RUNNER_TEMP/quire-release.keystore"
+          echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
+          export QUIRE_KEYSTORE_FILE="$KEYSTORE"
+          export QUIRE_KEYSTORE_PASSWORD="$RELEASE_KEYSTORE_PASSWORD"
+          export QUIRE_KEY_ALIAS="$RELEASE_KEY_ALIAS"
+          export QUIRE_KEY_PASSWORD="$RELEASE_KEY_PASSWORD"
+          # versionCode is the run number: strictly monotonic across all builds.
+          # versionName: the tag (v1.2.3 -> 1.2.3) or dev-<short sha> on branch pushes.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_NAME="dev-${GITHUB_SHA::7}"
+          fi
+          ./gradlew assembleRelease -PversionCode="$GITHUB_RUN_NUMBER" -PversionName="$VERSION_NAME" --stacktrace
+          mkdir -p dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/quire-$VERSION_NAME.apk"
+
+      - name: Name the debug APK
+        if: github.event_name == 'pull_request'
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/debug/app-debug.apk "dist/quire-debug-${GITHUB_SHA::7}.apk"
 
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: quire-release-apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
         with:
           name: quire-debug-apk
           path: dist/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: r8-mapping
+          path: app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
@@ -69,9 +113,14 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: quire-debug-apk
+          name: quire-release-apk
           path: dist
+      # mapping.txt goes alongside the APK: CI artifacts expire, releases don't.
+      - uses: actions/download-artifact@v4
+        with:
+          name: r8-mapping
+          path: .
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/*.apk --repo "$GITHUB_REPOSITORY" --title "Quire $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/*.apk mapping.txt --repo "$GITHUB_REPOSITORY" --title "Quire $GITHUB_REF_NAME" --generate-notes
