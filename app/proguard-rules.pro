@@ -22,3 +22,13 @@
 -keepclasseswithmembers class com.quire.reader.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+# --- Readium publication services (org.readium.r2). ---
+# Publication.ServicesBuilder keys its service-factory map by Class.getSimpleName()
+# and looks services up with findService(CoverService::class)-style instance checks.
+# Under minification R8 renamed ResourceCoverService and StringSearchService both to
+# simple name "k", so the cover fallback's containsKey("k") saw the EPUB parser's search
+# factory and the cover service was never registered - covers vanished silently in
+# release builds. Keeping Readium's original names keeps those keys distinct and the
+# service interfaces alive. Do not remove.
+-keep class org.readium.r2.** { *; }
+-keep interface org.readium.r2.** { *; }
