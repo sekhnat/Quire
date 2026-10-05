@@ -15,10 +15,12 @@ package com.quire.reader.navigator.epub
 
 import android.app.Application
 import android.os.PatternMatcher
+import android.util.Log
 import android.webkit.MimeTypeMap
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
+import java.io.ByteArrayInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.quire.reader.navigator.epub.css.ReadiumCss
@@ -53,6 +55,7 @@ internal class WebViewServer(
     private val onResourceLoadFailed: (Url, ReadError) -> Unit,
 ) {
     companion object {
+        private const val TAG = "WebViewServer"
         const val PACKAGE_HOSTNAME = "readium_package"
         const val ASSETS_HOSTNAME = "readium_assets"
 
@@ -203,7 +206,12 @@ internal class WebViewServer(
         val mediaType = link?.mediaType
             ?: mediaTypeFromUrl(url)
 
-        val href = link?.url() ?: url // Just in case some resource is not in the manifest
+        // Just in case some resource is not in the manifest: look it up in the container by its
+        // path. Anything else (the browser's `/favicon.ico`, a remote image or stylesheet) is
+        // refused: handing an absolute URL to the publication would fetch it over HTTP, and the
+        // app has no network permission, so the failed lookup throws on the WebView's network
+        // thread and takes the whole app down.
+        val href = link?.url() ?: unlistedHref(url) ?: return notFoundResponse(url)
 
         return servePublicationResourceWithHref(
             href = href,
@@ -299,6 +307,15 @@ internal class WebViewServer(
                 stream
             )
         }
+    }
+
+    /** The container path of [url] when it is on the package origin, null for any other origin. */
+    private fun unlistedHref(url: AbsoluteUrl): Url? =
+        if (url.host == PACKAGE_HOSTNAME && url.path != "/favicon.ico") packageBaseHref.relativize(url) else null
+
+    private fun notFoundResponse(url: AbsoluteUrl): WebResourceResponse {
+        Log.d(TAG, "not served (not in the publication): $url")
+        return WebResourceResponse(null, null, 404, "Not Found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
     }
 
     /**
