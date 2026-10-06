@@ -796,7 +796,8 @@ public class EpubNavigatorFragment internal constructor(
 
     private fun onSettingsChange(previous: EpubSettings, new: EpubSettings) {
         if (previous.effectiveBackgroundColor != new.effectiveBackgroundColor) {
-            resourcePager.setBackgroundColor(new.effectiveBackgroundColor)
+            // Scroll mode never builds the pager, so it may not exist.
+            if (::resourcePager.isInitialized) resourcePager.setBackgroundColor(new.effectiveBackgroundColor)
             continuousBook?.setBackgroundColor(new.effectiveBackgroundColor)
         }
 
