@@ -5,8 +5,9 @@ notes in an exportable snapshot. Neither database travels in Android backups.
 
 ## Relationship to PR #4
 
-This change is stacked on [search-index-v2, PR #4](https://github.com/sekhnat/Quire/pull/4).
-**Merge #4 first, then retarget this PR to `main` and merge it.**
+This feature builds on [search-index-v2, PR #4](https://github.com/sekhnat/Quire/pull/4).
+The [backup PR #5](https://github.com/sekhnat/Quire/pull/5) was originally stacked on #4, then
+rebased onto `main` after #4 merged. The dependency order is search-index-v2 first, backup second.
 
 PR #4 owns `quire-index.db`, bundled SQLite/FTS5, CJK search, relevance ordering, index clearing and
 incremental vacuum, and the library v4→v5 migration with sliced legacy-index cleanup. This change
