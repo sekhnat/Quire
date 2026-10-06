@@ -21,7 +21,7 @@ Quire is a quiet replacement for Librera and Moon+ Reader. It watches the folder
 - **Point it at folders.** Quire finds EPUBs in your Calibre library, `Books`, `Downloads`, or any folder you choose, and picks up new files on its own (when you open the app, and every six hours in the background).
 - **Calibre-aware.** Reads each book's `metadata.opf` and `cover.jpg`: series and book number, tags, ratings, description, and the date you added it. Your Calibre library is never modified.
 - **Fast at scale.** About 100 books a second on first scan; a rescan with nothing changed takes half a second for 1,500 books. Only new or changed files are read.
-- **Browse the way you think.** Books, Authors (with an A–Z rail), Series (with the volumes you're missing), and Tags. Grid, dense list or shelves; sort by recently opened, date added, publication date, file size or length; filter and search across titles, authors, series and tags.
+- **Browse the way you think.** Books, Authors (with an A–Z rail), Series (with the volumes you're missing), and Tags. Grid, dense list, a roomier list with each book's synopsis, or shelves; sort by recently opened, date added, publication date, file size or length; filter and search across titles, authors, series and tags.
 - **Picks up where you left off.** A "Continue reading" card with time left, and every book remembers its place.
 
 ### Search inside every book

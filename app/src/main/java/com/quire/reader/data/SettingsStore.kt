@@ -46,6 +46,10 @@ class SettingsStore(context: Context) {
   val textSearchOrder: Flow<SearchOrder> = store.data.map { p -> SearchOrder.entries.firstOrNull { it.name == p[TEXT_SEARCH_ORDER] } ?: SearchOrder.Relevance }
   suspend fun setTextSearchOrder(v: SearchOrder) = store.edit { it[TEXT_SEARCH_ORDER] = v.name }
 
+  /** The library layout last picked, by name; null until one is. */
+  val libraryLayout: Flow<String?> = store.data.map { it[LIBRARY_LAYOUT] }
+  suspend fun setLibraryLayout(name: String) = store.edit { it[LIBRARY_LAYOUT] = name }
+
   /** The reading settings new books start with. */
   val readerDefaults: Flow<ReaderPrefs> = store.data.map { ReaderPrefs.fromJson(it[READER_DEFAULTS]) ?: ReaderPrefs() }
   suspend fun setReaderDefaults(prefs: ReaderPrefs) = store.edit { it[READER_DEFAULTS] = prefs.toJson() }
@@ -96,5 +100,6 @@ class SettingsStore(context: Context) {
     val BRIGHTNESS = intPreferencesKey("brightness")
     val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
     val TEXT_SEARCH_ORDER = stringPreferencesKey("text_search_order")
+    val LIBRARY_LAYOUT = stringPreferencesKey("library_layout")
   }
 }
