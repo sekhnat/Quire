@@ -13,6 +13,7 @@
 
 package com.quire.reader.navigator.epub
 
+import android.content.pm.ApplicationInfo
 import android.graphics.PointF
 import android.util.Log
 import android.graphics.RectF
@@ -40,6 +41,7 @@ import androidx.lifecycle.withStarted
 import androidx.viewpager.widget.ViewPager
 import kotlin.math.ceil
 import kotlin.reflect.KClass
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +51,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import org.readium.r2.navigator.DecorableNavigator
@@ -776,20 +780,16 @@ public class EpubNavigatorFragment internal constructor(
 
     private fun handleEvent(event: EpubNavigatorViewModel.Event) {
         when (event) {
-            is EpubNavigatorViewModel.Event.RunScript -> {
-                run(event.command)
-            }
-            is EpubNavigatorViewModel.Event.OpenInternalLink -> {
-                go(event.target)
-            }
-            EpubNavigatorViewModel.Event.InvalidateViewPager -> {
-                invalidateResourcePager()
-            }
+            is EpubNavigatorViewModel.Event.ApplyPreferences -> applyPreferences(event)
+            is EpubNavigatorViewModel.Event.OpenInternalLink -> go(event.target)
         }
     }
 
-    private fun invalidateResourcePager() {
-        val locator = currentLocator.value
+    /**
+     * Rebuilds the container around [locator]: the position was captured before the CSS
+     * changed, and the jump never falls back to the chapter start.
+     */
+    private fun invalidateResourcePager(locator: Locator) {
         resetContainer(requireView())
         go(locator)
     }
@@ -804,10 +804,6 @@ public class EpubNavigatorFragment internal constructor(
         if (viewModel.layout == Layout.REFLOWABLE) {
             if (previous.fontSize != new.fontSize) {
                 r2PagerAdapter?.setFontSize(new.fontSize)
-            }
-            // Reflow every frame of the continuous surface with a text anchor.
-            if (previous.fontSize != new.fontSize || previous.theme != new.theme) {
-                reflowContinuousSurface()
             }
         }
     }
@@ -841,14 +837,110 @@ public class EpubNavigatorFragment internal constructor(
         go(locator)
     }
 
-    /** Captures the reading anchor, remeasures all frames, restores once (task 5.1). */
+    /**
+     * Captures the reading anchor, remeasures every frame, and restores the anchor once
+     * that remeasure commits. Used for viewport changes; preference applications go
+     * through [applyPreferences] instead.
+     */
     internal fun reflowContinuousSurface() {
         val book = continuousBook ?: return
         viewLifecycleOwner.lifecycleScope.launch {
             val anchor = book.captureAnchor()
-            book.remeasureAllFrames()
-            book.restoreAnchor(anchor)
+            val target = book.remeasureAllFrames()
+            book.restoreAnchor(anchor, target)
         }
+    }
+
+    // ── preference application ──────────────────────────────────────────────────
+
+    /** Serializes preference applications: one capture/script/reflow pass at a time. */
+    private val applyMutex = Mutex()
+
+    /** Bumped per apply pass; stale completions check it. */
+    private var applyGeneration = 0
+
+    /**
+     * True while an apply pass is reflowing: the intermediate locations a reflow produces
+     * must not publish or persist — the pass publishes the restored position once, when
+     * it finishes.
+     */
+    private var suppressLocationNotifications = false
+
+    /** Test instrumentation: position-preserving reflows run by the apply path. */
+    internal var applyReflowCount = 0
+        private set
+
+    /** Test instrumentation: resource-pager invalidations run by the apply path. */
+    internal var applyInvalidationCount = 0
+        private set
+
+    /**
+     * Applies one [EpubNavigatorViewModel.Event.ApplyPreferences] in a single serialized
+     * pass: capture the position, run the CSS script, then either invalidate the pager or
+     * reflow the surface — never both — and restore the captured position exactly once.
+     * Failures keep the persisted values and the last usable surface, release the
+     * position/update guards, and log only in debuggable builds.
+     */
+    private fun applyPreferences(event: EpubNavigatorViewModel.Event.ApplyPreferences) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            applyMutex.withLock {
+                val token = ++applyGeneration
+                suppressLocationNotifications = true
+                try {
+                    applyPreferencesLocked(event)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    debugLog("Applying preferences failed", e)
+                } finally {
+                    if (token == applyGeneration) {
+                        suppressLocationNotifications = false
+                        notifyCurrentLocation()
+                    }
+                }
+            }
+        }
+    }
+
+    private suspend fun applyPreferencesLocked(event: EpubNavigatorViewModel.Event.ApplyPreferences) {
+        if (event.needsInvalidation) {
+            // The layout structure changed (direction, vertical text, spread, scroll or
+            // mode): rebuild the container around the position captured before the CSS
+            // changed, never falling back to the chapter start.
+            val locator = currentLocator.value
+            event.script?.let(::run)
+            applyInvalidationCount++
+            resetContainer(requireView())
+            go(locator)
+            return
+        }
+        val script = event.script ?: return
+        applyReflowCount++
+        val book = continuousBook
+        if (book != null) {
+            // Scroll: the anchor is captured before the style change is queued, the CSS is
+            // applied once, and the restore waits for this reflow's own layout generation.
+            val anchor = book.captureAnchor()
+            run(script)
+            val target = book.remeasureAllFrames()
+            book.restoreAnchor(anchor, target)
+        } else {
+            // Pages: capture the locator, apply the CSS, wait for the page to re-layout,
+            // then go back to the captured locator once.
+            val locator = currentLocator.value
+            run(script)
+            currentReflowablePageFragment?.let { page ->
+                page.awaitLoaded()
+                page.awaitVisualStateUpdate()
+                go(locator)
+            }
+        }
+    }
+
+    /** Logs only in debuggable builds; reflow failures are exercised by tests, not logcat. */
+    private fun debugLog(message: String, error: Throwable) {
+        val debuggable = context?.applicationInfo?.flags?.and(ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (debuggable) Log.w("EpubNavigator", message, error)
     }
 
     private fun R2PagerAdapter.setFontSize(fontSize: Double) {
@@ -1432,9 +1524,14 @@ public class EpubNavigatorFragment internal constructor(
         // Make sure viewLifecycleOwner is accessible.
         view ?: return
 
+        // A preference application reflows the surface and moves the reading position
+        // transiently; the apply pass publishes the restored position itself.
+        if (suppressLocationNotifications) return
+
         debounceLocationNotificationJob?.cancel()
         debounceLocationNotificationJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(100L)
+            if (suppressLocationNotifications) return@launch
 
             // We don't want to notify the current location if the navigator is still loading a
             // locator, to avoid notifying intermediate locations.

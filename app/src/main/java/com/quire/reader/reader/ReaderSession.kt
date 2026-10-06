@@ -19,6 +19,7 @@ import org.readium.r2.navigator.Decoration
 import org.readium.r2.navigator.DecorableNavigator
 import org.readium.r2.navigator.SelectableNavigator
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.navigator.epub.EpubPreferences
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
@@ -61,13 +62,29 @@ class ReaderSession(
   private val navigatorFlow = MutableStateFlow<EpubNavigatorFragment?>(null)
   val navigator: EpubNavigatorFragment? get() = navigatorFlow.value
 
+  /** The latest mapped navigator preferences, kept for a navigator that is not attached yet. */
+  private var latestPreferences: EpubPreferences? = null
+
+  /**
+   * Submits mapped reading preferences to the navigator. Deduplicates by equality and
+   * keeps the latest value for a detached navigator, so accepted changes are applied
+   * exactly once and fast changes are never lost to flow conflation.
+   */
+  fun submit(preferences: EpubPreferences) {
+    if (latestPreferences == preferences) return
+    latestPreferences = preferences
+    navigator?.submitPreferences(preferences)
+  }
+
   private val _toc = MutableStateFlow(flatten(publication.tableOfContents))
   val toc: List<TocEntry> get() = _toc.value
   val tocFlow: StateFlow<List<TocEntry>> = _toc
 
-  fun attach(nav: EpubNavigatorFragment) { navigatorFlow.value = nav }
+  fun attach(nav: EpubNavigatorFragment) {
+    navigatorFlow.value = nav
+    latestPreferences?.let(nav::submitPreferences)
+  }
   fun detach() { navigatorFlow.value = null }
-
   fun onLocator(locator: Locator) { _current.value = locator }
 
   // ── position ─────────────────────────────────────────────────────────────

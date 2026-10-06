@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -109,6 +110,9 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
   val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
   val epubPrefs = remember(prefs) { prefs.toEpubPreferences() }
+  // The single submission path: mapped preferences go to the session, which deduplicates
+  // by equality and applies them through the navigator in one serialized pass.
+  LaunchedEffect(session, epubPrefs) { session.submit(epubPrefs) }
   val bookmarked = vm.isBookmarked(session, bookmarks)
 
   BackHandler {
