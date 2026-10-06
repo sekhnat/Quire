@@ -120,6 +120,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       edit { copy(screen = if (done) Screen.Library else Screen.Onboard, hasAccess = StoragePaths.hasAllFilesAccess(), useCalibre = useCalibre) }
     }
     viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
+    // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
+    viewModelScope.launch { settings.libraryLayout.first().let { saved -> edit { copy(layout = libLayoutOf(saved)) } } }
   }
 
   fun toast(text: String) {
@@ -203,9 +205,15 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun pickSort(k: SortKey) = edit { copy(sort = k, sortOpen = false, view = LibView.Books, layout = if (layout == LibLayout.Shelves) LibLayout.Grid else layout) }
 
   fun cycleLayout() {
-    val next = when (_state.value.layout) { LibLayout.Grid -> LibLayout.List; LibLayout.List -> LibLayout.Shelves; LibLayout.Shelves -> LibLayout.Grid }
+    val next = when (_state.value.layout) {
+      LibLayout.Grid -> LibLayout.List
+      LibLayout.List -> LibLayout.Comfortable
+      LibLayout.Comfortable -> LibLayout.Shelves
+      LibLayout.Shelves -> LibLayout.Grid
+    }
     edit { copy(layout = next, view = LibView.Books) }
-    toast(when (next) { LibLayout.Grid -> "Grid"; LibLayout.List -> "Dense list"; LibLayout.Shelves -> "Shelves" } + " layout")
+    viewModelScope.launch { settings.setLibraryLayout(next.name) }
+    toast(when (next) { LibLayout.Grid -> "Grid"; LibLayout.List -> "Dense list"; LibLayout.Comfortable -> "Comfortable list"; LibLayout.Shelves -> "Shelves" } + " layout")
   }
 
   /** Rescans every watched folder and reports what changed. */

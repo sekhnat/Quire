@@ -20,10 +20,11 @@ fun testBook(
   size: Long = 500_000,
   rating: Int = 0,
   isNew: Boolean = false,
+  desc: String? = null,
 ) = Book(
   id = id, path = "/books/$id.epub", folderId = 1, title = title, sortTitle = title.lowercase(), author = author, primaryAuthor = author,
   authorSort = author.split(" ").let { if (it.size > 1) "${it.last()}, ${it.dropLast(1).joinToString(" ")}" else author }.lowercase(),
   series = series, seriesNo = seriesNo, year = year, pages = pages, tags = tags, userTags = emptyList(), language = "en", rating = rating,
-  status = status, progress = progress, lastOpened = lastOpened, addedAt = addedAt, sizeBytes = size, desc = null, coverPath = null,
+  status = status, progress = progress, lastOpened = lastOpened, addedAt = addedAt, sizeBytes = size, desc = desc, coverPath = null,
   fromCalibre = false, readable = true, isNew = isNew,
 )

@@ -68,7 +68,9 @@ import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
+import com.quire.reader.ui.authorLine
 import com.quire.reader.ui.scanStatus
+import com.quire.reader.ui.synopsisPreview
 import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.SearchScope
 import com.quire.reader.ui.Segmented
@@ -160,7 +162,7 @@ private fun LibraryHeader(s: UiState, lib: LibraryData, vm: QuireViewModel) {
       IconBtn(Ic.Search, vm::toggleSearch, tint = if (s.searchOpen) Nq.accent else Nq.neutral300)
       IconBtn(if (s.sortAscending) Ic.SortAsc else Ic.SortDesc, { vm.openSort(true) }, tint = if (s.sort != SortKey.Opened) Nq.accent else Nq.neutral300)
       IconBtn(
-        when (s.layout) { LibLayout.Grid -> Ic.Grid; LibLayout.List -> Ic.ListDashes; LibLayout.Shelves -> Ic.Rows },
+        when (s.layout) { LibLayout.Grid -> Ic.Grid; LibLayout.List -> Ic.ListDashes; LibLayout.Comfortable -> Ic.ListBullets; LibLayout.Shelves -> Ic.Rows },
         vm::cycleLayout, tint = Nq.neutral300,
       )
       IconBtn(Ic.Plus, { vm.openImport(true) }, tint = Nq.accent)
@@ -203,6 +205,13 @@ private fun BooksView(s: UiState, lib: LibraryData, vm: QuireViewModel) {
     LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
       item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, vm, list, layout) } }
       items(list, key = { it.id }) { b -> ListRow(b, s.sort) { vm.openBook(b.id) } }
+    }
+    LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
+      item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, vm, list, layout) } }
+      items(list, key = { it.id }) { b ->
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
+        ComfortableRow(b, s.sort) { vm.openBook(b.id) }
+      }
     }
     LibLayout.Shelves -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
       item { BooksHeader(s, lib, vm, list, layout) }
@@ -309,11 +318,29 @@ private fun ListRow(b: Book, sort: SortKey, onClick: () -> Unit) {
     ListCover(b)
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       QText(b.title, 14f, weight = 500, maxLines = 1)
-      QText(if (b.series != null) "${b.author} · ${b.series}${b.seriesNoLabel?.let { " $it" } ?: ""}" else b.author, 12f, color = Nq.neutral500, maxLines = 1)
+      QText(authorLine(b), 12f, color = Nq.neutral500, maxLines = 1)
     }
     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
       QText(cardStatus(b, sort), 11f, color = if (b.status == BookStatus.Reading) Nq.accent300 else Nq.neutral500, tabular = true)
       ProgressLine(b.progress, Modifier.width(40.dp))
+    }
+  }
+}
+
+/** The roomy list row: a larger cover with the title, author and the start of the synopsis beside it. */
+@Composable
+private fun ComfortableRow(b: Book, sort: SortKey, onClick: () -> Unit) {
+  val synopsis = remember(b.desc) { synopsisPreview(b.desc) }
+  Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+    HeroCover(b)
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      QText(b.title, 15f, weight = 500, lh = 1.2f, maxLines = 2)
+      QText(authorLine(b), 12f, color = Nq.neutral500, maxLines = 1)
+      if (synopsis != null) QText(synopsis, 12.5f, color = Nq.neutral400, lh = 1.45f, maxLines = 3)
+      Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        QText(cardStatus(b, sort), 11f, color = if (b.status == BookStatus.Reading) Nq.accent300 else Nq.neutral500, tabular = true)
+        ProgressLine(b.progress, Modifier.width(64.dp))
+      }
     }
   }
 }

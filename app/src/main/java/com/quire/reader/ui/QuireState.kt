@@ -12,7 +12,7 @@ import java.time.LocalDate
 enum class Screen { Splash, Onboard, Library, Detail, Reader, Settings }
 enum class OnboardStep { Welcome, Access, Folders, Scan }
 enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Series("Series"), Tags("Tags") }
-enum class LibLayout { Grid, List, Shelves }
+enum class LibLayout { Grid, List, Comfortable, Shelves }
 enum class LibFilter(val label: String) { All("All"), Reading("In progress"), Unread("Unread"), Recent("Recently added"), Finished("Finished") }
 enum class Sheet { Display, Contents }
 enum class TocTab(val label: String) { Contents("Contents"), Bookmarks("Bookmarks"), Highlights("Highlights") }
@@ -101,6 +101,18 @@ fun statusLabel(b: Book) = when {
   b.isNew -> "New"
   else -> "Unread"
 }
+
+/** The saved layout with that name; anything unknown (or nothing saved yet) is the grid. */
+fun libLayoutOf(name: String?): LibLayout = LibLayout.entries.firstOrNull { it.name == name } ?: LibLayout.Grid
+
+/** `author · series #n`, or just the author for a book outside a series. */
+fun authorLine(b: Book): String =
+  if (b.series != null) "${b.author} · ${b.series}${b.seriesNoLabel?.let { " $it" } ?: ""}" else b.author
+
+private val paragraphBreaks = Regex("\\s*\\n+\\s*")
+
+/** A book's synopsis as one running paragraph for a list row; null when it has none. */
+fun synopsisPreview(desc: String?): String? = desc?.trim()?.takeIf { it.isNotEmpty() }?.replace(paragraphBreaks, " ")
 
 /** The caption under a cover: the active sort's metadata if there is one, otherwise reading status. */
 fun cardStatus(b: Book, sort: SortKey): String = when (sort) {
