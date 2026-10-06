@@ -21,6 +21,7 @@ import org.readium.r2.navigator.SelectableNavigator
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
 import com.quire.reader.navigator.epub.EpubPreferences
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
@@ -56,6 +57,10 @@ class ReaderSession(
   /** Cancelled when the session closes; holds the navigator collectors. */
   val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
+
+  /** The publication layout, determined exactly as EpubNavigatorFactory determines it. */
+  /** The publication layout, determined exactly as EpubNavigatorFactory determines it. */
+  val layout: Layout get() = publication.metadata.layout ?: Layout.REFLOWABLE
   private val _current = MutableStateFlow(initialLocator ?: positions.firstOrNull())
   val current: StateFlow<Locator?> = _current
 

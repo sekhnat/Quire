@@ -109,7 +109,7 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
   val bgColor by animateColorAsState(theme.bg, tween(300), label = "readerBg")
   val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val epubPrefs = remember(prefs) { prefs.toEpubPreferences() }
+  val epubPrefs = remember(prefs, session.layout) { prefs.toEpubPreferences(session.layout) }
   // The single submission path: mapped preferences go to the session, which deduplicates
   // by equality and applies them through the navigator in one serialized pass.
   LaunchedEffect(session, epubPrefs) { session.submit(epubPrefs) }
