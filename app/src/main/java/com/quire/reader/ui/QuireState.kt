@@ -80,6 +80,8 @@ data class UiState(
   val chrome: Boolean = false,
   val sheet: Sheet? = null,
   val tocTab: TocTab = TocTab.Contents,
+  /** Whether the reader's Display sheet shows the advanced controls expanded. Session memory; resets per book. */
+  val advancedOpen: Boolean = false,
   val showZones: Boolean = false,
   val textSearchOpen: Boolean = false,
   val textQuery: String = "",

@@ -626,7 +626,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       if (libraryBook == null) { publication.close(); _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
       val session = ReaderSession(libraryBook, publication, positions, initial)
       _reader.value = ReaderLoad.Ready(session)
-      edit { copy(brightness = 100) }
+      edit { copy(brightness = 100, advancedOpen = false) }
       startReaderJobs(session)
       if (target != null) targetJob = launch { reportOutcome(session.goToTarget(target)) }
       if (libraryQuery != null) enterBookSearch(id, libraryQuery)
@@ -693,6 +693,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun setChrome(show: Boolean) = edit { copy(chrome = show) }
   fun openSheet(sheet: Sheet?, tab: TocTab? = null) = edit { copy(sheet = sheet, tocTab = tab ?: tocTab) }
   fun setTocTab(tab: TocTab) = edit { copy(tocTab = tab) }
+  fun setAdvancedOpen(open: Boolean) = edit { copy(advancedOpen = open) }
   fun showZones(show: Boolean) = edit { copy(showZones = show, sheet = if (show) null else sheet, chrome = if (show) false else chrome) }
   fun closeReaderOverlays() = edit { copy(sheet = null, chrome = false, textSearchOpen = false, showZones = false, activeHighlight = null, noteFor = null) }
 

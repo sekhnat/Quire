@@ -17,6 +17,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -298,7 +300,9 @@ fun Segmented(options: List<SegOption>, modifier: Modifier = Modifier, height: D
         Modifier
           .height(height).defaultMinSize(minWidth = minWidth)
           .then(if (o.selected) Modifier.border(1.dp, Nq.accent, androidx.compose.ui.graphics.RectangleShape) else Modifier)
-          .clickable(onClick = o.onClick)
+          .alpha(if (o.enabled) 1f else 0.45f)
+          .clickable(enabled = o.enabled, onClick = o.onClick)
+          .semantics { if (!o.enabled) stateDescription = "Unavailable" else if (o.selected) stateDescription = "Selected" }
           .padding(horizontal = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -311,13 +315,17 @@ fun Segmented(options: List<SegOption>, modifier: Modifier = Modifier, height: D
   }
 }
 
-data class SegOption(val label: String, val selected: Boolean, val onClick: () -> Unit, val icon: Int? = null)
+data class SegOption(val label: String, val selected: Boolean, val onClick: () -> Unit, val icon: Int? = null, val enabled: Boolean = true)
 
 @Composable
-fun Toggle(on: Boolean, onClick: () -> Unit) {
+fun Toggle(on: Boolean, onClick: () -> Unit, enabled: Boolean = true) {
   val x by animateDpAsState(if (on) 16.dp else 0.dp, tween(200), label = "knob")
   Box(
-    Modifier.size(width = 38.dp, height = 22.dp).clip(CircleShape).border(1.dp, if (on) Nq.accent else Nq.neutral600, CircleShape).clickable(onClick = onClick),
+    Modifier
+      .alpha(if (enabled) 1f else 0.45f)
+      .size(width = 38.dp, height = 22.dp).clip(CircleShape).border(1.dp, if (on) Nq.accent else Nq.neutral600, CircleShape)
+      .clickable(enabled = enabled, onClick = onClick)
+      .semantics { stateDescription = if (on) "On" else "Off" },
   ) {
     Box(Modifier.padding(start = 3.dp).align(Alignment.CenterStart).offset(x = x).size(14.dp).clip(CircleShape).background(if (on) Nq.accent else Nq.neutral500))
   }

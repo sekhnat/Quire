@@ -86,6 +86,9 @@ data class AdvancedReaderPrefs(
   /** True when nothing has been changed from the factory values. */
   val isFactory: Boolean get() = this == AdvancedReaderPrefs()
 
+  /** This object with a preset's indent and spacing levels set; Custom leaves it unchanged. */
+  fun withPreset(preset: ParagraphPreset): AdvancedReaderPrefs? =
+    levelsFor(preset)?.let { (indent, spacing) -> copy(paragraphIndent = indent, paragraphSpacing = spacing) }
   companion object {
     /**
      * The indent and spacing levels a preset choice sets, reduced in one step. Custom is a
