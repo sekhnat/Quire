@@ -35,6 +35,15 @@ class IndexRulesTest {
     assertTrue(needsIndexing(signature.mtime, signature.sizeBytes + 1, signature))
   }
 
+  @Test fun `an index carries forward only when size and source fingerprint both match`() {
+    assertTrue(canCarryIndex(signature.sizeBytes, "fp", signature, "fp"))
+    assertFalse("different content", canCarryIndex(signature.sizeBytes, "fp2", signature, "fp"))
+    assertFalse("different size", canCarryIndex(signature.sizeBytes + 1, "fp", signature, "fp"))
+    assertFalse("no state", canCarryIndex(signature.sizeBytes, "fp", null, "fp"))
+    assertFalse("book fingerprint unknown", canCarryIndex(signature.sizeBytes, null, signature, null))
+    assertFalse("source fingerprint unknown", canCarryIndex(signature.sizeBytes, "fp", signature, null))
+  }
+
   @Test fun `counts below the cap are exact and counts from a capped query read as N plus`() {
     val exact = PassageCount.of(12, examined = MAX_COUNTED_PASSAGES - 1)
     assertFalse(exact.isCapped)

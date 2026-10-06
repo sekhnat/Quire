@@ -42,8 +42,11 @@ class IndexStore(private val sql: IndexSql) {
   suspend fun replaceBook(
     bookId: Long, mtime: Long, sizeBytes: Long, chunks: List<IndexChunk>, truncated: Boolean, unreadableResources: Int,
     completedAt: Long = System.currentTimeMillis(),
+    /** The fingerprint of the file the chunks were read from; null when it is not known. */
+    fingerprint: String? = null,
   ) = sql.write { c ->
     c.deleteBook(bookId)
+    c.putSource(bookId, fingerprint)
     val base = (c.long("SELECT MAX(id) FROM chunk") ?: 0L) + 1
     val strings = BookStrings()
     for (chunk in chunks) { strings.href(chunk.href, chunk.mediaType); strings.chapter(chunk.chapter) }
@@ -84,11 +87,43 @@ class IndexStore(private val sql: IndexSql) {
   }
 
   /** Records a `failed` or `skipped` outcome for the signature and drops the book's obsolete chunks. */
-  suspend fun markTerminal(bookId: Long, mtime: Long, sizeBytes: Long, status: String, completedAt: Long = System.currentTimeMillis()) {
+  suspend fun markTerminal(
+    bookId: Long, mtime: Long, sizeBytes: Long, status: String, completedAt: Long = System.currentTimeMillis(), fingerprint: String? = null,
+  ) {
     require(status == IndexStateEntity.STATUS_FAILED || status == IndexStateEntity.STATUS_SKIPPED) { "not a chunk-less terminal status: $status" }
     sql.write { c ->
       c.deleteBook(bookId)
+      c.putSource(bookId, fingerprint)
       c.putState(IndexStateEntity(bookId, mtime, sizeBytes, status, completedAt))
+    }
+  }
+
+  /**
+   * Moves a book's index state to the file signature [mtime]/[sizeBytes] without touching its text: the file's content is
+   * the one the index was built from (see [canCarryIndex]). False when the book has no state any more.
+   */
+  suspend fun resign(bookId: Long, mtime: Long, sizeBytes: Long): Boolean = sql.write { c ->
+    c.exec("UPDATE index_state SET mtime = ?, sizeBytes = ? WHERE bookId = ?", mtime, sizeBytes, bookId)
+    (c.long("SELECT changes()") ?: 0L) > 0
+  }
+
+  /** The fingerprint a book's index state was built from, or null when it is not known. */
+  suspend fun sourceFingerprint(bookId: Long): String? = sql.read { c ->
+    c.statement("SELECT fingerprint FROM index_source WHERE book_id = ?") { st -> st.bindLong(1, bookId); if (st.step()) st.getText(0) else null }
+  }
+
+  /** Book ids that have a recorded source fingerprint. */
+  suspend fun sourcedBooks(): Set<Long> = sql.read { c ->
+    c.statement("SELECT book_id FROM index_source") { st -> buildSet { while (st.step()) add(st.getLong(0)) } }
+  }
+
+  /** Records source fingerprints for books indexed before they were kept; existing rows are left alone. */
+  suspend fun addSources(fingerprints: Map<Long, String>) {
+    if (fingerprints.isEmpty()) return
+    sql.write { c ->
+      c.statement("INSERT OR IGNORE INTO index_source (book_id, fingerprint) VALUES (?, ?)") { st ->
+        for ((bookId, fingerprint) in fingerprints) { st.bindLong(1, bookId); st.bindText(2, fingerprint); st.step(); st.reset() }
+      }
     }
   }
 
@@ -99,6 +134,7 @@ class IndexStore(private val sql: IndexSql) {
       for (id in bookIds) {
         c.deleteBook(id)
         c.exec("DELETE FROM index_state WHERE bookId = ?", id)
+        c.exec("DELETE FROM index_source WHERE book_id = ?", id)
       }
     }
   }
@@ -120,7 +156,7 @@ class IndexStore(private val sql: IndexSql) {
    */
   suspend fun clearAll() = sql.write { c ->
     for (table in listOf("chunk_fts", "seam_fts", "cjk_fts")) c.exec("INSERT INTO $table($table) VALUES('delete-all')")
-    for (table in listOf("chunk", "seam", "book_string", "index_state")) c.exec("DELETE FROM $table")
+    for (table in listOf("chunk", "seam", "book_string", "index_state", "index_source")) c.exec("DELETE FROM $table")
   }
 
   /**
@@ -168,6 +204,10 @@ class IndexStore(private val sql: IndexSql) {
     exec("DELETE FROM chunk WHERE book_id = ?", bookId)
     exec("DELETE FROM book_string WHERE book_id = ?", bookId)
   }
+
+  private suspend fun IndexConnection.putSource(bookId: Long, fingerprint: String?) =
+    if (fingerprint == null) exec("DELETE FROM index_source WHERE book_id = ?", bookId)
+    else exec("INSERT OR REPLACE INTO index_source (book_id, fingerprint) VALUES (?, ?)", bookId, fingerprint)
 
   private suspend fun IndexConnection.putState(s: IndexStateEntity) = exec(
     "INSERT OR REPLACE INTO index_state (bookId, mtime, sizeBytes, status, completedAt, chunkCount, textBytes, truncated, unreadableResources, firstChunkId, lastChunkId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",

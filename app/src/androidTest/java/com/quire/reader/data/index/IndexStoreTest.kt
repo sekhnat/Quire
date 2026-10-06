@@ -37,6 +37,32 @@ class IndexStoreTest : DbTestCase() {
   private suspend fun Fixture.index(book: BookEntity, vararg texts: String, truncated: Boolean = false, unreadable: Int = 0) =
     store.replaceBook(book.id, book.mtime, book.sizeBytes, chunks(*texts), truncated, unreadable)
 
+  @Test fun `the source fingerprint follows the books index state`() = runBlocking<Unit> {
+    val f = fixture()
+    val book = f.add("Emma")
+    f.store.replaceBook(book.id, book.mtime, book.sizeBytes, chunks("Highbury was quiet"), false, 0, fingerprint = "100:aaaa")
+    assertEquals("100:aaaa", f.store.sourceFingerprint(book.id))
+
+    assertTrue(f.store.resign(book.id, book.mtime + 7, book.sizeBytes))
+    assertEquals(book.mtime + 7, f.index.stateOf(book.id)!!.mtime)
+    assertEquals(1, f.index.hits("highbury").size)
+
+    // A new outcome without a known fingerprint forgets the old one.
+    f.store.markTerminal(book.id, book.mtime, book.sizeBytes, IndexStateEntity.STATUS_FAILED)
+    assertNull(f.store.sourceFingerprint(book.id))
+
+    f.store.addSources(mapOf(book.id to "100:aaaa"))
+    f.store.addSources(mapOf(book.id to "ignored, a row exists"))
+    assertEquals("100:aaaa", f.store.sourceFingerprint(book.id))
+    f.store.removeBooks(listOf(book.id))
+    assertNull(f.store.sourceFingerprint(book.id))
+    assertTrue(!f.store.resign(book.id, 1, 1))
+
+    f.store.addSources(mapOf(book.id to "100:aaaa"))
+    f.store.clearAll()
+    assertEquals(emptySet<Long>(), f.store.sourcedBooks())
+  }
+
   @Test fun `replacing a book swaps its chunks and full-text rows for the new ones and records the state`() = runBlocking<Unit> {
     val f = fixture()
     val book = f.add("Emma")

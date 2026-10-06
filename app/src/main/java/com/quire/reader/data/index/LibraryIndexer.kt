@@ -38,6 +38,7 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.getOrElse
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
@@ -69,6 +70,7 @@ class LibraryIndexer(
   private val mutex = Mutex()
   private val requestLock = Mutex()
   private val epoch = AtomicLong()
+  private val sourcesBackfilled = AtomicBoolean(false)
 
   /** Extraction runs on one low-priority thread, so it never competes with the UI. */
   private val dispatcher = Executors.newSingleThreadExecutor { task ->
@@ -225,26 +227,33 @@ class LibraryIndexer(
     dropLegacyIndex(db.openHelper.writableDatabase, keepGoing = { !_readerBusy.value && epoch.get() == startEpoch })
       ?.let { Log.i(TAG, "dropped the old index from ${QuireDatabase.FILE_NAME} in $it ms") }
     sweep()
+    backfillSources()
     val setAside = HashSet<Long>()
     var processed = 0
+    var carried = 0
+    fun stop(reason: BatchStop): BatchResult {
+      if (carried > 0) Log.i(TAG, "kept the index of $carried books whose file signature changed but whose content did not")
+      return BatchResult(processed, reason)
+    }
     while (true) {
       currentCoroutineContext().ensureActive()
-      if (epoch.get() != startEpoch) return BatchResult(processed, BatchStop.Superseded)
-      if (_readerBusy.value) return BatchResult(processed, BatchStop.ReaderBusy)
-      val book = catalog.eligibleBooks().firstOrNull { it.id !in setAside } ?: return BatchResult(processed, BatchStop.Drained)
-      if (System.currentTimeMillis() >= deadlineMillis) return BatchResult(processed, BatchStop.Deadline)
+      if (epoch.get() != startEpoch) return stop(BatchStop.Superseded)
+      if (_readerBusy.value) return stop(BatchStop.ReaderBusy)
+      val book = catalog.eligibleBooks().firstOrNull { it.id !in setAside } ?: return stop(BatchStop.Drained)
+      if (System.currentTimeMillis() >= deadlineMillis) return stop(BatchStop.Deadline)
       when (indexBook(book, startEpoch)) {
         Step.Settled -> processed++
+        Step.Carried -> { processed++; carried++ }
         // The file changed or vanished after the last scan; the next scan updates the book and makes it eligible again.
         Step.SetAside -> setAside += book.id
-        Step.ReaderBusy -> return BatchResult(processed, BatchStop.ReaderBusy)
-        Step.Superseded -> return BatchResult(processed, BatchStop.Superseded)
+        Step.ReaderBusy -> return stop(BatchStop.ReaderBusy)
+        Step.Superseded -> return stop(BatchStop.Superseded)
       }
       yield()
     }
   }
 
-  private enum class Step { Settled, SetAside, ReaderBusy, Superseded }
+  private enum class Step { Settled, Carried, SetAside, ReaderBusy, Superseded }
 
   private class Extraction(val result: Extracted, val chunks: List<IndexChunk> = emptyList(), val truncated: Boolean = false)
 
@@ -252,6 +261,7 @@ class LibraryIndexer(
     if (epoch.get() != startEpoch) return Step.Superseded
     val file = File(book.path)
     if (!isUnchanged(file, book)) return Step.SetAside
+    if (carryForward(book)) return Step.Carried
 
     val extraction = extract(file, startEpoch)
     // Look again at the file and the epoch only now, under the lock: nothing can clear the index before the write below.
@@ -272,6 +282,32 @@ class LibraryIndexer(
     }
   }
 
+  /** Keeps the index of a book whose file signature moved but whose content did not (see [canCarryIndex]); true if it did. */
+  private suspend fun carryForward(book: EligibleBook): Boolean {
+    val state = indexDb.states().of(book.id) ?: return false
+    if (!canCarryIndex(book.sizeBytes, book.fingerprint, IndexSignature(state.mtime, state.sizeBytes), store.sourceFingerprint(book.id))) return false
+    if (!stillCurrent(book)) return false
+    return withContext(NonCancellable) { store.resign(book.id, book.mtime, book.sizeBytes) }
+  }
+
+  /**
+   * Once per process: books indexed before source fingerprints were kept get the fingerprint of the file their index still
+   * matches, so they can carry their index forward too. Books whose file changed since are left out; they are re-indexed.
+   */
+  private suspend fun backfillSources() {
+    if (!sourcesBackfilled.compareAndSet(false, true)) return
+    mutex.withLock {
+      val states = indexDb.states().all().associateBy { it.bookId }
+      val known = store.sourcedBooks()
+      val found = db.books().indexable().mapNotNull { b ->
+        val s = states[b.id] ?: return@mapNotNull null
+        val fingerprint = b.fingerprint ?: return@mapNotNull null
+        if (b.id in known || s.mtime != b.mtime || s.sizeBytes != b.sizeBytes) null else b.id to fingerprint
+      }.toMap()
+      withContext(NonCancellable) { store.addSources(found) }
+    }
+  }
+
   private fun isUnchanged(file: File, book: EligibleBook): Boolean =
     file.isFile && file.lastModified() == book.mtime && file.length() == book.sizeBytes
 
@@ -282,13 +318,13 @@ class LibraryIndexer(
   private suspend fun publish(book: EligibleBook, extraction: Extraction): Boolean {
     if (!stillCurrent(book)) return false
     val unreadable = (extraction.result as? Extracted.Text)?.unreadableResources ?: 0
-    store.replaceBook(book.id, book.mtime, book.sizeBytes, extraction.chunks, extraction.truncated, unreadable)
+    store.replaceBook(book.id, book.mtime, book.sizeBytes, extraction.chunks, extraction.truncated, unreadable, fingerprint = book.fingerprint)
     return true
   }
 
   private suspend fun markTerminal(book: EligibleBook, status: String): Boolean {
     if (!stillCurrent(book)) return false
-    store.markTerminal(book.id, book.mtime, book.sizeBytes, status)
+    store.markTerminal(book.id, book.mtime, book.sizeBytes, status, fingerprint = book.fingerprint)
     return true
   }
 

@@ -46,8 +46,8 @@ class LibraryIndexerTest : DbTestCase() {
     index.rows("SELECT s.value FROM chunk c JOIN book_string s ON s.book_id = c.book_id AND s.idx = c.chapter_idx WHERE c.book_id = ? ORDER BY c.seq", bookId).map { it[0] }
 
   /** Adds a book row describing [file] the way a scan would. */
-  private fun Fixture.add(name: String, file: File, addedAt: Long = 0): BookEntity = runBlocking {
-    val entity = bookEntity(folderId, name, addedAt = addedAt).copy(path = file.absolutePath, mtime = file.lastModified(), sizeBytes = file.length())
+  private fun Fixture.add(name: String, file: File, addedAt: Long = 0, fingerprint: String? = null): BookEntity = runBlocking {
+    val entity = bookEntity(folderId, name, addedAt = addedAt).copy(path = file.absolutePath, mtime = file.lastModified(), sizeBytes = file.length(), fingerprint = fingerprint)
     entity.copy(id = db.books().save(entity, emptyList()))
   }
 
@@ -63,6 +63,62 @@ class LibraryIndexerTest : DbTestCase() {
   private fun epub(name: String, vararg chapters: FixtureChapter) = EpubFixtures.write(File(epubDir, "$name.epub"), chapters.toList())
 
   private fun bigChapters(word: String) = List(4) { c -> FixtureChapter("Part $c", (0 until 1_500).joinToString("") { "<p>$word number $it of part $c repeated for bulk text padding the paragraph out to length.</p>" }) }
+
+  /** Gives [file] a new modification time without changing a byte, and updates the row as a rescan would. */
+  private fun Fixture.touch(book: BookEntity, file: File): BookEntity = runBlocking {
+    file.setLastModified(file.lastModified() + 5_000)
+    book.copy(mtime = file.lastModified()).also { db.books().update(it) }
+  }
+
+  @Test fun `a file whose mtime changed but whose content did not keeps its index`() = runBlocking {
+    val f = fixture()
+    val file = epub("emma", EpubFixtures.chapter("Volume One", "Highbury was quiet that morning."))
+    val book = f.add("Emma", file, fingerprint = "100:aaaa")
+    f.indexer.runBatch(deadline)
+    val before = f.index.stateOf(book.id)!!
+
+    val touched = f.touch(book, file)
+    assertEquals(BatchResult(processed = 1, stop = BatchStop.Drained), f.indexer.runBatch(deadline))
+
+    val after = f.index.stateOf(book.id)!!
+    assertEquals(touched.mtime, after.mtime)
+    assertEquals("the text was not extracted again", before.copy(mtime = touched.mtime), after)
+    assertEquals(1, f.index.hits("highbury").size)
+    assertEquals(emptyList<Any>(), f.indexer.catalog.eligibleBooks())
+  }
+
+  @Test fun `a file whose fingerprint changed is indexed again`() = runBlocking {
+    val f = fixture()
+    val file = epub("emma", EpubFixtures.chapter("Volume One", "Highbury was quiet that morning."))
+    val book = f.add("Emma", file, fingerprint = "100:aaaa")
+    f.indexer.runBatch(deadline)
+
+    val changed = f.change(book, file, listOf(EpubFixtures.chapter("Volume One", "Hartfield in the evening.")))
+    f.db.books().setIdentity(book.id, null, null, "120:bbbb")
+    f.indexer.runBatch(deadline)
+
+    assertEquals(changed.mtime, f.index.stateOf(book.id)!!.mtime)
+    assertEquals(emptyList<Long>(), f.index.hits("highbury"))
+    assertEquals(1, f.index.hits("hartfield").size)
+  }
+
+  @Test fun `books indexed before fingerprints were kept carry their index forward after the backfill`() = runBlocking {
+    val f = fixture()
+    val file = epub("emma", EpubFixtures.chapter("Volume One", "Highbury was quiet that morning."))
+    val book = f.add("Emma", file)
+    f.indexer.runBatch(deadline)
+    val before = f.index.stateOf(book.id)!!
+    // A later scan reads the file's identity; the index still matches the file.
+    f.db.books().setIdentity(book.id, null, null, "100:aaaa")
+
+    // A new process backfills the source fingerprint once.
+    val restarted = LibraryIndexer(target, f.db, f.index, PublicationLoader(target), SettingsStore(target), scope)
+    restarted.runBatch(deadline)
+    val touched = f.touch(book.copy(fingerprint = "100:aaaa"), file)
+    restarted.runBatch(deadline)
+
+    assertEquals(before.copy(mtime = touched.mtime), f.index.stateOf(book.id))
+  }
 
   @Test fun `an epub is indexed into searchable chunks labelled with its chapters`() = runBlocking {
     val f = fixture()

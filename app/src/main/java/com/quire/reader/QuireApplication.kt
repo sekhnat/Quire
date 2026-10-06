@@ -3,6 +3,10 @@ package com.quire.reader
 import android.app.Application
 import com.quire.reader.data.LibraryRepository
 import com.quire.reader.data.SettingsStore
+import com.quire.reader.data.backup.BackupLocations
+import com.quire.reader.data.backup.BackupWorker
+import com.quire.reader.data.backup.FullBackupWriter
+import com.quire.reader.data.backup.FullRestore
 import com.quire.reader.data.backup.RestoreCoordinator
 import com.quire.reader.data.backup.SnapshotImporter
 import com.quire.reader.data.backup.SnapshotWriter
@@ -25,7 +29,10 @@ import com.quire.reader.reader.PublicationLoader
 class QuireApplication : Application() {
   override fun onCreate() {
     super.onCreate()
+    // A full restore staged before the restart goes in now, before anything opens a database or the settings.
+    FullRestore.applyStagedIfAny(this)
     appScope.launch {
+      fullRestore.finishAfterStart()
       // Restored settings and onboarding routing must settle before scanning or indexing is scheduled.
       restore.prepare()
       snapshotWriter.start()
@@ -35,6 +42,10 @@ class QuireApplication : Application() {
         }
       }
       launch { settings.watchNewBooks.distinctUntilChanged().collect { ScanWorker.schedule(this@QuireApplication, it) } }
+      launch {
+        combine(settings.autoBackupEnabled, settings.autoBackupInterval) { enabled, interval -> enabled to interval }
+          .distinctUntilChanged().collect { (enabled, interval) -> BackupWorker.schedule(this@QuireApplication, enabled, interval) }
+      }
       launch {
         combine(settings.indexingEnabled, settings.indexChargingOnly) { enabled, chargingOnly -> enabled to chargingOnly }
           .distinctUntilChanged().drop(1).collect { indexer.applyPolicy() }
@@ -57,5 +68,14 @@ class QuireApplication : Application() {
   val restore by lazy { RestoreCoordinator(this, database, settings, SnapshotImporter(database, settings)) }
   val snapshotWriter by lazy {
     SnapshotWriter(database, settings, backupDirectory(this), appScope, isRestorePending = { restore.isWriteBlocked })
+  }
+
+  val backupLocations by lazy { BackupLocations.of(this) }
+  val fullBackupWriter by lazy {
+    val version = runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull() ?: "?"
+    FullBackupWriter(database, indexDatabase, snapshotWriter, backupLocations, version)
+  }
+  val fullRestore by lazy {
+    FullRestore(this, backupLocations, database, settings, { library.scanImported() }, SnapshotImporter(database, settings), snapshotWriter)
   }
 }

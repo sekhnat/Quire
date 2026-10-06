@@ -152,10 +152,10 @@ abstract class BookDao {
   @Query("SELECT id FROM book WHERE missingSince IS NULL") abstract suspend fun presentIds(): List<Long>
 
   /** Readable, present books with the file signature to index them against, newest first. */
-  @Query("SELECT id, path, mtime, sizeBytes FROM book WHERE readable = 1 AND missingSince IS NULL ORDER BY addedAt DESC, id DESC")
+  @Query("SELECT id, path, mtime, sizeBytes, fingerprint FROM book WHERE readable = 1 AND missingSince IS NULL ORDER BY addedAt DESC, id DESC")
   abstract suspend fun indexable(): List<EligibleBook>
 
-  @Query("SELECT id, path, mtime, sizeBytes FROM book WHERE readable = 1 AND missingSince IS NULL")
+  @Query("SELECT id, path, mtime, sizeBytes, fingerprint FROM book WHERE readable = 1 AND missingSince IS NULL")
   abstract fun observeIndexable(): Flow<List<EligibleBook>>
   @Query("SELECT COUNT(*) FROM book WHERE missingSince IS NULL") abstract fun observeCount(): Flow<Int>
   @Query("DELETE FROM book WHERE id IN (:ids)") abstract suspend fun delete(ids: List<Long>)
@@ -202,6 +202,10 @@ abstract class BookDao {
    * up again) through a full re-read exactly once; the re-read stores the real mtime and the row settles.
    */
   @Query("UPDATE book SET mtime = -1 WHERE coverPath IS NULL") abstract suspend fun queueCoverBackfill()
+
+  /** Books that point at a cover file; a full restore without covers checks which of those files exist. */
+  @Query("SELECT id, coverPath FROM book WHERE coverPath IS NOT NULL") abstract suspend fun withCovers(): List<BookCover>
+  @Query("UPDATE book SET coverPath = NULL WHERE id IN (:ids)") abstract suspend fun clearCovers(ids: List<Long>)
 
   @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NOT NULL") abstract suspend fun missingIdentities(): List<IdentityRow>
   @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NULL") abstract suspend fun liveIdentities(): List<IdentityRow>
@@ -315,8 +319,8 @@ interface AnnotationDao {
   @Query("UPDATE highlight SET note = :note WHERE id = :id") suspend fun setHighlightNote(id: Long, note: String?)
 }
 
-/** A book that may need indexing, with the file signature to index against. */
-data class EligibleBook(val id: Long, val path: String, val mtime: Long, val sizeBytes: Long)
+/** A book that may need indexing, with the file signature to index against and the fingerprint of that file, when known. */
+data class EligibleBook(val id: Long, val path: String, val mtime: Long, val sizeBytes: Long, val fingerprint: String? = null)
 
 /**
  * How much of the library is searchable. Every count covers readable books only, and `searchable`, `failed`

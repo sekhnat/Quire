@@ -11,6 +11,14 @@ fun needsIndexing(bookMtime: Long, bookSize: Long, state: IndexSignature?): Bool
   state == null || state.mtime != bookMtime || state.sizeBytes != bookSize
 
 /**
+ * True when a book that [needsIndexing] only because its signature moved can keep its index: same size, and the file's
+ * fingerprint equals the one the index was built from. The fingerprint hashes the file's tail, which for an EPUB is the zip
+ * central directory holding every entry's CRC, so any change to the content changes it; a copied or touched file does not.
+ */
+fun canCarryIndex(bookSize: Long, bookFingerprint: String?, state: IndexSignature?, sourceFingerprint: String?): Boolean =
+  state != null && state.sizeBytes == bookSize && bookFingerprint != null && bookFingerprint == sourceFingerprint
+
+/**
  * At most this many matching passages are counted per library query; past it counts read "N+". Matches stream from the
  * index in id order at about 0.4 µs each for a word and about 1 µs for a phrase or a filtered scan, so this is the largest
  * cap that keeps every capped query of the benchmark under 100 ms (the slowest, a very common word inside a broad filter,

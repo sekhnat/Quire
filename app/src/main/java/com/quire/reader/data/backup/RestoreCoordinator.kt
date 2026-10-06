@@ -177,12 +177,13 @@ class RestoreCoordinator(
     runCatching { phaseFile.writeText(PHASE_IMPORTED) }.onFailure { Log.w(TAG, "marking the restore imported failed", it) }
   }
 
-  private companion object {
-    const val TAG = "RestoreCoordinator"
+  companion object {
+    private const val TAG = "RestoreCoordinator"
+    /** The staged copy and its phase marker, in `noBackupFilesDir`; a full restore clears them (see [StagedRestore]). */
     const val PENDING_FILE_NAME = "pending-restore.json"
     const val PHASE_FILE_NAME = "restore-phase"
-    const val PHASE_STAGED = "staged"
-    const val PHASE_IMPORTED = "imported"
+    private const val PHASE_STAGED = "staged"
+    private const val PHASE_IMPORTED = "imported"
   }
 }
 

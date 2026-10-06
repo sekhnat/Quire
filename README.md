@@ -45,6 +45,10 @@ If you used text search before books with self-closing `<title/>` tags were hand
 - **Search the whole book.** Results stream in as they are found, and the matches are underlined on the page.
 - **Contents with real page numbers**, even for books that keep every chapter in one file.
 
+### Your data, backed up
+- **Reading data travels on its own.** Positions, ratings, tags, bookmarks, highlights and notes go with Android's own backup, and Settings → Export reading data writes them to one file you can merge into any library.
+- **Full backups.** Settings → Back up now writes one `.zip` with the whole library: folders, reading data, settings, and if you like the search index, covers and imported books. Restore it on a new phone (also from the welcome screen) to replace everything and skip indexing again, or merge just its reading data into the library you have. Automatic backups can go to a folder daily or weekly, keeping the newest few. A copied or touched book keeps its index as long as its content is unchanged. See [docs/user-data-backup.md](docs/user-data-backup.md).
+
 ## Screenshots
 
 | Welcome | Pick folders | Library ready |

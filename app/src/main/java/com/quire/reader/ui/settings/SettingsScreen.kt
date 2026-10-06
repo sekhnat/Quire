@@ -56,6 +56,7 @@ import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.Toggle
 import com.quire.reader.ui.coverageFraction
 import com.quire.reader.ui.coverageIssues
+import com.quire.reader.ui.FolderPickerSheet
 import com.quire.reader.ui.formatBytes
 import com.quire.reader.ui.indexStatusText
 import com.quire.reader.ui.reader.ReadingControls
@@ -78,6 +79,8 @@ fun SettingsScreen(vm: QuireViewModel) {
   val missing by vm.missingBooks.collectAsStateWithLifecycle()
   var confirmingDelete by remember { mutableStateOf(false) }
   BackHandler(enabled = confirmingDelete) { confirmingDelete = false }
+  var choosingBackup by remember { mutableStateOf(false) }
+  var pickingBackupFolder by remember { mutableStateOf(false) }
   /** Missing books the user asked to forget, waiting for confirmation; null when nothing is being confirmed. */
   var forgetting by remember { mutableStateOf<List<MissingBookRow>?>(null) }
   BackHandler(enabled = forgetting != null) { forgetting = null }
@@ -97,6 +100,9 @@ fun SettingsScreen(vm: QuireViewModel) {
   }
   val readingDataImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
     if (uri != null) vm.importReadingData(uri)
+  }
+  val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) vm.inspectBackup(uri)
   }
 
   Box(Modifier.fillMaxSize()) {
@@ -138,6 +144,13 @@ fun SettingsScreen(vm: QuireViewModel) {
         )
       }
 
+      BackupSection(
+        vm,
+        onBackUp = { vm.refreshBackupSizes(); choosingBackup = true },
+        onRestore = { backupOpen.launch(BACKUP_PICK_TYPES) },
+        onPickFolder = { pickingBackupFolder = true },
+      )
+
       if (missing.isNotEmpty()) {
         MissingBooks(
           missing,
@@ -171,6 +184,8 @@ fun SettingsScreen(vm: QuireViewModel) {
       }
     }
   }
+  BackupSheets(vm, choosingBackup, onDismissChoosing = { choosingBackup = false })
+  FolderPickerSheet(pickingBackupFolder, { pickingBackupFolder = false }) { path -> pickingBackupFolder = false; vm.setAutoBackupFolder(path) }
   DeleteIndexSheet(confirmingDelete, textBytes, onDismiss = { confirmingDelete = false }) { confirmingDelete = false; vm.deleteSearchIndex() }
   ForgetMissingSheet(forgetting, onDismiss = { forgetting = null }) { rows ->
     forgetting = null
@@ -247,7 +262,7 @@ private fun LibrarySearchStatus(index: IndexStatusText, coverage: IndexCoverage?
 }
 
 @Composable
-private fun Value(label: String, value: String, sub: String?) {
+internal fun Value(label: String, value: String, sub: String?) {
   Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       QText(label, 14f)
@@ -276,7 +291,7 @@ private fun DeleteIndexSheet(visible: Boolean, textBytes: Long, onDismiss: () ->
 }
 
 @Composable
-private fun Toggle(label: String, sub: String, on: Boolean, onClick: () -> Unit) {
+internal fun Toggle(label: String, sub: String, on: Boolean, onClick: () -> Unit) {
   Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       QText(label, 14f)
