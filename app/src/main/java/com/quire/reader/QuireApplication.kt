@@ -3,15 +3,21 @@ package com.quire.reader
 import android.app.Application
 import com.quire.reader.data.LibraryRepository
 import com.quire.reader.data.SettingsStore
+import com.quire.reader.data.backup.RestoreCoordinator
+import com.quire.reader.data.backup.SnapshotImporter
+import com.quire.reader.data.backup.SnapshotWriter
+import com.quire.reader.data.backup.backupDirectory
 import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.data.index.LibraryIndexer
 import com.quire.reader.data.scan.CoverStore
 import com.quire.reader.data.scan.LibraryScanner
+import com.quire.reader.data.scan.ScanPhase
 import com.quire.reader.data.scan.ScanWorker
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import com.quire.reader.reader.PublicationLoader
 
@@ -19,14 +25,22 @@ import com.quire.reader.reader.PublicationLoader
 class QuireApplication : Application() {
   override fun onCreate() {
     super.onCreate()
-    // Keep the background scan in step with the "Watch for new books" setting.
-    appScope.launch { settings.watchNewBooks.distinctUntilChanged().collect { ScanWorker.schedule(this@QuireApplication, it) } }
-    // Text indexing is independent of that: a changed indexing setting replaces the queued work, and startup asks for a run.
     appScope.launch {
-      combine(settings.indexingEnabled, settings.indexChargingOnly) { enabled, chargingOnly -> enabled to chargingOnly }
-        .distinctUntilChanged().drop(1).collect { indexer.applyPolicy() }
+      // Restored settings and onboarding routing must settle before scanning or indexing is scheduled.
+      restore.prepare()
+      snapshotWriter.start()
+      launch {
+        scanner.progress.filter { it.phase == ScanPhase.Done }.collect {
+          if (restore.onScanCompleted() != null) snapshotWriter.flush()
+        }
+      }
+      launch { settings.watchNewBooks.distinctUntilChanged().collect { ScanWorker.schedule(this@QuireApplication, it) } }
+      launch {
+        combine(settings.indexingEnabled, settings.indexChargingOnly) { enabled, chargingOnly -> enabled to chargingOnly }
+          .distinctUntilChanged().drop(1).collect { indexer.applyPolicy() }
+      }
+      indexer.request()
     }
-    indexer.request()
   }
 
   /** For work that must outlive a screen, such as saving the reading position as the reader closes. */
@@ -39,4 +53,9 @@ class QuireApplication : Application() {
   val scanner by lazy { LibraryScanner(database, publicationLoader, covers, settings) }
   val indexer by lazy { LibraryIndexer(this, database, indexDatabase, publicationLoader, settings, appScope) }
   val library by lazy { LibraryRepository(this, database, indexDatabase, scanner, covers, settings, indexer) }
+
+  val restore by lazy { RestoreCoordinator(this, database, settings, SnapshotImporter(database, settings)) }
+  val snapshotWriter by lazy {
+    SnapshotWriter(database, settings, backupDirectory(this), appScope, isRestorePending = { restore.isWriteBlocked })
+  }
 }

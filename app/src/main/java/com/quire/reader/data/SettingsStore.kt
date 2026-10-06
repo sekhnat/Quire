@@ -8,7 +8,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.quire.reader.data.index.SearchOrder
+import com.quire.reader.data.backup.SnapshotSettings
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -51,6 +53,37 @@ class SettingsStore(context: Context) {
   /** In-app dimming over the page, 30–100. */
   val brightness: Flow<Int> = flow(BRIGHTNESS, 100)
   suspend fun setBrightness(v: Int) = store.edit { it[BRIGHTNESS] = v.coerceIn(30, 100) }
+
+  /** Emits whenever any setting changes; the snapshot writer re-captures on it. */
+  val changes: Flow<Unit> = store.data.map { }
+
+  /**
+   * The settings a snapshot carries, with their current values (defaults included). Setup and
+   * maintenance flags are deliberately absent: they describe this device's progress, not preferences.
+   */
+  suspend fun capture(): SnapshotSettings {
+    val prefs = store.data.first()
+    return SnapshotSettings(
+      useCalibre = prefs[USE_CALIBRE] ?: true,
+      watchNewBooks = prefs[WATCH_NEW] ?: true,
+      indexingEnabled = prefs[INDEXING_ENABLED] ?: true,
+      indexChargingOnly = prefs[INDEX_CHARGING_ONLY] ?: false,
+      brightness = prefs[BRIGHTNESS] ?: 100,
+      readerDefaults = prefs[READER_DEFAULTS]?.let(ReaderPrefs::fromJson),
+      textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
+    )
+  }
+
+  /** Restores the settings a snapshot carries; fields the snapshot omits keep their local values. */
+  suspend fun applySettings(s: SnapshotSettings) {
+    s.useCalibre?.let { setUseCalibre(it) }
+    s.watchNewBooks?.let { setWatchNewBooks(it) }
+    s.indexingEnabled?.let { setIndexingEnabled(it) }
+    s.indexChargingOnly?.let { setIndexChargingOnly(it) }
+    s.brightness?.let { setBrightness(it) }
+    s.readerDefaults?.let { setReaderDefaults(it) }
+    s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
+  }
 
   private companion object {
     val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")

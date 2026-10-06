@@ -19,6 +19,7 @@ abstract class QuireDatabase : RoomDatabase() {
   abstract fun books(): BookDao
   abstract fun states(): StateDao
   abstract fun annotations(): AnnotationDao
+  abstract fun snapshots(): SnapshotDao
   abstract fun search(): SearchDao
 
   companion object {

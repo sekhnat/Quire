@@ -34,6 +34,7 @@ fun QuireApp(
   ),
 ) {
   androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { vm.onForeground() }
+  androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { vm.onAppStop() }
   val s by vm.state.collectAsStateWithLifecycle()
   val lib by vm.library.collectAsStateWithLifecycle()
   Box(Modifier.fillMaxSize().background(Nq.bg)) {

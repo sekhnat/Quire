@@ -1,6 +1,8 @@
 package com.quire.reader.ui.detail
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -187,6 +189,9 @@ fun DetailScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
 @Composable
 private fun EditSheet(open: Boolean, book: Book, vm: QuireViewModel) {
   var newTag by remember(book.id, open) { mutableStateOf("") }
+  val notesExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+    if (uri != null) vm.exportNotes(book.id, uri)
+  }
   SheetHost(open, { vm.openEdit(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
     Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       QText("Edit in Quire", 17f, weight = 500)
@@ -209,6 +214,7 @@ private fun EditSheet(open: Boolean, book: Book, vm: QuireViewModel) {
         QTextField(newTag, { newTag = it }, "Add a tag", leadingIcon = Ic.Plus, onSubmit = { if (newTag.isNotBlank()) { vm.addTag(book.id, newTag); newTag = "" } })
       }
       QText("Your tags (outlined in purple) can be removed here. Tags that came with the book can only be changed in Calibre. Your changes stay in Quire.", 11.5f, color = Nq.neutral500, lh = 1.4f)
+      QButton("Export notes", { notesExport.launch("${book.title} — notes.md") }, Modifier.fillMaxWidth(), icon = Ic.FileDown, size = 12.5f)
     }
   }
 }
