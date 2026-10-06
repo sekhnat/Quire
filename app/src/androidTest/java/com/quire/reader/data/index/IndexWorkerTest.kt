@@ -38,7 +38,7 @@ class IndexWorkerTest {
     runBlocking {
       app.settings.setIndexingEnabled(true)
       app.settings.setIndexChargingOnly(false)
-      app.database.index().clearAll()
+      app.indexer.clearIndex()
       folderId = app.database.folders().insert(FolderEntity(path = dir.absolutePath))
     }
   }
@@ -62,7 +62,7 @@ class IndexWorkerTest {
   }
 
   private suspend fun status(bookId: Long): String? =
-    app.database.openHelper.readableDatabase.query("SELECT status FROM index_state WHERE bookId = ?", arrayOf<Any>(bookId)).use { if (it.moveToFirst()) it.getString(0) else null }
+    app.indexDatabase.states().of(bookId)?.status
 
   private suspend fun awaitStatus(bookId: Long, expected: String) = withTimeout(60_000) {
     while (status(bookId) != expected) delay(250)

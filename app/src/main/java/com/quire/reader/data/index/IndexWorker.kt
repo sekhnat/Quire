@@ -22,11 +22,9 @@ class IndexWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     indexer.setPermissionMissing(!hasAccess)
     // A reader that is open or opening keeps the CPU and storage to itself; closing it requests indexing again.
     if (!hasAccess || indexer.readerBusy.value) return Result.success()
-    val t0 = System.currentTimeMillis() // SCALE-PROBE
-    android.util.Log.i("ScaleProbe", "batch start id=$id attempt=$runAttemptCount") // SCALE-PROBE
     val result = indexer.runBatch(System.currentTimeMillis() + BATCH_MILLIS)
-    android.util.Log.i("ScaleProbe", "batch end id=$id processed=${result.processed} stop=${result.stop} ms=${System.currentTimeMillis() - t0}") // SCALE-PROBE
     if (result.needsContinuation) indexer.request()
+    if (result.stop == BatchStop.Drained) indexer.optimizeIfDue()
     return Result.success()
   }
 

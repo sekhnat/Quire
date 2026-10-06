@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextStatusFilter
 import com.quire.reader.data.scan.FolderCandidate
@@ -64,6 +65,8 @@ data class UiState(
   /** What the search field looks at; the text typed for [SearchScope.Text] is kept apart from [query]. */
   val searchScope: SearchScope = SearchScope.Metadata,
   val textLibraryQuery: String = "",
+  /** How "Inside books" results are ordered; follows the saved setting. */
+  val textSearchOrder: SearchOrder = SearchOrder.Relevance,
   val layout: LibLayout = LibLayout.Grid,
   val importOpen: Boolean = false,
 

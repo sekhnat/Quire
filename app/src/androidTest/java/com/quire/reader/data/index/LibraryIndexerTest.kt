@@ -3,6 +3,7 @@ package com.quire.reader.data.index
 import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.DbTestCase
+import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.IndexStateEntity
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.reader.PublicationLoader
@@ -12,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -31,12 +33,17 @@ class LibraryIndexerTest : DbTestCase() {
     epubDir.deleteRecursively()
   }
 
-  private class Fixture(val db: QuireDatabase, val folderId: Long, val indexer: LibraryIndexer)
+  private class Fixture(val db: QuireDatabase, val index: IndexDatabase, val folderId: Long, val indexer: LibraryIndexer)
 
   private fun fixture(): Fixture {
     val db = open()
-    return Fixture(db, folder(db), LibraryIndexer(target, db, PublicationLoader(target), SettingsStore(target), scope))
+    val index = openIndex()
+    return Fixture(db, index, folder(db), LibraryIndexer(target, db, index, PublicationLoader(target), SettingsStore(target), scope))
   }
+
+  /** The chapter label of each of a book's chunks, in reading order. */
+  private fun Fixture.chapters(bookId: Long) =
+    index.rows("SELECT s.value FROM chunk c JOIN book_string s ON s.book_id = c.book_id AND s.idx = c.chapter_idx WHERE c.book_id = ? ORDER BY c.seq", bookId).map { it[0] }
 
   /** Adds a book row describing [file] the way a scan would. */
   private fun Fixture.add(name: String, file: File, addedAt: Long = 0): BookEntity = runBlocking {
@@ -65,29 +72,35 @@ class LibraryIndexerTest : DbTestCase() {
     val result = f.indexer.runBatch(deadline)
 
     assertEquals(BatchResult(processed = 1, stop = BatchStop.Drained), result)
-    val state = f.db.stateOf(book.id)!!
+    val state = f.index.stateOf(book.id)!!
     assertEquals(IndexStateEntity.STATUS_DONE, state.status)
     assertFalse(state.truncated)
-    assertEquals(f.db.chunkCount(book.id), state.chunkCount)
-    assertEquals(1, f.db.hits("highbury").size)
-    assertEquals(1, f.db.hits("knightley").size)
-    val chapters = f.db.openHelper.writableDatabase.rows("SELECT chapter FROM text_chunk WHERE bookId = ? ORDER BY seq", book.id).map { it[0] }
-    assertEquals(listOf("Volume One", "Volume Two"), chapters)
-    val mappings = f.db.chunkMappings(book.id)
-    assertTrue(mappings.isNotEmpty())
-    assertTrue(mappings.none { it.contains("cssSelector") })
-    assertTrue(mappings.all { it.contains("href") })
-    assertEquals(emptyList<Any>(), f.db.index().eligibleBooks())
+    assertEquals(f.index.chunkCount(book.id), state.chunkCount)
+    assertEquals(1, f.index.hits("highbury").size)
+    assertEquals(1, f.index.hits("knightley").size)
+    assertEquals(listOf("Volume One", "Volume Two"), f.chapters(book.id))
+    // Every chunk's binary mapping reads back against its text, and its resource is one of the book's documents.
+    val rows = f.index.rows(
+      "SELECT c.text, hex(c.mapping), s.value, s.media_type FROM chunk c JOIN book_string s ON s.book_id = c.book_id AND s.idx = c.href_idx WHERE c.book_id = ? ORDER BY c.seq", book.id,
+    )
+    assertEquals(state.chunkCount, rows.size)
+    for ((text, hex, href, mediaType) in rows) {
+      val blob = hex!!.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+      assertTrue(MappingCodec.decode(blob, text!!.length).isNotEmpty())
+      assertTrue(href!!.endsWith(".xhtml"))
+      assertEquals("application/xhtml+xml", mediaType)
+    }
+    assertEquals(emptyList<Any>(), f.indexer.catalog.eligibleBooks())
   }
 
   @Test fun `an unchanged book is not read again`() = runBlocking {
     val f = fixture()
     val book = f.add("Emma", epub("emma", EpubFixtures.chapter("One", "Highbury was quiet.")))
     f.indexer.runBatch(deadline)
-    val completedAt = f.db.stateOf(book.id)!!.completedAt
+    val completedAt = f.index.stateOf(book.id)!!.completedAt
 
     assertEquals(BatchResult(processed = 0, stop = BatchStop.Drained), f.indexer.runBatch(deadline))
-    assertEquals(completedAt, f.db.stateOf(book.id)!!.completedAt)
+    assertEquals(completedAt, f.index.stateOf(book.id)!!.completedAt)
   }
 
   @Test fun `a changed file replaces the stale chunks`() = runBlocking {
@@ -95,16 +108,16 @@ class LibraryIndexerTest : DbTestCase() {
     val file = epub("emma", EpubFixtures.chapter("One", "Highbury was quiet."))
     val book = f.add("Emma", file)
     f.indexer.runBatch(deadline)
-    assertEquals(1, f.db.hits("highbury").size)
+    assertEquals(1, f.index.hits("highbury").size)
 
     val changed = f.change(book, file, listOf(EpubFixtures.chapter("One", "Hartfield in the evening.")))
-    assertEquals(1, f.db.index().eligibleBooks().size)
+    assertEquals(1, f.indexer.catalog.eligibleBooks().size)
     f.indexer.runBatch(deadline)
 
-    assertEquals(emptyList<Long>(), f.db.hits("highbury"))
-    assertEquals(1, f.db.hits("hartfield").size)
-    assertEquals(changed.mtime, f.db.stateOf(book.id)!!.mtime)
-    assertEquals(IndexStateEntity.STATUS_DONE, f.db.stateOf(book.id)!!.status)
+    assertEquals(emptyList<Long>(), f.index.hits("highbury"))
+    assertEquals(1, f.index.hits("hartfield").size)
+    assertEquals(changed.mtime, f.index.stateOf(book.id)!!.mtime)
+    assertEquals(IndexStateEntity.STATUS_DONE, f.index.stateOf(book.id)!!.status)
   }
 
   @Test fun `a file that changed since the last scan is set aside and the previous index stays`() = runBlocking {
@@ -119,9 +132,9 @@ class LibraryIndexerTest : DbTestCase() {
     val result = f.indexer.runBatch(deadline)
 
     assertEquals(BatchResult(processed = 0, stop = BatchStop.Drained), result)
-    assertEquals(1, f.db.hits("highbury").size)
-    assertEquals(emptyList<Long>(), f.db.hits("hartfield"))
-    assertEquals(book.mtime, f.db.stateOf(book.id)!!.mtime)
+    assertEquals(1, f.index.hits("highbury").size)
+    assertEquals(emptyList<Long>(), f.index.hits("hartfield"))
+    assertEquals(book.mtime, f.index.stateOf(book.id)!!.mtime)
   }
 
   @Test fun `a vanished file is neither failed nor skipped`() = runBlocking {
@@ -131,8 +144,8 @@ class LibraryIndexerTest : DbTestCase() {
     file.delete()
 
     assertEquals(BatchResult(processed = 0, stop = BatchStop.Drained), f.indexer.runBatch(deadline))
-    assertNull(f.db.stateOf(book.id))
-    assertEquals(listOf(book.id), f.db.index().eligibleBooks().map { it.id })
+    assertNull(f.index.stateOf(book.id))
+    assertEquals(listOf(book.id), f.indexer.catalog.eligibleBooks().map { it.id })
   }
 
   @Test fun `an epub without text is skipped`() = runBlocking {
@@ -142,10 +155,10 @@ class LibraryIndexerTest : DbTestCase() {
 
     f.indexer.runBatch(deadline)
 
-    val state = f.db.stateOf(book.id)!!
+    val state = f.index.stateOf(book.id)!!
     assertEquals(IndexStateEntity.STATUS_SKIPPED, state.status)
-    assertEquals(0, f.db.chunkCount(book.id))
-    assertEquals(emptyList<Any>(), f.db.index().eligibleBooks())
+    assertEquals(0, f.index.chunkCount(book.id))
+    assertEquals(emptyList<Any>(), f.indexer.catalog.eligibleBooks())
   }
 
   @Test fun `a damaged archive is failed once and not retried`() = runBlocking {
@@ -153,7 +166,7 @@ class LibraryIndexerTest : DbTestCase() {
     val book = f.add("Broken", EpubFixtures.writeCorrupt(File(epubDir, "broken.epub")))
 
     assertEquals(1, f.indexer.runBatch(deadline).processed)
-    assertEquals(IndexStateEntity.STATUS_FAILED, f.db.stateOf(book.id)!!.status)
+    assertEquals(IndexStateEntity.STATUS_FAILED, f.index.stateOf(book.id)!!.status)
     assertEquals(0, f.indexer.runBatch(deadline).processed)
   }
 
@@ -168,19 +181,19 @@ class LibraryIndexerTest : DbTestCase() {
     f.db.books().update(book.copy(mtime = file.lastModified(), sizeBytes = file.length()))
     f.indexer.runBatch(deadline)
 
-    assertEquals(IndexStateEntity.STATUS_FAILED, f.db.stateOf(book.id)!!.status)
-    assertEquals(emptyList<Long>(), f.db.hits("highbury"))
+    assertEquals(IndexStateEntity.STATUS_FAILED, f.index.stateOf(book.id)!!.status)
+    assertEquals(emptyList<Long>(), f.index.hits("highbury"))
   }
 
   @Test fun `newest added books are indexed first and unreadable books are never queued`() = runBlocking {
     val f = fixture()
     val old = f.add("Old", epub("old", EpubFixtures.chapter("One", "Oldword text.")), addedAt = 1)
     val new = f.add("New", epub("new", EpubFixtures.chapter("One", "Newword text.")), addedAt = 2)
-    assertEquals(listOf(new.id, old.id), f.db.index().eligibleBooks().map { it.id })
+    assertEquals(listOf(new.id, old.id), f.indexer.catalog.eligibleBooks().map { it.id })
 
     // A deadline already in the past stops before the first book.
     assertEquals(BatchResult(processed = 0, stop = BatchStop.Deadline), f.indexer.runBatch(System.currentTimeMillis() - 1))
-    assertEquals(2, f.db.index().eligibleBooks().size)
+    assertEquals(2, f.indexer.catalog.eligibleBooks().size)
   }
 
   @Test fun `an open reader keeps the batch from starting`() = runBlocking {
@@ -189,7 +202,7 @@ class LibraryIndexerTest : DbTestCase() {
     f.indexer.setReaderBusy(true)
 
     assertEquals(BatchResult(processed = 0, stop = BatchStop.ReaderBusy), f.indexer.runBatch(deadline))
-    assertNull(f.db.stateOf(book.id))
+    assertNull(f.index.stateOf(book.id))
 
     f.indexer.setReaderBusy(false)
     assertEquals(1, f.indexer.runBatch(deadline).processed)
@@ -206,9 +219,9 @@ class LibraryIndexerTest : DbTestCase() {
     val result = running.await()
 
     assertEquals(BatchResult(processed = 0, stop = BatchStop.ReaderBusy), result)
-    assertNull(f.db.stateOf(book.id))
-    assertEquals(0, f.db.chunkCount(book.id))
-    assertEquals(listOf(book.id), f.db.index().eligibleBooks().map { it.id })
+    assertNull(f.index.stateOf(book.id))
+    assertEquals(0, f.index.chunkCount(book.id))
+    assertEquals(listOf(book.id), f.indexer.catalog.eligibleBooks().map { it.id })
   }
 
   @Test fun `cancelling mid-book leaves the previous index and no terminal write`() = runBlocking {
@@ -216,7 +229,7 @@ class LibraryIndexerTest : DbTestCase() {
     val file = epub("big", EpubFixtures.chapter("One", "Highbury was quiet."))
     val book = f.add("Big", file)
     f.indexer.runBatch(deadline)
-    val before = f.db.stateOf(book.id)!!
+    val before = f.index.stateOf(book.id)!!
     val changed = f.change(book, file, bigChapters("Marmalade"))
     val running = async(Dispatchers.Default) { f.indexer.runBatch(deadline) }
     delay(400)
@@ -225,17 +238,17 @@ class LibraryIndexerTest : DbTestCase() {
     runCatching { running.await() }
 
     assertTrue("the batch finished before it could be cancelled; make the fixture bigger", running.isCancelled)
-    assertEquals(before, f.db.stateOf(book.id))
-    assertEquals(1, f.db.hits("highbury").size)
-    assertEquals(emptyList<Long>(), f.db.hits("marmalade"))
-    assertEquals(listOf(changed.id), f.db.index().eligibleBooks().map { it.id })
+    assertEquals(before, f.index.stateOf(book.id))
+    assertEquals(1, f.index.hits("highbury").size)
+    assertEquals(emptyList<Long>(), f.index.hits("marmalade"))
+    assertEquals(listOf(changed.id), f.indexer.catalog.eligibleBooks().map { it.id })
   }
 
   @Test fun `clearing the index while a book is being read keeps it from reappearing`() = runBlocking {
     val f = fixture()
     val other = f.add("Other", epub("other", EpubFixtures.chapter("One", "Persuasion text.")), addedAt = 1)
     f.indexer.runBatch(deadline)
-    assertEquals(IndexStateEntity.STATUS_DONE, f.db.stateOf(other.id)!!.status)
+    assertEquals(IndexStateEntity.STATUS_DONE, f.index.stateOf(other.id)!!.status)
     val big = f.add("Big", epub("big", *bigChapters("Marmalade").toTypedArray()), addedAt = 2)
     val running = async(Dispatchers.Default) { f.indexer.runBatch(deadline) }
     delay(400)
@@ -244,11 +257,11 @@ class LibraryIndexerTest : DbTestCase() {
     val result = running.await()
 
     assertEquals(BatchStop.Superseded, result.stop)
-    assertEquals(0, f.db.chunkCount())
-    assertNull(f.db.stateOf(big.id))
-    assertNull(f.db.stateOf(other.id))
-    assertEquals(emptyList<Long>(), f.db.hits("marmalade"))
-    assertEquals(emptyList<Long>(), f.db.hits("persuasion"))
+    assertEquals(0, f.index.chunkCount())
+    assertNull(f.index.stateOf(big.id))
+    assertNull(f.index.stateOf(other.id))
+    assertEquals(emptyList<Long>(), f.index.hits("marmalade"))
+    assertEquals(emptyList<Long>(), f.index.hits("persuasion"))
   }
 
   @Test fun `after the index was cleared the library is indexed again from scratch`() = runBlocking {
@@ -257,9 +270,9 @@ class LibraryIndexerTest : DbTestCase() {
     f.indexer.runBatch(deadline)
 
     f.indexer.clearIndex()
-    assertEquals(listOf(book.id), f.db.index().eligibleBooks().map { it.id })
+    assertEquals(listOf(book.id), f.indexer.catalog.eligibleBooks().map { it.id })
     assertEquals(1, f.indexer.runBatch(deadline).processed)
-    assertEquals(1, f.db.hits("highbury").size)
+    assertEquals(1, f.index.hits("highbury").size)
   }
 
   /** Three chapters of sixty paragraphs (about 4 KB each, past the 2 KB where jsoup starts misreading `<title/>`), every resource with [head] in its `<head>`; the last chapter mentions a quokka. */
@@ -278,11 +291,11 @@ class LibraryIndexerTest : DbTestCase() {
 
     f.indexer.runBatch(deadline)
 
-    val state = f.db.stateOf(selfClosing.id)!!
+    val state = f.index.stateOf(selfClosing.id)!!
     assertEquals(IndexStateEntity.STATUS_DONE, state.status)
     assertEquals(0, state.unreadableResources)
-    assertEquals(f.db.chunkTexts(closed.id), f.db.chunkTexts(selfClosing.id))
-    assertTrue(f.db.chunkTexts(selfClosing.id).any { it.contains("quokka") })
+    assertEquals(f.index.chunkTexts(closed.id), f.index.chunkTexts(selfClosing.id))
+    assertTrue(f.index.chunkTexts(selfClosing.id).any { it.contains("quokka") })
   }
 
   @Test fun `a book with one unreadable chapter is indexed from the rest and says so`() = runBlocking {
@@ -291,13 +304,12 @@ class LibraryIndexerTest : DbTestCase() {
 
     f.indexer.runBatch(deadline)
 
-    val state = f.db.stateOf(book.id)!!
+    val state = f.index.stateOf(book.id)!!
     assertEquals(IndexStateEntity.STATUS_DONE, state.status)
     assertEquals(1, state.unreadableResources)
     assertFalse(state.truncated)
-    assertTrue(f.db.chunkTexts(book.id).any { it.contains("quokka") })
-    val chapters = f.db.openHelper.writableDatabase.rows("SELECT DISTINCT chapter FROM text_chunk WHERE bookId = ?", book.id).map { it[0] }.toSet()
-    assertEquals(setOf("Chapter 0", "Chapter 2"), chapters)
+    assertTrue(f.index.chunkTexts(book.id).any { it.contains("quokka") })
+    assertEquals(setOf("Chapter 0", "Chapter 2"), f.chapters(book.id).toSet())
   }
 
   @Test fun `a book none of whose chapters can be read fails instead of being skipped`() = runBlocking {
@@ -306,7 +318,37 @@ class LibraryIndexerTest : DbTestCase() {
 
     assertEquals(1, f.indexer.runBatch(deadline).processed)
 
-    assertEquals(IndexStateEntity.STATUS_FAILED, f.db.stateOf(book.id)!!.status)
-    assertEquals(0, f.db.chunkCount(book.id))
+    assertEquals(IndexStateEntity.STATUS_FAILED, f.index.stateOf(book.id)!!.status)
+    assertEquals(0, f.index.chunkCount(book.id))
+  }
+
+  @Test fun `a book that left the library is swept from the index before the next batch`() = runBlocking {
+    val f = fixture()
+    val kept = f.add("Kept", epub("kept", EpubFixtures.chapter("One", "Highbury was quiet.")))
+    val gone = f.add("Gone", epub("gone", EpubFixtures.chapter("One", "Hartfield in the evening.")))
+    f.indexer.runBatch(deadline)
+    assertEquals(1, f.index.hits("hartfield").size)
+
+    f.db.books().delete(listOf(gone.id))
+    f.indexer.runBatch(deadline)
+
+    assertEquals(emptyList<Long>(), f.index.hits("hartfield"))
+    assertNull(f.index.stateOf(gone.id))
+    assertEquals(1, f.index.hits("highbury").size)
+    assertEquals(IndexStateEntity.STATUS_DONE, f.index.stateOf(kept.id)!!.status)
+  }
+
+  @Test fun `the one-off merge waits for a first build that put text in the index`() = runBlocking<Unit> {
+    val f = fixture()
+    val settings = SettingsStore(target)
+    settings.setIndexOptimized(false)
+    f.indexer.optimizeIfDue() // nothing indexed: must not be recorded as done
+    assertFalse(settings.indexOptimized.first())
+    f.add("Emma", epub("emma", EpubFixtures.chapter("One", "Highbury was quiet.")))
+    f.indexer.runBatch(deadline)
+    f.indexer.optimizeIfDue()
+    // Done when charging, still waiting otherwise; either way the index keeps answering.
+    assertEquals(1, f.index.hits("highbury").size)
+    settings.setIndexOptimized(false)
   }
 }

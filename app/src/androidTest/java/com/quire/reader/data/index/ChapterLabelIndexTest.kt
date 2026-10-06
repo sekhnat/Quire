@@ -2,6 +2,7 @@ package com.quire.reader.data.index
 
 import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.db.DbTestCase
+import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.reader.PublicationLoader
 import kotlinx.coroutines.CoroutineScope
@@ -28,30 +29,29 @@ class ChapterLabelIndexTest : DbTestCase() {
     epubDir.deleteRecursively()
   }
 
-  private class Indexed(val db: QuireDatabase, val bookId: Long) {
+  private inner class Indexed(val db: QuireDatabase, val index: IndexDatabase, val bookId: Long) {
     private fun query(input: String) = FtsQuery.parse(input) as FtsQuery.Result.Query
 
     /** The chapter labels of every snippet for [input], in reading order. */
-    fun chapters(input: String): List<String> = runBlocking { TextSearcher(db).page(query(input), bookId) }.snippets.map { it.chapter }
+    fun chapters(input: String): List<String> = runBlocking { TextSearcher(db, index).page(query(input), bookId) }.snippets.map { it.chapter }
 
     fun chapterOf(word: String): String = chapters(word).single()
 
     /** The text of every stored chunk, in reading order. */
-    fun chunkTexts(): List<String> = db.openHelper.writableDatabase.query("SELECT text FROM text_chunk WHERE bookId = $bookId ORDER BY seq").use { c ->
-      buildList { while (c.moveToNext()) add(c.getString(0)) }
-    }
+    fun chunkTexts(): List<String> = index.chunkTexts(bookId)
   }
 
   private fun index(name: String, resources: List<FixtureResource>, toc: List<FixtureToc>): Indexed {
     val file = EpubFixtures.write(File(epubDir, "$name.epub"), resources, toc)
     val db = open()
+    val index = openIndex()
     val book = runBlocking {
       val entity = bookEntity(folder(db), name).copy(path = file.absolutePath, mtime = file.lastModified(), sizeBytes = file.length())
       entity.copy(id = db.books().save(entity, emptyList()))
     }
-    val indexer = LibraryIndexer(target, db, PublicationLoader(target), SettingsStore(target), scope)
+    val indexer = LibraryIndexer(target, db, index, PublicationLoader(target), SettingsStore(target), scope)
     assertEquals(BatchResult(processed = 1, stop = BatchStop.Drained), runBlocking { indexer.runBatch(System.currentTimeMillis() + 60_000) })
-    return Indexed(db, book.id)
+    return Indexed(db, index, book.id)
   }
 
   @Test fun `chapters sharing one file are labelled from their anchors wherever the anchor sits`() {
@@ -120,7 +120,7 @@ class ChapterLabelIndexTest : DbTestCase() {
     assertTrue(chunks[1].startsWith("Startwordtwo opens"))
   }
 
-  @Test fun `a phrase that runs across a chapter boundary takes the chapter where it begins`() {
+  @Test fun `a phrase that runs across a chapter boundary is not found because chunks never span chapters`() {
     val book = index(
       "phrase",
       listOf(
@@ -132,7 +132,9 @@ class ChapterLabelIndexTest : DbTestCase() {
       ),
       listOf(FixtureToc("book.xhtml", "one", "Chapter One"), FixtureToc("book.xhtml", "two", "Chapter Two")),
     )
-    assertEquals(listOf("Chapter One"), book.chapters("\"silver lanterns swinging\""))
+    // Without overlap, a phrase is found only inside one chunk, and a chapter always starts a new one (documented in the README).
+    assertEquals(emptyList<String>(), book.chapters("\"silver lanterns swinging\""))
+    assertEquals(listOf("Chapter One"), book.chapters("\"first chapter ends with silver lanterns\""))
     assertEquals("Chapter Two", book.chapterOf("swinging"))
   }
 

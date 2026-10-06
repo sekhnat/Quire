@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.quire.reader.data.index.SearchOrder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -35,6 +36,14 @@ class SettingsStore(context: Context) {
   suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
   suspend fun setCoversBackfilled(v: Boolean) = store.edit { it[COVERS_BACKFILLED] = v }
 
+  /** Whether the full-text index was merged into its fastest form after the first complete build; cleared when the index is. */
+  val indexOptimized: Flow<Boolean> = flow(INDEX_OPTIMIZED, false)
+  suspend fun setIndexOptimized(v: Boolean) = store.edit { it[INDEX_OPTIMIZED] = v }
+
+  /** How library text search orders the books it finds. */
+  val textSearchOrder: Flow<SearchOrder> = store.data.map { p -> SearchOrder.entries.firstOrNull { it.name == p[TEXT_SEARCH_ORDER] } ?: SearchOrder.Relevance }
+  suspend fun setTextSearchOrder(v: SearchOrder) = store.edit { it[TEXT_SEARCH_ORDER] = v.name }
+
   /** The reading settings new books start with. */
   val readerDefaults: Flow<ReaderPrefs> = store.data.map { ReaderPrefs.fromJson(it[READER_DEFAULTS]) ?: ReaderPrefs() }
   suspend fun setReaderDefaults(prefs: ReaderPrefs) = store.edit { it[READER_DEFAULTS] = prefs.toJson() }
@@ -52,5 +61,7 @@ class SettingsStore(context: Context) {
     val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     val BRIGHTNESS = intPreferencesKey("brightness")
+    val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
+    val TEXT_SEARCH_ORDER = stringPreferencesKey("text_search_order")
   }
 }

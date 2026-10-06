@@ -25,6 +25,7 @@ import com.quire.reader.reader.STALE_TARGET_MESSAGE
 import com.quire.reader.reader.SearchHit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import androidx.room.useReaderConnection
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
@@ -424,12 +425,13 @@ class ReaderTargetTest {
   // ── helpers ───────────────────────────────────────────────────────────────
 
   /** A few consecutive words from the middle of the book's text, quoted, so the search is a phrase that exists. */
-  private fun phrase(): String {
-    val db = app.database.openHelper.writableDatabase
-    val seq = db.query("SELECT chunkCount FROM index_state WHERE bookId = ${book.id}").use { it.moveToFirst(); it.getInt(0) } / 2
-    val text = db.query("SELECT text FROM text_chunk WHERE bookId = ${book.id} AND seq = $seq").use { it.moveToFirst(); it.getString(0) }
+  private fun phrase(): String = runBlocking {
+    val state = app.indexDatabase.states().of(book.id)!!
+    // A middle chunk, whole inside one chunk, so the phrase is found there (a phrase across two chunks would not be).
+    val id = state.firstChunkId!! + state.chunkCount / 2
+    val text = app.indexDatabase.useReaderConnection { c -> c.usePrepared("SELECT text FROM chunk WHERE id = $id") { it.step(); it.getText(0) } }
     val words = text.split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
-    return ("\"" + words.drop(8).take(4).joinToString(" ") + "\"")
+    "\"" + words.drop(8).take(4).joinToString(" ") + "\""
   }
 
   private fun firstSnippet(query: String): Snippet = runBlocking {
