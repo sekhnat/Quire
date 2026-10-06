@@ -144,6 +144,9 @@ abstract class BookDao {
   @Query("SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath, missingSince IS NOT NULL AS missing, fingerprint IS NOT NULL AS hasIdentity FROM book")
   abstract suspend fun knownFiles(): List<KnownFile>
   @Query("SELECT * FROM book WHERE id = :id") abstract suspend fun byId(id: Long): BookEntity?
+  @Query("SELECT * FROM book WHERE path = :path") abstract suspend fun byPath(path: String): BookEntity?
+  /** Includes missing rows: a restored snapshot is auto-imported only into an empty library. */
+  @Query("SELECT COUNT(*) FROM book") abstract suspend fun totalCount(): Int
 
   /** Ids of every book in the library (missing ones are not); the index keeps text for these only. */
   @Query("SELECT id FROM book WHERE missingSince IS NULL") abstract suspend fun presentIds(): List<Long>
@@ -164,6 +167,7 @@ abstract class BookDao {
   @Query("DELETE FROM book_tag WHERE bookId = :bookId AND origin = :origin") abstract suspend fun deleteTags(bookId: Long, origin: String)
   @Query("DELETE FROM book_tag WHERE bookId = :bookId AND tag = :tag AND origin = 'user'") abstract suspend fun deleteUserTag(bookId: Long, tag: String)
 
+  @Query("SELECT tag FROM book_tag WHERE bookId = :bookId AND origin = 'user'") abstract suspend fun userTags(bookId: Long): List<String>
   /**
    * Writes a scanned book and replaces its Calibre tags in one transaction. The row id is kept when the
    * file was already known so reading state, bookmarks and highlights stay attached.
@@ -300,10 +304,12 @@ abstract class StateDao {
 @Dao
 interface AnnotationDao {
   @Query("SELECT * FROM bookmark WHERE bookId = :bookId ORDER BY progress") fun observeBookmarks(bookId: Long): Flow<List<BookmarkEntity>>
+  @Query("SELECT * FROM bookmark WHERE bookId = :bookId ORDER BY progress, id") suspend fun bookmarksOf(bookId: Long): List<BookmarkEntity>
   @Insert suspend fun addBookmark(b: BookmarkEntity): Long
   @Query("DELETE FROM bookmark WHERE id = :id") suspend fun deleteBookmark(id: Long)
 
   @Query("SELECT * FROM highlight WHERE bookId = :bookId ORDER BY progress") fun observeHighlights(bookId: Long): Flow<List<HighlightEntity>>
+  @Query("SELECT * FROM highlight WHERE bookId = :bookId ORDER BY progress, id") suspend fun highlightsOf(bookId: Long): List<HighlightEntity>
   @Insert suspend fun addHighlight(h: HighlightEntity): Long
   @Query("DELETE FROM highlight WHERE id = :id") suspend fun deleteHighlight(id: Long)
   @Query("UPDATE highlight SET note = :note WHERE id = :id") suspend fun setHighlightNote(id: Long, note: String?)

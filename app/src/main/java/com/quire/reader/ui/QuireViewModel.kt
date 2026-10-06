@@ -2,12 +2,19 @@ package com.quire.reader.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.net.Uri
 import com.quire.reader.QuireApplication
+import com.quire.reader.data.backup.ImportResult
+import com.quire.reader.data.backup.NotesExporter
+import com.quire.reader.data.backup.SnapshotCodec
+import com.quire.reader.data.backup.SnapshotImporter
+import com.quire.reader.data.backup.identityKeyFor
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.IndexActivity
+import com.quire.reader.data.index.IndexStorageBytes
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.db.BookmarkEntity
@@ -29,6 +36,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
+import android.util.Log
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.getOrElse
@@ -77,9 +85,9 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   val indexActivity: StateFlow<IndexActivity> = app.indexer.activity
   val indexedTextBytes: StateFlow<Long> = repo.indexedTextBytes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
 
-  private val _databaseBytes = MutableStateFlow<Long?>(null)
-  /** Disk used by the library database, or null until first measured. */
-  val databaseBytes: StateFlow<Long?> = _databaseBytes
+  private val _storageBytes = MutableStateFlow<IndexStorageBytes?>(null)
+  /** Disk the library and the search index each take, or null until first measured. */
+  val storageBytes: StateFlow<IndexStorageBytes?> = _storageBytes
 
   /**
    * The library's "Inside books" search: the status for the typed text and the active filters, with the index
@@ -104,8 +112,12 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   init {
     viewModelScope.launch {
+      // Restore detection runs first: on a restored install it overrides the backed-up onboarding
+      // flag and applies the snapshot's settings, which the rest of routing and scanning then follow.
+      app.restore.prepare()
       val done = settings.onboardingDone.first()
-      edit { copy(screen = if (done) Screen.Library else Screen.Onboard, hasAccess = StoragePaths.hasAllFilesAccess(), useCalibre = true) }
+      val useCalibre = settings.useCalibre.first()
+      edit { copy(screen = if (done) Screen.Library else Screen.Onboard, hasAccess = StoragePaths.hasAllFilesAccess(), useCalibre = useCalibre) }
     }
     viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
   }
@@ -219,6 +231,19 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   private var lastForegroundScan = 0L
 
   /**
+   * The app went to the background: the reader's latest position is saved first, then the snapshot is
+   * flushed, so the backed-up file never trails a page turn that happened just before leaving.
+   */
+  fun onAppStop() {
+    app.appScope.launch {
+      (_reader.value as? ReaderLoad.Ready)?.session?.let { session ->
+        session.current.value?.let { locator -> runCatching { savePosition(session, locator) } }
+      }
+      if (!app.snapshotWriter.flush()) Log.w("QuireViewModel", "snapshot flush on stop failed or is held back")
+    }
+  }
+
+  /**
    * Called whenever the app comes to the foreground. Rescans (quietly, and at most every couple of minutes)
    * so books copied in while Quire was in the background show up; only speaks up if something changed.
    */
@@ -275,6 +300,65 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun setRating(id: Long, rating: Int?) = viewModelScope.launch { repo.setUserRating(id, rating) }
   fun addTag(id: Long, tag: String) = viewModelScope.launch { repo.addTag(id, tag) }
   fun removeTag(id: Long, tag: String) = viewModelScope.launch { repo.removeTag(id, tag) }
+
+  // ── export and import ────────────────────────────────────────────────────
+
+  /** Writes the reading-data snapshot to a file the user picked (Settings → Export reading data). */
+  fun exportReadingData(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+    val ok = runCatching {
+      app.contentResolver.openOutputStream(uri)?.use { it.write(app.snapshotWriter.encoded().toByteArray(Charsets.UTF_8)) } != null
+    }.getOrDefault(false)
+    toast(if (ok) "Reading data exported" else "Couldn't write the file")
+  }
+
+  /** Merges a picked reading-data file into the library; what the library has is never overwritten. */
+  fun importReadingData(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+    val text = runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+    if (text == null) { toast("Couldn't read the file"); return@launch }
+    when (val decoded = SnapshotCodec.decode(text)) {
+      is SnapshotCodec.Decoded.Ok -> {
+        try {
+          val result = SnapshotImporter(app.database, app.settings).import(decoded.snapshot, applySettings = false)
+          app.snapshotWriter.flush()
+          toast(importSummary(result))
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          Log.w("QuireViewModel", "reading-data import failed", e)
+          toast("Couldn't import the reading data")
+        }
+      }
+      is SnapshotCodec.Decoded.UnsupportedVersion -> toast("That file was written by a newer Quire")
+      is SnapshotCodec.Decoded.Malformed -> toast("That file isn't Quire reading data")
+    }
+  }
+
+  /** Exports a book's highlights as Markdown; missing books export what they kept. */
+  fun exportNotes(bookId: Long, uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
+    val book = repo.book(bookId)
+    if (book == null) { toast("That book is no longer in the library"); return@launch }
+    val highlights = repo.highlights(bookId).first()
+    if (highlights.isEmpty()) { toast("No highlights to export"); return@launch }
+    val chapterTitles = if (book.missingSince == null && File(book.path).isFile) {
+      NotesExporter.chapterTitles(app.publicationLoader, book.path)
+    } else emptyMap()
+    val markdown = NotesExporter.markdown(book.title, book.author, identityKeyFor(book), highlights, chapterTitles)
+    val ok = runCatching {
+      app.contentResolver.openOutputStream(uri)?.use { it.write(markdown.toByteArray(Charsets.UTF_8)) } != null
+    }.getOrDefault(false)
+    toast(if (ok) "Notes exported" else "Couldn't write the file")
+  }
+
+  private fun importSummary(r: ImportResult): String = when {
+    !r.changed -> "Nothing to import"
+    else -> listOfNotNull(
+      if (r.matched > 0) "${r.matched} book${if (r.matched == 1) "" else "s"} updated" else null,
+      if (r.tombstoned > 0) "${r.tombstoned} kept under Missing books" else null,
+      if (r.highlightsAdded > 0) "${r.highlightsAdded} highlight${if (r.highlightsAdded == 1) "" else "s"}" else null,
+      if (r.bookmarksAdded > 0) "${r.bookmarksAdded} bookmark${if (r.bookmarksAdded == 1) "" else "s"}" else null,
+      if (r.tagsAdded > 0) "${r.tagsAdded} tag${if (r.tagsAdded == 1) "" else "s"}" else null,
+    ).joinToString(" · ")
+  }
 
   // ── reader ───────────────────────────────────────────────────────────────
 
@@ -453,8 +537,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun setIndexingEnabledSetting(v: Boolean) = viewModelScope.launch { repo.setIndexingEnabled(v) }
   fun setIndexChargingOnlySetting(v: Boolean) = viewModelScope.launch { repo.setIndexChargingOnly(v) }
 
-  /** Measures the database on disk off the main thread. */
-  fun refreshDatabaseBytes() { viewModelScope.launch { _databaseBytes.value = repo.databaseBytes() } }
+  /** Measures the library and index files on disk, off the main thread. */
+  fun refreshDatabaseBytes() = viewModelScope.launch(Dispatchers.IO) { _storageBytes.value = repo.storageBytes() }
 
   /** Clears the search index and indexes the library again under the current charging and reader rules. Books and reading state stay. */
   fun rebuildIndex() {
@@ -517,9 +601,12 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
           session.clearSelection(); toast("Copied")
         }
         SelectionAction.Highlight, SelectionAction.Note -> {
+          // The chapter goes into the locator's display title: note exports can label this highlight
+          // forever, even once the book is gone. Canonical keys ignore the title, so merging is unaffected.
+          val stamped = locator.copy(title = session.chapterTitle(locator).ifEmpty { locator.title })
           val id = repo.addHighlight(
             HighlightEntity(
-              bookId = session.book.id, locatorJson = locator.toJSON().toString(), text = locator.text.highlight.orEmpty(),
+              bookId = session.book.id, locatorJson = stamped.toJSON().toString(), text = locator.text.highlight.orEmpty(),
               progress = (locator.locations.totalProgression ?: 0.0).toFloat(), createdAt = System.currentTimeMillis(),
             ),
           )

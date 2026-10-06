@@ -22,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,6 +33,8 @@ import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.db.IndexCoverage
@@ -71,7 +74,7 @@ fun SettingsScreen(vm: QuireViewModel) {
   val coverage by vm.indexCoverage.collectAsStateWithLifecycle()
   val activity by vm.indexActivity.collectAsStateWithLifecycle()
   val textBytes by vm.indexedTextBytes.collectAsStateWithLifecycle()
-  val databaseBytes by vm.databaseBytes.collectAsStateWithLifecycle()
+  val storage by vm.storageBytes.collectAsStateWithLifecycle()
   val missing by vm.missingBooks.collectAsStateWithLifecycle()
   var confirmingDelete by remember { mutableStateOf(false) }
   BackHandler(enabled = confirmingDelete) { confirmingDelete = false }
@@ -80,6 +83,21 @@ fun SettingsScreen(vm: QuireViewModel) {
   BackHandler(enabled = forgetting != null) { forgetting = null }
   // The database grows as books are indexed, so measure again whenever the searchable count changes.
   LaunchedEffect(coverage?.searchable) { vm.refreshDatabaseBytes() }
+
+  // Document pickers. The picked book is remembered across the picker round trip, and a cancelled
+  // picker (null uri) changes nothing.
+  var pendingNotesFor by rememberSaveable { mutableStateOf<Long?>(null) }
+  val notesExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
+    val bookId = pendingNotesFor
+    pendingNotesFor = null
+    if (uri != null && bookId != null) vm.exportNotes(bookId, uri)
+  }
+  val readingDataExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+    if (uri != null) vm.exportReadingData(uri)
+  }
+  val readingDataImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    if (uri != null) vm.importReadingData(uri)
+  }
 
   Box(Modifier.fillMaxSize()) {
   Column(Modifier.fillMaxSize().background(Nq.bg).statusBarsPadding()) {
@@ -106,15 +124,39 @@ fun SettingsScreen(vm: QuireViewModel) {
         Toggle("Use Calibre metadata", "Series, tags and ratings from metadata.opf (applies on a full rescan)", useCalibre) { vm.setUseCalibreSetting(!useCalibre) }
       }
 
-      if (missing.isNotEmpty()) MissingBooks(missing) { forgetting = it }
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Kicker("Reading data")
+        QButton("Export reading data", { readingDataExport.launch("quire-reading-data.json") }, Modifier.fillMaxWidth(), icon = Ic.FileDown, size = 12.5f)
+        QButton(
+          "Import reading data",
+          { readingDataImport.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+          Modifier.fillMaxWidth(), icon = Ic.Plus, size = 12.5f,
+        )
+        QText(
+          "Your highlights, notes, bookmarks, reading positions, ratings, tags and settings as one file. Importing merges them into what you have; nothing here is overwritten.",
+          11.5f, color = Nq.neutral500, lh = 1.5f,
+        )
+      }
+
+      if (missing.isNotEmpty()) {
+        MissingBooks(
+          missing,
+          onForget = { forgetting = it },
+          onExportNotes = { row ->
+            pendingNotesFor = row.id
+            notesExport.launch("${row.title} — notes.md")
+          },
+        )
+      }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Kicker("Library search")
         Toggle("Index book text", "Lets you search inside books. Runs in the background and steps aside while you read.", indexing) { vm.setIndexingEnabledSetting(!indexing) }
         Toggle("Index only while charging", "Applies to all indexing, including updates for new and changed books.", chargingOnly) { vm.setIndexChargingOnlySetting(!chargingOnly) }
         LibrarySearchStatus(indexStatusText(coverage, activity, inSettings = true), coverage)
-        Value("Database storage", databaseBytes?.let(::formatBytes) ?: "…", "Everything Quire keeps on disk: library, reading state and search. Not the search index alone.")
-        Value("Indexed text", formatBytes(textBytes), "The book text stored for searching. The search index and position data built on it take more room.")
+        Value("Library storage", storage?.let { formatBytes(it.library) } ?: "…", "Books, reading state, highlights and notes. The search index lives in its own file, below.")
+        Value("Search index storage", storage?.let { formatBytes(it.index) } ?: "…", "The search index file: book text and the full-text tables built on it. Deleting the index or moving a book removes it, and nothing else.")
+        Value("Indexed text", formatBytes(textBytes), "How much of that is book text stored for searching.")
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           QButton("Rebuild index", vm::rebuildIndex, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = indexing)
           QText(
@@ -139,7 +181,7 @@ fun SettingsScreen(vm: QuireViewModel) {
 
 /** Books whose file is gone but whose reading history Quire keeps, each of which can be forgotten. */
 @Composable
-private fun MissingBooks(rows: List<MissingBookRow>, onForget: (List<MissingBookRow>) -> Unit) {
+private fun MissingBooks(rows: List<MissingBookRow>, onForget: (List<MissingBookRow>) -> Unit, onExportNotes: (MissingBookRow) -> Unit) {
   Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
     Kicker("Missing books")
     QText(
@@ -152,6 +194,7 @@ private fun MissingBooks(rows: List<MissingBookRow>, onForget: (List<MissingBook
           QText(row.title, 14f, maxLines = 1)
           QText("${row.author} · ${missingDetail(row)}", 11.5f, color = Nq.neutral500, maxLines = 2, lh = 1.4f)
         }
+        IconBtn(Ic.NotePencil, { onExportNotes(row) }, tint = Nq.neutral500, size = 32.dp, iconSize = 16.dp)
         IconBtn(Ic.X, { onForget(listOf(row)) }, tint = Nq.neutral500, size = 32.dp, iconSize = 16.dp)
       }
     }
