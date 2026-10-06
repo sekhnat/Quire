@@ -23,7 +23,7 @@ class DiffBench : BenchStep() {
     val v = Variant.valueOf(arg("variant"))
     val a = sets(Variant.A)
     val x = sets(v)
-    val db = SQLiteDatabase.openDatabase(File(dir, "$v.db").path, null, SQLiteDatabase.OPEN_READONLY)
+    val db = SQLiteDatabase.openDatabase(dbFile(v).path, null, SQLiteDatabase.OPEN_READONLY)
     val mem = IndexDriver().open(":memory:")
     mem.execSQL("CREATE VIRTUAL TABLE t USING fts5(text, tokenize='unicode61 remove_diacritics 2')")
     for (q in BENCH_QUERIES.filter { !it.page && it.filters.author == null && it.filters.tag == null && it.filters.status == null }) {
@@ -61,7 +61,7 @@ class SizeBench : BenchStep() {
   @Test fun sizes() {
     requireBench()
     val v = Variant.valueOf(arg("variant"))
-    val file = File(dir, "$v.db")
+    val file = dbFile(v)
     val total = listOf("", "-wal").sumOf { File(file.path + it).length() }
     val db = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY)
     val tables = runCatching {

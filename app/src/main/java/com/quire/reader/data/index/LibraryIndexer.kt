@@ -130,9 +130,34 @@ class LibraryIndexer(
       withContext(NonCancellable) {
         store.clearAll()
         store.incrementalVacuum()
+        settings.setIndexOptimized(false)
       }
     }
   }
+
+  /**
+   * Merges the full-text tables into one segment each, once, after the first complete build: queries are fastest then, and
+   * automerge keeps them close afterwards. A merge rewrites the whole index, so it only runs while the device is charging,
+   * with free space for a second copy, and never while a reader is open.
+   */
+  suspend fun optimizeIfDue() {
+    if (settings.indexOptimized.first() || _readerBusy.value || !isCharging()) return
+    val file = app.getDatabasePath(IndexDatabase.FILE_NAME)
+    val size = listOf("", "-wal").sumOf { File(file.path + it).length() }
+    if (file.parentFile!!.usableSpace < size) return
+    val started = System.currentTimeMillis()
+    // Step by step, so a reader opening (or the charger leaving) stops it at once; the next idle batch carries on.
+    while (true) {
+      currentCoroutineContext().ensureActive()
+      if (_readerBusy.value || !isCharging()) return
+      val done = mutex.withLock { withContext(NonCancellable) { store.mergeStep() } }
+      if (done) break
+    }
+    settings.setIndexOptimized(true)
+    Log.i(TAG, "optimized the index (${size / (1 shl 20)} MB) in ${System.currentTimeMillis() - started} ms")
+  }
+
+  private fun isCharging(): Boolean = app.getSystemService(android.os.BatteryManager::class.java)?.isCharging == true
 
   /**
    * Forgets the indexed text of books that left the library (deleted, or missing). The index is a separate database, so
@@ -174,7 +199,9 @@ class LibraryIndexer(
 
   private suspend fun batch(deadlineMillis: Long): BatchResult {
     val startEpoch = epoch.get()
-    withContext(NonCancellable) { dropLegacyIndex(db)?.let { Log.i(TAG, "dropped the old index from ${QuireDatabase.FILE_NAME} in $it ms") } }
+    // In slices that let other writers in, and stopping at once if a reader opens or the index is cleared; the next batch resumes.
+    dropLegacyIndex(db.openHelper.writableDatabase, keepGoing = { !_readerBusy.value && epoch.get() == startEpoch })
+      ?.let { Log.i(TAG, "dropped the old index from ${QuireDatabase.FILE_NAME} in $it ms") }
     sweep()
     val setAside = HashSet<Long>()
     var processed = 0

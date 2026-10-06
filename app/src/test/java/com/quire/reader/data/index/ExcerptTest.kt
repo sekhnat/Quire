@@ -145,4 +145,38 @@ class ExcerptTest {
     assertNull(MatchTarget("not json", "", "word", "", 0).fullLocatorJson())
     assertNotNull(MatchTarget("""{"a":1}""", "b", "w", "a", 0).fullLocatorJson())
   }
+
+  private fun ranges(text: String, input: String) = matchRanges(text, (FtsQuery.parse(input) as FtsQuery.Result.Query).terms).map { text.substring(it) }
+
+  @Test fun `match ranges find words phrases and prefixes with case and accents folded`() {
+    val text = "The Old House stood near Pemberley; Café au lait, naïve Zürich. The old house again."
+    assertEquals(listOf("House", "house"), ranges(text, "house "))
+    assertEquals(listOf("Old House", "old house"), ranges(text, "\"old house\""))
+    assertEquals(listOf("Pemberley"), ranges(text, "pember"))
+    assertEquals(listOf("Café", "naïve", "Zürich"), ranges(text, "CAFE naive zurich "))
+    assertEquals(emptyList<String>(), ranges(text, "\"house old\""))
+    assertEquals(listOf("The", "The"), ranges(text, "\"the\""))
+    assertEquals(listOf("The Old", "The old"), ranges(text, "\"the old\""))
+  }
+
+  @Test fun `an unfinished phrase prefix and the exact word differ only in the last word`() {
+    val text = "Hartfield, Hartfields and Hart."
+    assertEquals(listOf("Hartfield", "Hartfields", "Hart"), ranges(text, "hart"))
+    assertEquals(listOf("Hart"), ranges(text, "hart "))
+    assertEquals(listOf("Hartfield"), ranges(text, "\"hartfield\""))
+  }
+
+  @Test fun `match ranges agree with the tokens the chunker sees across punctuation and multibyte text`() {
+    val text = "don't e-mail 日本語 and 😀 émigré, e-mail!"
+    assertEquals(listOf("don't"), ranges(text, "\"don t\""))
+    assertEquals(listOf("émigré"), ranges(text, "emigre "))
+    assertEquals(listOf("mail", "mail"), ranges(text, "mail "))
+  }
+
+  @Test fun `terms are read back from the match expression`() {
+    val q = FtsQuery.parse("stone \"large handsome\" pemb") as FtsQuery.Result.Query
+    assertEquals(listOf(MatchTerm(listOf("stone"), false), MatchTerm(listOf("large", "handsome"), false), MatchTerm(listOf("pemb"), true)), q.terms)
+    assertEquals(listOf(MatchTerm(listOf("pemb"), false)), q.copy(match = "\"pemb\"").terms)
+    assertEquals(emptyList<MatchTerm>(), (FtsQuery.parse("日本語") as FtsQuery.Result.Query).terms)
+  }
 }

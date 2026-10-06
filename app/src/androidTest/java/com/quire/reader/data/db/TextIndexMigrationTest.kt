@@ -125,7 +125,7 @@ class TextIndexMigrationTest : DbTestCase() {
   private val legacyTriggers = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'room_fts_content_sync_text_chunk_fts%'"
   private val legacyTables = "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('text_chunk', 'text_chunk_fts', 'index_state', 'text_chunk_fts_terms')"
 
-  @Test fun `migration from versions 2 to 4 leaves the old index inert, and its one-off removal keeps every user row`() = runBlocking {
+  @Test fun `migration from versions 2 to 4 leaves the old index inert and its one-off removal keeps every user row`() = runBlocking {
     for (version in 2..4) {
       val file = createV2File(version)
       val before = dumpV1Tables(file)
@@ -137,8 +137,8 @@ class TextIndexMigrationTest : DbTestCase() {
       assertTrue(sqlite.count(legacyTables) >= 3)
       sqlite.execSQL("INSERT INTO book (path, folderId, sizeBytes, mtime, title, sortTitle, author, primaryAuthor, authorSort, calibreRating, addedAt, pageEstimate, source, readable) VALUES ('/x.epub', 1, 1, 1, 'X', 'X', 'A', 'A', 'A', 0, 1, 0, 'file', 1)")
 
-      assertTrue(dropLegacyIndex(db) != null)
-      assertEquals(null, dropLegacyIndex(db))
+      assertTrue(dropLegacyIndex(sqlite) != null)
+      assertEquals(null, dropLegacyIndex(sqlite))
 
       assertEquals(0, sqlite.count(legacyTables))
       val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid").map { it.take(before.getValue(t).first().size) } }
@@ -149,10 +149,22 @@ class TextIndexMigrationTest : DbTestCase() {
     }
   }
 
-  @Test fun `a new install has none of the old index tables and nothing to drop`() {
+  @Test fun `stopping the removal part-way leaves a working database that a later call finishes`() = runBlocking<Unit> {
+    val db = open(createV2File(version = 4))
+    val sqlite = db.openHelper.writableDatabase
+    repeat(30) { i -> sqlite.execSQL("INSERT INTO text_chunk (bookId, seq, chapter, href, tokenStart, tokenEnd, primaryEndByte, text, mapping, progression) VALUES (1, ${i + 1}, 'c', 'h', 0, 1, 1, 'text $i', '[]', 0.0)") }
+    var slices = 0
+    // Slices of 2,000 rows are too big for this fixture, so stop after the first one through keepGoing.
+    assertEquals(null, dropLegacyIndex(sqlite, keepGoing = { slices++ < 0 }, pauseMillis = 0))
+    assertEquals("a slice smaller than its limit ends that table, so only the final drop is left", 1, sqlite.count("SELECT COUNT(*) FROM sqlite_master WHERE name = 'text_chunk'"))
+    assertTrue(dropLegacyIndex(sqlite, pauseMillis = 0) != null)
+    assertEquals(0, sqlite.count(legacyTables))
+  }
+
+  @Test fun `a new install has none of the old index tables and nothing to drop`() = runBlocking<Unit> {
     val db = open()
     assertEquals(0, db.openHelper.writableDatabase.count(legacyTables))
-    assertEquals(null, dropLegacyIndex(db))
+    assertEquals(null, dropLegacyIndex(db.openHelper.writableDatabase))
   }
 
   @Test fun `migration from version 3 keeps every book in the library with its history and identity still to be read`() = runBlocking {

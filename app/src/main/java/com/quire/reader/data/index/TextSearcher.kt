@@ -5,8 +5,11 @@ import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.IndexStateEntity
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.data.db.SearchableBook
+import com.quire.reader.data.db.SearchableState
 import com.quire.reader.data.toBook
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
@@ -41,17 +44,23 @@ class TextSearcher(
     ) { _, _ -> }.mapLatest { search(query, filters, order) }
 
   /** A book that can be searched: its index is current and has text, so it owns the chunk ids [first]..[last]. */
-  private class Candidate(val book: SearchableBook, val state: IndexStateEntity) {
-    val first: Long get() = state.firstChunkId!!
-    val last: Long get() = state.lastChunkId!!
+  private class Candidate(val book: SearchableBook, val state: SearchableState) {
+    val first: Long get() = state.firstChunkId
+    val last: Long get() = state.lastChunkId
   }
 
-  private suspend fun candidates(books: List<SearchableBook>): List<Candidate> {
-    val states = indexDb.states().all().associateBy { it.bookId }
+  /** The books to search for [filters]: both databases read at once, then joined here. */
+  private suspend fun candidates(filters: TextSearchFilters, recentSince: Long): List<Candidate> = coroutineScope {
+    val states = async { indexDb.states().searchable() }
+    val books = async { db.search().searchableBooks(filters.author, filters.series, filters.tag, filters.status?.name?.lowercase(), recentSince) }
+    candidates(books.await(), states.await())
+  }
+
+  private fun candidates(books: List<SearchableBook>, states: List<SearchableState>): List<Candidate> {
+    val byBook = states.associateBy { it.bookId }
     return books.mapNotNull { b ->
-      val s = states[b.id] ?: return@mapNotNull null
-      if (s.status != IndexStateEntity.STATUS_DONE || s.mtime != b.mtime || s.sizeBytes != b.sizeBytes || s.firstChunkId == null || s.lastChunkId == null) null
-      else Candidate(b, s)
+      val s = byBook[b.id] ?: return@mapNotNull null
+      if (s.mtime != b.mtime || s.sizeBytes != b.sizeBytes) null else Candidate(b, s)
     }
   }
 
@@ -67,12 +76,11 @@ class TextSearcher(
     q.prefix?.let { if (isCommon(foldedTerm(it), cjk = false)) { q = q.withoutPrefix(); downgraded = it } }
     q.cjkPrefixes.firstOrNull { isCommon(it, cjk = true) }?.let { q = q.withoutCjkPrefixes(); downgraded = downgraded ?: it }
 
-    val status = filters.status?.name?.lowercase()
-    val books = db.search().searchableBooks(filters.author, filters.series, filters.tag, status, recentSince)
-    val candidates = candidates(books)
+    val candidates = candidates(filters, recentSince)
     if (candidates.isEmpty()) return TextSearchResult(emptyList(), 0, capped = false, prefixDowngraded = downgraded)
     val ranges = ChunkRanges(candidates.map { BookChunks(it.book.id, it.first, it.last) })
-    val byIndex = ranges.ranges.map { r -> candidates.first { it.book.id == r.bookId } }
+    val byBook = candidates.associateBy { it.book.id }
+    val byIndex = ranges.ranges.map { byBook.getValue(it.bookId) }
 
     // Count matching passages per book, in id order, until the cap.
     val counts = IntArray(ranges.size)
@@ -168,17 +176,21 @@ class TextSearcher(
   private suspend fun snippets(q: FtsQuery.Result.Query, ids: List<Long>): Map<Long, Pair<StoredChunk, Excerpt>> {
     if (ids.isEmpty()) return emptyMap()
     val chunks = index.chunks(ids)
-    val marked = if (q.match != null) index.highlights(q.match, ids) else emptyMap()
+    val terms = q.terms
+    val inChunk = ids.associateWith { id -> chunks[id]?.let { matchRanges(it.text, terms) }.orEmpty() }
+    // A phrase across a split element has no hit inside its chunk: the seam says where the part after the split is.
     val seamRanges = if (q.phrase) {
-      val missing = ids.filter { it !in marked }
+      val missing = ids.filter { inChunk.getValue(it).isEmpty() }
       if (missing.isEmpty()) emptyMap() else index.seamHits(q.match!!, missing.min(), missing.max()).mapNotNull { h -> h.rangeInChunk?.let { h.chunkId to it } }.toMap()
     } else emptyMap()
     return ids.mapNotNull { id ->
       val chunk = chunks[id] ?: return@mapNotNull null
       val hits = buildList {
-        marked[id]?.let { addAll(highlightRanges(it)) }
+        addAll(inChunk.getValue(id))
         seamRanges[id]?.let { add(it) }
         if (q.cjkRuns.isNotEmpty()) addAll(substringRanges(chunk.text, q.cjkRuns))
+        // The index matched this chunk but the tokenizers disagree on it (rare characters): ask the index.
+        if (isEmpty() && q.match != null) index.highlights(q.match, listOf(id))[id]?.let { addAll(highlightRanges(it)) }
       }
       val segments = runCatching { MappingCodec.decode(chunk.mapping, chunk.text.length) }.getOrNull() ?: return@mapNotNull null
       val excerpt = buildExcerpt(chunk.text, segments, chunk.href, chunk.mediaType, hits) ?: return@mapNotNull null
@@ -186,7 +198,7 @@ class TextSearcher(
     }.toMap()
   }
 
-  private fun snippet(state: IndexStateEntity, chunk: StoredChunk, excerpt: Excerpt): Snippet? {
+  private fun snippet(state: SearchableState, chunk: StoredChunk, excerpt: Excerpt): Snippet? {
     val locator = excerpt.target.fullLocatorJson() ?: return null
     val target = IndexTarget(state.bookId, state.mtime, state.sizeBytes, locator, excerpt.target.highlight, chunk.progression)
     return Snippet(chunk.seq, chunk.chapter, excerpt.spans, target)
@@ -202,7 +214,8 @@ class TextSearcher(
   /** The next page of [bookId]'s matches after chunk [afterSeq] (-1 for the first), unaffected by the library examine cap. */
   suspend fun page(query: FtsQuery.Result.Query, bookId: Long, afterSeq: Int = -1): BookTextPage {
     val book = db.search().searchableBook(bookId) ?: return BookTextPage(emptyList(), null, IndexGap.None)
-    val c = candidates(listOf(book)).firstOrNull() ?: return BookTextPage(emptyList(), null, indexDb.states().of(bookId)?.gap ?: IndexGap.None)
+    val c = candidates(listOf(book), indexDb.states().searchable().filter { it.bookId == bookId }).firstOrNull()
+      ?: return BookTextPage(emptyList(), null, indexDb.states().of(bookId)?.gap ?: IndexGap.None)
     val from = c.first + afterSeq + 1
     if (from > c.last) return BookTextPage(emptyList(), null, c.state.gap)
     val ids = ArrayList<Long>()
@@ -240,3 +253,4 @@ class TextSearcher(
 }
 
 private val IndexStateEntity.gap: IndexGap get() = IndexGap.of(truncated, unreadableResources > 0)
+private val SearchableState.gap: IndexGap get() = IndexGap.of(truncated, unreadableResources > 0)

@@ -98,7 +98,7 @@ class TextSearcherTest : DbTestCase() {
     assertEquals(2, result.books.single().passages.value)
   }
 
-  @Test fun `a phrase across the split of a long element is found once, for the chunk after the split`() {
+  @Test fun `a phrase across the split of a long element is found once for the chunk after the split`() {
     val f = fixture()
     val book = f.add("Boundaries")
     val words = List(1200) { "w$it" }
@@ -121,7 +121,7 @@ class TextSearcherTest : DbTestCase() {
     }
   }
 
-  @Test fun `a phrase or AND query across two whole elements in different chunks is not found, as documented`() {
+  @Test fun `a phrase or AND query across two whole elements in different chunks is not found as documented`() {
     val f = fixture()
     val book = f.add("Two paragraphs")
     val chunks = f.index(book, listOf("First paragraph ends with alpha. " + pad + " omega", "beta starts the second paragraph. " + pad))
@@ -287,17 +287,19 @@ class TextSearcherTest : DbTestCase() {
 
   @Test fun `a broad filter that cannot be scanned fully says so instead of reporting no match`() {
     val f = fixture()
+    val first = f.add("First", author = "Group")
     val other = f.add("Other", author = "Other Author")
     val holder = f.add("Holder", author = "Group")
-    f.index(other, List(30) { "A heron here number $it. " + pad })
-    f.index(holder, listOf("A heron in the group's book."))
+    f.index(first, listOf("Nothing relevant here."))
+    f.index(other, List(30) { "A heron here number $it. " + pad }) // between the allowed books, so the scan has to read past it
+    f.index(holder, listOf("A heron in the third book."))
     val filter = TextSearchFilters(author = "Group")
 
     val partial = runBlocking { f.searcher(maxExamined = 2, perBookMax = 0).search(query("heron"), filter, now = 0L) } // stops after 16 rows
     assertEquals(emptyList<String>(), partial.titles())
     assertTrue("an empty result that may be missing books must say so", partial.incomplete)
 
-    val narrow = runBlocking { f.searcher(maxExamined = 2).search(query("heron"), filter, now = 0L) } // one book: searched inside its own range
+    val narrow = runBlocking { f.searcher(maxExamined = 2).search(query("heron"), filter, now = 0L) } // two books: searched inside their own ranges
     assertEquals(listOf("Holder"), narrow.titles())
     assertFalse(narrow.incomplete)
   }
@@ -536,7 +538,7 @@ class TextSearcherTest : DbTestCase() {
     assertEquals(listOf("Many thin", "Dense"), f.search("heron", order = SearchOrder.Relevance, max = 7).titles())
   }
 
-  @Test fun `CJK text is found by any substring of one, two or three characters, alone or with Latin words`() {
+  @Test fun `CJK text is found by any substring of one two or three characters alone or with Latin words`() {
     val f = fixture()
     val zh = f.add("Journey")
     val ja = f.add("Cat")

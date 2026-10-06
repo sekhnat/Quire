@@ -21,7 +21,7 @@ interface IndexConnection {
 interface IndexSql {
   suspend fun <T> read(block: suspend (IndexConnection) -> T): T
   suspend fun <T> write(block: suspend (IndexConnection) -> T): T
-  /** Runs [sql] outside any transaction (`VACUUM`-like statements). */
+  /** Runs [sql] to completion outside any transaction: a pragma such as `incremental_vacuum` returns a row for every page it frees, and stops early if not stepped to the end. */
   suspend fun exec(sql: String)
 }
 
@@ -37,7 +37,7 @@ class RoomIndexSql(private val db: IndexDatabase) : IndexSql {
       override suspend fun <R> statement(sql: String, block: (SQLiteStatement) -> R): R = usePrepared(sql, block)
     }) } }.also { db.invalidationTracker.refreshAsync() }
 
-  override suspend fun exec(sql: String) = db.useWriterConnection { c -> c.usePrepared(sql) { it.step() } }.let { }
+  override suspend fun exec(sql: String) = db.useWriterConnection { c -> c.usePrepared(sql) { while (it.step()) Unit } }
 }
 
 /** A single bare connection, for tools that build index files without Room. Not thread-safe. */
@@ -58,7 +58,7 @@ class ConnectionIndexSql(private val connection: SQLiteConnection) : IndexSql {
     }
   }
 
-  override suspend fun exec(sql: String) = connection.execSQL(sql)
+  override suspend fun exec(sql: String) = connection.prepare(sql).use { while (it.step()) Unit }
 }
 
 internal suspend fun IndexConnection.exec(sql: String, vararg args: Any?) = statement(sql) { st -> st.bindAll(args); st.step(); Unit }

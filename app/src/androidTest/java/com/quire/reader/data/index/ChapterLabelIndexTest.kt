@@ -120,7 +120,7 @@ class ChapterLabelIndexTest : DbTestCase() {
     assertTrue(chunks[1].startsWith("Startwordtwo opens"))
   }
 
-  @Test fun `a phrase that runs across a chapter boundary takes the chapter where it begins`() {
+  @Test fun `a phrase that runs across a chapter boundary is not found because chunks never span chapters`() {
     val book = index(
       "phrase",
       listOf(
@@ -132,7 +132,9 @@ class ChapterLabelIndexTest : DbTestCase() {
       ),
       listOf(FixtureToc("book.xhtml", "one", "Chapter One"), FixtureToc("book.xhtml", "two", "Chapter Two")),
     )
-    assertEquals(listOf("Chapter One"), book.chapters("\"silver lanterns swinging\""))
+    // Without overlap, a phrase is found only inside one chunk, and a chapter always starts a new one (documented in the README).
+    assertEquals(emptyList<String>(), book.chapters("\"silver lanterns swinging\""))
+    assertEquals(listOf("Chapter One"), book.chapters("\"first chapter ends with silver lanterns\""))
     assertEquals("Chapter Two", book.chapterOf("swinging"))
   }
 

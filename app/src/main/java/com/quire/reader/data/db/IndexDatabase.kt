@@ -70,9 +70,18 @@ data class IndexStateEntity(
   }
 }
 
+/** The part of a `done` [IndexStateEntity] that search reads for every library query. */
+data class SearchableState(
+  val bookId: Long, val mtime: Long, val sizeBytes: Long, val firstChunkId: Long, val lastChunkId: Long, val truncated: Boolean, val unreadableResources: Int,
+)
+
 @Dao
 interface IndexStateDao {
   @Query("SELECT * FROM index_state") suspend fun all(): List<IndexStateEntity>
+
+  /** Just what search needs of each book with searchable text: its signature and the chunk ids it owns. */
+  @Query("SELECT bookId, mtime, sizeBytes, firstChunkId, lastChunkId, truncated, unreadableResources FROM index_state WHERE status = 'done' AND firstChunkId IS NOT NULL")
+  suspend fun searchable(): List<SearchableState>
 
   @Query("SELECT * FROM index_state") fun observeAll(): Flow<List<IndexStateEntity>>
 
@@ -109,9 +118,9 @@ abstract class IndexDatabase : RoomDatabase() {
     )
 
     /** [name] exists so tests and benchmarks can open throwaway files; the app uses the default. */
-    fun create(context: Context, name: String = FILE_NAME): IndexDatabase =
+    fun create(context: Context, name: String = FILE_NAME, pageSize: Int = IndexDriver.PAGE_SIZE): IndexDatabase =
       Room.databaseBuilder(context.applicationContext, IndexDatabase::class.java, name)
-        .setDriver(IndexDriver())
+        .setDriver(IndexDriver(pageSize))
         .fallbackToDestructiveMigration(dropAllTables = true)
         .addCallback(object : Callback() {
           override fun onCreate(connection: SQLiteConnection) = CREATE_EXTRA.forEach(connection::execSQL)

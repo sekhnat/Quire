@@ -7,6 +7,7 @@ import com.quire.reader.bench.legacy.TextChunker as LegacyChunker
 import com.quire.reader.bench.legacy.SourceElement as LegacyElement
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.BookStateEntity
+import com.quire.reader.data.db.BookTagEntity
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.QuireDatabase
@@ -65,7 +66,7 @@ class BuildBench : BenchStep() {
     requireBench()
     val v = Variant.valueOf(arg("variant"))
     val books = cache.books().filter { it.ok }
-    File(dir, "$v.db").let { f -> listOf("", "-wal", "-shm").forEach { File(f.path + it).delete() } }
+    dbFile(v).let { f -> listOf("", "-wal", "-shm").forEach { File(f.path + it).delete() } }
     val stats = if (v.legacy) buildLegacy(v, books) else buildNew(v, books)
     report("build.tsv", "$v\t$stats")
   }
@@ -75,7 +76,7 @@ class BuildBench : BenchStep() {
   }
 
   private fun buildLegacy(v: Variant, books: List<BenchBook>): Stats {
-    val c = LegacySchema.open(File(dir, "$v.db"), v.fts5)
+    val c = LegacySchema.open(dbFile(v), v.fts5)
     LegacySchema.create(c, v.fts5)
     insertLegacyBooks(c, books)
     val s = Stats()
@@ -135,7 +136,7 @@ class BuildBench : BenchStep() {
 
   private suspend fun buildNew(v: Variant, books: List<BenchBook>): Stats {
     ensureUserDb(books)
-    val db = IndexDatabase.create(ctx, File(dir, "$v.db").absolutePath)
+    val db = IndexDatabase.create(ctx, dbFile(v).absolutePath, pageSize)
     val store = IndexStore(RoomIndexSql(db))
     val s = Stats()
     var timed = 0L
@@ -167,13 +168,13 @@ class BuildBench : BenchStep() {
     val opened = BenchMeta.lastOpened(books)
     for (b in books) {
       val author = BenchMeta.author(b)
-      db.books().save(
+      db.books().upsert(
         BookEntity(
           id = b.id, path = b.path, folderId = folder, sizeBytes = b.sizeBytes, mtime = b.mtime, title = b.title, sortTitle = b.title,
           author = author, primaryAuthor = author, authorSort = author, addedAt = b.idx.toLong(),
         ),
-        if (b.id in broad) listOf(BenchMeta.BROAD_TAG) else emptyList(),
       )
+      if (b.id in broad) db.books().insertTags(listOf(BookTagEntity(b.id, BenchMeta.BROAD_TAG, BookTagEntity.ORIGIN_USER)))
     }
     for (id in reading + opened.keys) {
       db.states().put(BookStateEntity(id, status = if (id in reading) BookStateEntity.STATUS_READING else BookStateEntity.STATUS_UNREAD, lastOpenedAt = opened[id] ?: 2_000_000L))

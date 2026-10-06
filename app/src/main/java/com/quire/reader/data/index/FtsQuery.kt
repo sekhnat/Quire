@@ -1,6 +1,12 @@
 package com.quire.reader.data.index
 
 /**
+ * One quoted term of a MATCH expression: [words] in order (a phrase when there are several), the last one a prefix when
+ * [prefix] is set. Words are as typed; the index folds case and accents.
+ */
+data class MatchTerm(val words: List<String>, val prefix: Boolean)
+
+/**
  * Turns what the user typed into FTS5 MATCH expressions, or says why it cannot be searched.
  *
  * The expressions are built only from tokenised words, each in double quotes, so no raw input ever reaches FTS syntax:
@@ -40,6 +46,11 @@ object FtsQuery {
       val phrase: Boolean = false,
       val cjkRuns: List<String> = emptyList(),
     ) : Result {
+      /** The terms of [match], read back from it: every one is a quoted run of words, with a `*` after the quote for a prefix. */
+      val terms: List<MatchTerm> get() = match?.let { m ->
+        Regex("\"([^\"]*)\"(\\*)?").findAll(m).map { MatchTerm(it.groupValues[1].split(' '), it.groupValues[2].isNotEmpty()) }.toList()
+      }.orEmpty()
+
       /** The same query with the prefix matched exactly, which costs far less when the prefix is very common. */
       fun withoutPrefix(): Query = if (prefix == null) this else copy(match = match?.removeSuffix("*"), prefix = null)
 

@@ -23,6 +23,51 @@ fun highlightRanges(marked: String): List<IntRange> {
   return out
 }
 
+/**
+ * Where [terms] match in [text], as char ranges in order: the words of each term in consecutive tokens, case and accents
+ * folded as the index folds them, the last word of a term a prefix when it says so. This is what FTS5's `highlight()` would
+ * mark, without asking the index: that costs about a millisecond a chunk, against microseconds here. Tokens are found by
+ * [Tokenizer], which agrees with the index's tokenizer except on rare characters, so a caller that finds nothing here for a
+ * chunk the index says matches should ask the index.
+ */
+fun matchRanges(text: String, terms: List<MatchTerm>): List<IntRange> {
+  if (terms.isEmpty()) return emptyList()
+  val want = terms.map { t -> t.words.map(::foldWord) }
+  val tokens = Tokenizer.tokenize(text)
+  val out = ArrayList<IntRange>()
+  for ((ti, term) in terms.withIndex()) {
+    val words = want[ti]
+    val last = words.lastIndex
+    var i = 0
+    while (i + last < tokens.size) {
+      var ok = true
+      for (k in 0..last) {
+        val t = tokens[i + k]
+        if (!tokenIs(text, t.startChar, t.endChar, words[k], prefix = k == last && term.prefix)) { ok = false; break }
+      }
+      if (ok) out += tokens[i].startChar until tokens[i + last].endChar
+      i++
+    }
+  }
+  return out.sortedBy { it.first }
+}
+
+/** Whether chars [start, end) of [text], folded, equal [want] (already folded) or, for a [prefix], start with it. Plain ASCII tokens are compared in place. */
+private fun tokenIs(text: String, start: Int, end: Int, want: String, prefix: Boolean): Boolean {
+  val length = end - start
+  var ascii = true
+  for (i in start until end) if (text[i].code >= 0x80) { ascii = false; break }
+  if (ascii) return if (prefix) length >= want.length && text.regionMatches(start, want, 0, want.length, ignoreCase = true) else length == want.length && text.regionMatches(start, want, 0, length, ignoreCase = true)
+  val folded = foldedTerm(text.substring(start, end))
+  return if (prefix) folded.startsWith(want) else folded == want
+}
+
+/** [word] as the index folds it; plain ASCII, nearly all text, skips the normaliser. */
+private fun foldWord(word: String): String {
+  for (c in word) if (c.code >= 0x80) return foldedTerm(word)
+  return word.lowercase(java.util.Locale.ROOT)
+}
+
 /** Every place in [text] where one of the CJK [runs] occurs, as char ranges; for excerpts of the CJK index, which has no `highlight()`. */
 fun substringRanges(text: String, runs: List<String>): List<IntRange> = buildList {
   for (run in runs) {

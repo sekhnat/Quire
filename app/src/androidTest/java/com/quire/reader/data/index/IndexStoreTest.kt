@@ -37,7 +37,7 @@ class IndexStoreTest : DbTestCase() {
   private suspend fun Fixture.index(book: BookEntity, vararg texts: String, truncated: Boolean = false, unreadable: Int = 0) =
     store.replaceBook(book.id, book.mtime, book.sizeBytes, chunks(*texts), truncated, unreadable)
 
-  @Test fun `replacing a book swaps its chunks and full-text rows for the new ones and records the state`() = runBlocking {
+  @Test fun `replacing a book swaps its chunks and full-text rows for the new ones and records the state`() = runBlocking<Unit> {
     val f = fixture()
     val book = f.add("Emma")
     f.index(book, "Highbury was quiet", "Mr Knightley called")
@@ -58,7 +58,7 @@ class IndexStoreTest : DbTestCase() {
     f.index.checkIntegrity()
   }
 
-  @Test fun `a book's chunks have consecutive ids that its state records, after every id in use`() = runBlocking {
+  @Test fun `a books chunks have consecutive ids that its state records after every id in use`() = runBlocking<Unit> {
     val f = fixture()
     val a = f.add("A")
     val b = f.add("B")
@@ -84,7 +84,7 @@ class IndexStoreTest : DbTestCase() {
     }
   }
 
-  @Test fun `a replacement that fails part-way leaves the previous committed index fully intact`() = runBlocking {
+  @Test fun `a replacement that fails part-way leaves the previous committed index fully intact`() = runBlocking<Unit> {
     val f = fixture()
     val book = f.add("Emma")
     val other = f.add("Persuasion")
@@ -108,7 +108,7 @@ class IndexStoreTest : DbTestCase() {
     f.index.checkIntegrity()
   }
 
-  @Test fun `eligible books are readable ones with no state or a signature that differs from the file and come newest added first`() = runBlocking {
+  @Test fun `eligible books are readable ones with no state or a signature that differs from the file and come newest added first`() = runBlocking<Unit> {
     val f = fixture()
     val fresh = f.add("Fresh", addedAt = 50)
     val current = f.add("Current", addedAt = 40)
@@ -137,7 +137,7 @@ class IndexStoreTest : DbTestCase() {
     assertTrue(unreadable.id !in eligible.map { it.id })
   }
 
-  @Test fun `marking a terminal outcome deletes obsolete chunks and records the signature`() = runBlocking {
+  @Test fun `marking a terminal outcome deletes obsolete chunks and records the signature`() = runBlocking<Unit> {
     val f = fixture()
     val book = f.add("Emma")
     f.index(book, "Highbury was quiet", "Mr Knightley called")
@@ -151,7 +151,7 @@ class IndexStoreTest : DbTestCase() {
     f.index.checkIntegrity()
   }
 
-  @Test fun `only failed and skipped can be recorded without chunks`() = runBlocking {
+  @Test fun `only failed and skipped can be recorded without chunks`() = runBlocking<Unit> {
     val f = fixture()
     val book = f.add("Emma")
     assertThrows(IllegalArgumentException::class.java) {
@@ -160,7 +160,7 @@ class IndexStoreTest : DbTestCase() {
     assertNull(f.index.stateOf(book.id))
   }
 
-  @Test fun `coverage counts only states that match the current file signature of readable books`() = runBlocking {
+  @Test fun `coverage counts only states that match the current file signature of readable books`() = runBlocking<Unit> {
     val f = fixture()
     val done = f.add("Done")
     val truncated = f.add("Truncated")
@@ -187,7 +187,7 @@ class IndexStoreTest : DbTestCase() {
     assertTrue(pending.id in f.catalog.eligibleBooks().map { it.id })
   }
 
-  @Test fun `coverage on an empty library is all zero and persisted text bytes are summed over every state`() = runBlocking {
+  @Test fun `coverage on an empty library is all zero and persisted text bytes are summed over every state`() = runBlocking<Unit> {
     val f = fixture()
     assertEquals(IndexCoverage(0, 0, 0, 0, 0), f.catalog.observeCoverage().first())
     assertEquals(0L, f.catalog.observeTextBytes().first())
@@ -202,7 +202,7 @@ class IndexStoreTest : DbTestCase() {
     assertEquals(("twelve bytes".length + "x".length + "longer passage here".length).toLong(), f.catalog.observeTextBytes().first())
   }
 
-  @Test fun `books that left the library are swept from the index and the rest are kept`() = runBlocking {
+  @Test fun `books that left the library are swept from the index and the rest are kept`() = runBlocking<Unit> {
     val f = fixture()
     val kept = f.add("Kept")
     val gone = f.add("Gone")
@@ -221,7 +221,7 @@ class IndexStoreTest : DbTestCase() {
     assertEquals(0, f.store.retainOnly(f.db.books().presentIds()))
   }
 
-  @Test fun `clearing the index removes every row of every table but keeps the books, and the index still works afterwards`() = runBlocking {
+  @Test fun `clearing the index removes every row of every table but keeps the books and the index still works afterwards`() = runBlocking<Unit> {
     val f = fixture()
     val a = f.add("A")
     val b = f.add("B")
@@ -243,5 +243,46 @@ class IndexStoreTest : DbTestCase() {
     f.store.incrementalVacuum()
     f.store.optimize()
     f.index.checkIntegrity()
+  }
+
+  @Test fun `merging in steps ends when nothing is left and changes no result`() = runBlocking<Unit> {
+    val f = fixture()
+    repeat(12) { i -> f.index(f.add("Book $i"), "Heron number $i stood in the reeds.", "Another passage about 東京 and the heron") }
+    val before = f.index.hits("heron")
+    assertEquals(24, before.size)
+
+    var steps = 0
+    while (!f.store.mergeStep(pages = 1)) { steps++; assertTrue("the merge never finishes", steps < 1_000) }
+
+    assertEquals(before, f.index.hits("heron"))
+    assertEquals(12, f.index.rows("SELECT rowid FROM cjk_fts WHERE cjk_fts MATCH ?", "\"東京\"").size)
+    f.index.checkIntegrity()
+    assertTrue(f.store.mergeStep())
+  }
+
+  @Test fun `removing books and clearing give the space back to the file system`() = runBlocking<Unit> {
+    val file = tempDbFile()
+    val index = openIndex(file)
+    val db = open()
+    val store = IndexStore(RoomIndexSql(index))
+    val f = Fixture(db, index, folder(db))
+    val filler = "padding words repeated to make every passage a real size ".repeat(25)
+    val books = List(8) { f.add("Book $it") }
+    for (b in books) f.index(b, *Array(300) { "Passage $it of ${b.title}. $filler" })
+    store.incrementalVacuum()
+    val full = file.length()
+    assertTrue("the fixture should be a few MB (was $full)", full > 2_000_000)
+
+    store.retainOnly(books.take(2).map { it.id })
+    store.incrementalVacuum()
+    val afterRemoving = file.length()
+    assertTrue("removing 6 of 8 books should shrink the file ($full -> $afterRemoving)", afterRemoving < full * 0.6)
+    assertEquals("the write-ahead log is truncated too", 0L, java.io.File(file.path + "-wal").length())
+
+    store.clearAll()
+    store.incrementalVacuum()
+    val afterClear = file.length()
+    assertTrue("clearing should leave little ($afterRemoving -> $afterClear)", afterClear < full * 0.1)
+    index.checkIntegrity()
   }
 }

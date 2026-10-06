@@ -33,6 +33,10 @@ class SettingsStore(context: Context) {
   suspend fun setIndexingEnabled(v: Boolean) = store.edit { it[INDEXING_ENABLED] = v }
   suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
 
+  /** Whether the full-text index was merged into its fastest form after the first complete build; cleared when the index is. */
+  val indexOptimized: Flow<Boolean> = flow(INDEX_OPTIMIZED, false)
+  suspend fun setIndexOptimized(v: Boolean) = store.edit { it[INDEX_OPTIMIZED] = v }
+
   /** How library text search orders the books it finds. */
   val textSearchOrder: Flow<SearchOrder> = store.data.map { p -> SearchOrder.entries.firstOrNull { it.name == p[TEXT_SEARCH_ORDER] } ?: SearchOrder.Relevance }
   suspend fun setTextSearchOrder(v: SearchOrder) = store.edit { it[TEXT_SEARCH_ORDER] = v.name }
@@ -53,6 +57,7 @@ class SettingsStore(context: Context) {
     val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     val BRIGHTNESS = intPreferencesKey("brightness")
+    val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
     val TEXT_SEARCH_ORDER = stringPreferencesKey("text_search_order")
   }
 }

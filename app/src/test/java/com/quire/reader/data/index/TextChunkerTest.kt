@@ -224,6 +224,16 @@ class TextChunkerTest {
     assertTrue("the seams were exercised", crossing > 20)
   }
 
+  @Test fun `a run of CJK characters is one token so it is never split across chunks even when longer than a chunk`() {
+    val run = "天下大勢分久必合合久必分".repeat(150) // 1,800 chars, no space or punctuation
+    val r = chunk(el("Before the run."), el("$run。And after it, more text."), el("Another paragraph here."))
+    assertTrue(r.chunks.count { run in it.text } == 1)
+    assertTrue(r.chunks.all { c -> CjkGrams.runs(c.text).all { it == run || it.length < run.length } })
+    // every query run is therefore inside one chunk, so the bigram index of that chunk finds it
+    val hit = r.chunks.single { run in it.text }
+    assertTrue(CjkGrams.grams(hit.text)!!.split(' ').containsAll(listOf("天下", "勢分", "必分")))
+  }
+
   @Test fun `highlight markers are removed from indexed text`() {
     val c = chunk(el("ab cd")).chunks.single()
     assertEquals("ab cd", c.text)

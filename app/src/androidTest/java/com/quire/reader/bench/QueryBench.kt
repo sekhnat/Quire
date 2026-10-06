@@ -28,6 +28,11 @@ val BENCH_QUERIES = listOf(
   BenchQuery("common prefix", "th"),
   BenchQuery("rare prefix", "quillf"),
   BenchQuery("mid prefix", "hous"),
+  BenchQuery("prefix wh", "wh"),
+  BenchQuery("prefix sta", "sta"),
+  BenchQuery("prefix com", "com"),
+  BenchQuery("prefix gre", "gre"),
+  BenchQuery("2 words + prefix", "king sta"),
   BenchQuery("2-word phrase common", "\"of the\""),
   BenchQuery("2-word phrase rare", "\"van helsing\""),
   BenchQuery("5-word phrase rare", "\"the crimson heron sang softly\""),
@@ -88,16 +93,16 @@ class NewEngine(user: QuireDatabase, index: IndexDatabase, cap: Int) {
 class QueryBench : BenchStep() {
   private fun percentile(sorted: List<Double>, p: Double) = sorted[((sorted.size - 1) * p).toInt()]
 
-  @Test fun query() = runBlocking {
+  @Test fun query() = runBlocking<Unit> {
     requireBench()
     val v = Variant.valueOf(arg("variant"))
     val runs = arg("runs", "20").toInt()
     val cap = arg("cap", "5000").toInt()
     val only = args.getString("only")?.split(',')?.toSet()
     val bigBook = cache.books().filter { it.ok }.maxBy { it.elements }.id
-    val legacy = if (v.legacy) LegacyEngine(LegacySchema.open(File(dir, "$v.db"), v.fts5), v.fts5, cap) else null
+    val legacy = if (v.legacy) LegacyEngine(LegacySchema.open(dbFile(v), v.fts5), v.fts5, cap) else null
     val user = if (v.legacy) null else QuireDatabase.create(ctx, File(dir, "user.db").absolutePath)
-    val index = if (v.legacy) null else IndexDatabase.create(ctx, File(dir, "$v.db").absolutePath)
+    val index = if (v.legacy) null else IndexDatabase.create(ctx, dbFile(v).absolutePath, pageSize)
     val engine = if (v.legacy) null else NewEngine(user!!, index!!, cap)
     val queries = BENCH_QUERIES.filter { only == null || it.name in only }
     for (q in queries) {
@@ -128,12 +133,12 @@ class QueryBench : BenchStep() {
   }
 
   /** Full matching book sets (no caps, no guard) for every unfiltered library query, for the diff against A. */
-  @Test fun sets() = runBlocking {
+  @Test fun sets() = runBlocking<Unit> {
     requireBench()
     val v = Variant.valueOf(arg("variant"))
-    val legacy = if (v.legacy) LegacyEngine(LegacySchema.open(File(dir, "$v.db"), v.fts5), v.fts5) else null
+    val legacy = if (v.legacy) LegacyEngine(LegacySchema.open(dbFile(v), v.fts5), v.fts5) else null
     val user = if (v.legacy) null else QuireDatabase.create(ctx, File(dir, "user.db").absolutePath)
-    val index = if (v.legacy) null else IndexDatabase.create(ctx, File(dir, "$v.db").absolutePath)
+    val index = if (v.legacy) null else IndexDatabase.create(ctx, dbFile(v).absolutePath, pageSize)
     val engine = if (v.legacy) null else NewEngine(user!!, index!!, 5000)
     val out = File(dir, "sets-$v.tsv").apply { delete() }
     for (q in BENCH_QUERIES.filter { !it.page && it.filters == TextSearchFilters.None }) {

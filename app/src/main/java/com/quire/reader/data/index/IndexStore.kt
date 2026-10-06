@@ -28,6 +28,10 @@ class SeamHit(val chunkId: Long, val text: String, val splitChar: Int, val range
  * contentless full-text tables in step with `chunk` and `seam` in the same transaction, since there are no triggers.
  */
 class IndexStore(private val sql: IndexSql) {
+  companion object {
+    /** Pages of merging per [mergeStep]: a fraction of a second of work. */
+    const val MERGE_PAGES = 2_000
+  }
 
   // ── writes ───────────────────────────────────────────────────────────────
 
@@ -119,10 +123,34 @@ class IndexStore(private val sql: IndexSql) {
     for (table in listOf("chunk", "seam", "book_string", "index_state")) c.exec("DELETE FROM $table")
   }
 
-  /** Returns free pages to the file system (the file uses incremental auto-vacuum). */
-  suspend fun incrementalVacuum() = sql.exec("PRAGMA incremental_vacuum")
+  /**
+   * Returns free pages to the file system (the file uses incremental auto-vacuum) and shrinks the write-ahead log, which
+   * otherwise stays as large as the biggest transaction since the last truncating checkpoint.
+   */
+  suspend fun incrementalVacuum() {
+    sql.exec("PRAGMA incremental_vacuum")
+    sql.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+  }
 
-  /** Merges the full-text b-trees into one, for the fastest queries; a one-off after a full build. */
+  /**
+   * Does a bounded amount of the merging that makes the full-text tables fastest to query (the work of `optimize`, in steps
+   * of about [pages] pages, so a caller can stop between them). Returns true once nothing is left to merge.
+   */
+  suspend fun mergeStep(pages: Int = MERGE_PAGES): Boolean {
+    var idle = true
+    for (table in listOf("chunk_fts", "seam_fts", "cjk_fts")) {
+      // FTS5 documents repeating 'merge' until it changes fewer than two rows as the sign that the b-tree is fully merged.
+      val changes = sql.write { c ->
+        val before = c.long("SELECT total_changes()") ?: 0L
+        c.exec("INSERT INTO $table($table, rank) VALUES('merge', ?)", pages)
+        (c.long("SELECT total_changes()") ?: 0L) - before
+      }
+      if (changes >= 2) idle = false
+    }
+    return idle
+  }
+
+  /** Merges every full-text table completely in one go; for tests and tools, since it cannot be interrupted. */
   suspend fun optimize() = sql.write { c ->
     for (table in listOf("chunk_fts", "seam_fts", "cjk_fts")) c.exec("INSERT INTO $table($table) VALUES('optimize')")
   }
@@ -197,11 +225,20 @@ class IndexStore(private val sql: IndexSql) {
     }
   }
 
-  /** `highlight()` output for each chunk in [ids] that matches [match], by chunk id. */
+  /**
+   * `highlight()` output for each chunk in [ids] that matches [match], by chunk id. One lookup per chunk by `rowid = ?`,
+   * which FTS5 seeks to directly; asking for them with `rowid IN (...)` instead makes it walk every match of the query first
+   * (measured: 89 ms for 113 chunks of a mid-common word, 10 s for 50 chunks of a very common one).
+   */
   suspend fun highlights(match: String, ids: Collection<Long>): Map<Long, String> = if (ids.isEmpty()) emptyMap() else sql.read { c ->
-    c.statement("SELECT rowid, highlight(chunk_fts, 0, char(57344), char(57345)) FROM chunk_fts WHERE chunk_fts MATCH ? AND rowid IN (${ids.joinToString(",")})") { st ->
-      st.bindText(1, match)
-      buildMap { while (st.step()) put(st.getLong(0), st.getText(1)) }
+    c.statement("SELECT highlight(chunk_fts, 0, char(57344), char(57345)) FROM chunk_fts WHERE chunk_fts MATCH ? AND rowid = ?") { st ->
+      buildMap {
+        for (id in ids) {
+          st.bindText(1, match); st.bindLong(2, id)
+          if (st.step()) put(id, st.getText(0))
+          st.reset()
+        }
+      }
     }
   }
 

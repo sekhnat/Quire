@@ -15,6 +15,11 @@ abstract class BenchStep {
   protected val dir = File(ctx.filesDir, "bench").apply { mkdirs() }
   protected val cache = BenchCache(File(dir, "cache").apply { mkdirs() })
 
+  /** Where variant [v]'s database lives; `-e tag x` builds and reads a differently configured copy next to it. */
+  protected fun dbFile(v: Variant) = File(dir, "$v${args.getString("tag").orEmpty()}.db")
+
+  protected val pageSize get() = args.getString("pagesize")?.toInt() ?: com.quire.reader.data.db.IndexDriver.PAGE_SIZE
+
   protected fun requireBench() = assumeTrue("benchmark step: pass -e bench 1", args.getString("bench") != null)
 
   protected fun arg(name: String, default: String? = null): String = args.getString(name) ?: default ?: error("missing -e $name")
