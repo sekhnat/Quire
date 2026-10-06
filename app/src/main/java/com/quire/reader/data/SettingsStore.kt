@@ -63,6 +63,10 @@ class SettingsStore(context: Context) {
   val readerDefaults: Flow<ReaderPrefs> = store.data.map { ReaderPrefs.fromJson(it[READER_DEFAULTS]) ?: ReaderPrefs() }
   suspend fun setReaderDefaults(prefs: ReaderPrefs) = store.edit { it[READER_DEFAULTS] = prefs.toJson() }
 
+  /** Whether the advanced reading controls are shown at all; independent of their values. */
+  val advancedReadingEnabled: Flow<Boolean> = flow(ADVANCED_READING_ENABLED, false)
+  suspend fun setAdvancedReadingEnabled(v: Boolean) = store.edit { it[ADVANCED_READING_ENABLED] = v }
+
   /** In-app dimming over the page, 30–100. */
   val brightness: Flow<Int> = flow(BRIGHTNESS, 100)
   suspend fun setBrightness(v: Int) = store.edit { it[BRIGHTNESS] = v.coerceIn(30, 100) }
@@ -114,6 +118,7 @@ class SettingsStore(context: Context) {
       indexChargingOnly = prefs[INDEX_CHARGING_ONLY] ?: false,
       brightness = prefs[BRIGHTNESS] ?: 100,
       readerDefaults = prefs[READER_DEFAULTS]?.let(ReaderPrefs::fromJson),
+      advancedReadingEnabled = prefs[ADVANCED_READING_ENABLED] ?: false,
       textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
     )
   }
@@ -126,6 +131,7 @@ class SettingsStore(context: Context) {
     s.indexChargingOnly?.let { setIndexChargingOnly(it) }
     s.brightness?.let { setBrightness(it) }
     s.readerDefaults?.let { setReaderDefaults(it) }
+    s.advancedReadingEnabled?.let { setAdvancedReadingEnabled(it) }
     s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
   }
 
@@ -149,6 +155,7 @@ class SettingsStore(context: Context) {
     private val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")
     private val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
+    private val ADVANCED_READING_ENABLED = booleanPreferencesKey("advanced_reading_enabled")
     private val BRIGHTNESS = intPreferencesKey("brightness")
     private val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
     private val TEXT_SEARCH_ORDER = stringPreferencesKey("text_search_order")

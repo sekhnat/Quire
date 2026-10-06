@@ -19,6 +19,8 @@ import com.quire.reader.data.backup.NotesExporter
 import com.quire.reader.data.backup.SnapshotCodec
 import com.quire.reader.data.backup.SnapshotImporter
 import com.quire.reader.data.backup.identityKeyFor
+import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.ParagraphPreset
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
@@ -115,6 +117,18 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   private val openBookId = MutableStateFlow(0L)
   /** Whether the open book has its own reading settings instead of the defaults. */
   val hasBookOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookOverride(id) }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  /** Whether the open book carries an advanced object of its own (the book restore action). */
+  val hasBookAdvancedOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookAdvancedOverride(id) }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  /** Whether the global defaults carry non-factory advanced values (the global restore action). */
+  val advancedDefaultsCustomized: StateFlow<Boolean> = repo.advancedDefaultsCustomized
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  /** Whether the advanced reading controls are shown at all; independent of their values. */
+  val advancedReadingEnabled: StateFlow<Boolean> = repo.advancedReadingEnabled
     .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
   private var toastJob: Job? = null
@@ -684,6 +698,11 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   // reading settings
 
+  /**
+   * Applies a change to the open book's basic settings: the accepted state is published
+   * once, and a persistence echo equal to it is just an acknowledgment (the state flow
+   * drops it); an echo that differs is the stored truth and wins.
+   */
   fun updatePrefs(change: (ReaderPrefs) -> ReaderPrefs) {
     val id = session()?.book?.id ?: return
     val next = change(_prefs.value)
@@ -691,9 +710,33 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     viewModelScope.launch { repo.setBookPrefs(id, next) }
   }
 
+  /** Applies a change to the open book's advanced controls; its basic group is untouched. */
+  fun updateBookAdvanced(change: (AdvancedReaderPrefs) -> AdvancedReaderPrefs) {
+    val id = session()?.book?.id ?: return
+    val next = change(_prefs.value.advanced)
+    _prefs.value = _prefs.value.copy(advanced = next)
+    viewModelScope.launch { repo.setBookAdvancedPrefs(id, next) }
+  }
+
+  /** Chooses a paragraph preset, setting indent and spacing in one reduction. */
+  fun chooseParagraphPreset(preset: ParagraphPreset) {
+    val levels = AdvancedReaderPrefs.levelsFor(preset) ?: return
+    updateBookAdvanced { it.copy(paragraphIndent = levels.first, paragraphSpacing = levels.second) }
+  }
+
   fun resetBookPrefs() {
     val id = session()?.book?.id ?: return
     viewModelScope.launch { repo.clearBookPrefs(id); toast("Using your default settings") }
+  }
+
+  /** Restores this book's advanced controls to the globals; its basic override stays. */
+  fun restoreBookAdvanced() {
+    val id = session()?.book?.id ?: return
+    _prefs.value = _prefs.value.copy(advanced = defaults.value.advanced)
+    viewModelScope.launch {
+      repo.clearBookAdvancedPrefs(id)
+      toast("This book's advanced settings follow your defaults")
+    }
   }
 
   // settings screen
@@ -704,6 +747,14 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     val next = change(defaults.value)
     viewModelScope.launch { repo.setReaderDefaults(next) }
   }
+
+  /** Restores the global advanced controls to the factory values; book overrides stay. */
+  fun restoreGlobalAdvanced() = viewModelScope.launch {
+    repo.setReaderDefaults(defaults.value.copy(advanced = AdvancedReaderPrefs()))
+    toast("Advanced reading settings restored")
+  }
+
+  fun setAdvancedReadingEnabled(v: Boolean) = viewModelScope.launch { repo.setAdvancedReadingEnabled(v) }
   fun resetAllBookPrefs() = viewModelScope.launch { repo.clearAllBookPrefs(); toast("Every book now uses your defaults") }
   fun setUseCalibreSetting(v: Boolean) = viewModelScope.launch { repo.setUseCalibre(v); toast("Takes effect on the next full rescan") }
   fun setWatchSetting(v: Boolean) = viewModelScope.launch { repo.setWatchNewBooks(v) }
