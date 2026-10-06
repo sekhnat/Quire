@@ -4,7 +4,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.quire.reader.QuireApplication
+import android.content.ComponentName
+import android.content.Intent
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import com.quire.reader.MainActivity
+import com.quire.reader.data.backup.BackupContents
+import com.quire.reader.data.backup.BackupException
+import com.quire.reader.data.backup.BackupInterval
+import com.quire.reader.data.backup.BackupWorker
 import com.quire.reader.data.backup.ImportResult
+import com.quire.reader.data.backup.MergeOutcome
 import com.quire.reader.data.backup.NotesExporter
 import com.quire.reader.data.backup.SnapshotCodec
 import com.quire.reader.data.backup.SnapshotImporter
@@ -387,6 +397,131 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     toast(if (ok) "Notes exported" else "Couldn't write the file")
   }
 
+  // ── full backup ──────────────────────────────────────────────────────────
+
+  private val backupPrefs = combine(
+    settings.backupContents, settings.autoBackupEnabled, settings.autoBackupInterval, settings.autoBackupFolder, settings.autoBackupKeep,
+  ) { contents, auto, interval, folder, keep -> BackupUi(contents, auto, interval, folder, keep) }
+
+  private val backupWork = WorkManager.getInstance(app).let { wm ->
+    combine(
+      wm.getWorkInfosForUniqueWorkFlow(BackupWorker.MANUAL_WORK),
+      wm.getWorkInfosForUniqueWorkFlow(BackupWorker.PERIODIC_WORK),
+      settings.lastBackupAt,
+      settings.lastBackupError,
+    ) { manual, periodic, lastAt, lastError ->
+      val running = (manual + periodic).firstOrNull { it.state == WorkInfo.State.RUNNING }
+      val queued = manual.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
+      BackupUi(
+        running = running != null || queued,
+        progress = running?.progress?.takeIf { it.keyValueMap.containsKey(BackupWorker.KEY_PROGRESS) }?.getFloat(BackupWorker.KEY_PROGRESS, 0f),
+        lastAt = lastAt, lastError = lastError,
+      )
+    }
+  }
+
+  /** Full-backup settings and the state of the last or running backup. */
+  val backup: StateFlow<BackupUi> = combine(backupPrefs, backupWork) { prefs, work ->
+    prefs.copy(running = work.running, progress = work.progress, lastAt = work.lastAt, lastError = work.lastError)
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUi())
+
+  private val _backupSizes = MutableStateFlow<BackupSizes?>(null)
+  /** What covers and imported books add to a full backup, or null until measured. */
+  val backupSizes: StateFlow<BackupSizes?> = _backupSizes
+
+  fun refreshBackupSizes() = viewModelScope.launch(Dispatchers.IO) {
+    fun measure(dir: File) = dir.listFiles()?.filter { it.isFile }.orEmpty().let { it.size to it.sumOf(File::length) }
+    val (covers, coverBytes) = measure(app.backupLocations.covers)
+    val (imported, importedBytes) = measure(app.backupLocations.imported)
+    _backupSizes.value = BackupSizes(covers, coverBytes, imported, importedBytes)
+  }
+
+  fun setBackupContents(contents: BackupContents) = viewModelScope.launch { settings.setBackupContents(contents) }
+  fun setAutoBackup(enabled: Boolean) = viewModelScope.launch { settings.setAutoBackupEnabled(enabled) }
+  fun setAutoBackupInterval(interval: BackupInterval) = viewModelScope.launch { settings.setAutoBackupInterval(interval) }
+  fun setAutoBackupKeep(keep: Int) = viewModelScope.launch { settings.setAutoBackupKeep(keep) }
+  fun setAutoBackupFolder(path: String) = viewModelScope.launch { settings.setAutoBackupFolder(path) }
+
+  /** Starts a full backup into the document the user just created; it runs in the background with a notification. */
+  fun startBackup(uri: Uri) {
+    // The worker may start after this screen is gone; a persistable grant keeps the document writable until it is done.
+    runCatching { app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+    BackupWorker.startManual(app, uri)
+    toast("Backing up in the background")
+  }
+
+  private val _restore = MutableStateFlow<RestoreUi>(RestoreUi.Idle)
+  /** Where a restore from a full backup is; drives the restore sheet. */
+  val restore: StateFlow<RestoreUi> = _restore
+
+  /** Reads the picked backup's manifest and shows what it holds, so the user can choose how to restore it. */
+  fun inspectBackup(uri: Uri) = viewModelScope.launch {
+    _restore.value = RestoreUi.Reading
+    _restore.value = try {
+      RestoreUi.Ready(uri, app.fullRestore.inspect(uri))
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      toast((e as? BackupException)?.message ?: "Couldn't read that backup")
+      RestoreUi.Idle
+    }
+  }
+
+  /** Closes the restore sheet; a restore already underway carries on. */
+  fun dismissRestore() { if (_restore.value !is RestoreUi.Working) _restore.value = RestoreUi.Idle }
+
+  /**
+   * Replaces the library, reading data, index and settings with the backup, then restarts the app so the restored files
+   * are opened fresh. Runs on the app's scope: leaving the screen must not abandon a half-extracted restore.
+   */
+  fun replaceFromBackup() {
+    val ready = _restore.value as? RestoreUi.Ready ?: return
+    _restore.value = RestoreUi.Working("Restoring…", 0f)
+    app.appScope.launch {
+      try {
+        app.fullRestore.stage(ready.uri) { p -> _restore.value = RestoreUi.Working(if (p == null) "Checking the backup…" else "Restoring…", p) }
+        _restore.value = RestoreUi.Working("Restarting…", null)
+        withContext(Dispatchers.Main) { restartApp() }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Log.w("QuireViewModel", "full restore failed", e)
+        _restore.value = RestoreUi.Idle
+        toast((e as? BackupException)?.message ?: "Couldn't restore that backup")
+      }
+    }
+  }
+
+  /** Adds the backup's reading data (and imported books the library lacks) to the library; nothing here is replaced. */
+  fun mergeFromBackup() {
+    val ready = _restore.value as? RestoreUi.Ready ?: return
+    _restore.value = RestoreUi.Working("Adding the backup's reading data…", null)
+    app.appScope.launch {
+      try {
+        val outcome = app.fullRestore.merge(ready.uri)
+        toast(mergeSummary(outcome))
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        Log.w("QuireViewModel", "full-backup merge failed", e)
+        toast((e as? BackupException)?.message ?: "Couldn't import that backup")
+      } finally {
+        _restore.value = RestoreUi.Idle
+      }
+    }
+  }
+
+  private fun mergeSummary(o: MergeOutcome): String {
+    val books = if (o.booksAdded > 0) "${books(o.booksAdded)} added" else null
+    return if (books == null) importSummary(o.result) else if (!o.result.changed) books else "$books · ${importSummary(o.result)}"
+  }
+
+  /** Starts the app again in a new process; the staged restore is swapped in before anything opens it. */
+  private fun restartApp() {
+    app.startActivity(Intent.makeRestartActivityTask(ComponentName(app, MainActivity::class.java)))
+    Runtime.getRuntime().exit(0)
+  }
+
   private fun importSummary(r: ImportResult): String = when {
     !r.changed -> "Nothing to import"
     else -> listOfNotNull(
@@ -563,7 +698,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   // settings screen
 
-  fun openSettings() { edit { copy(screen = Screen.Settings) }; refreshDatabaseBytes() }
+  fun openSettings() { edit { copy(screen = Screen.Settings) }; refreshDatabaseBytes(); refreshBackupSizes() }
   fun closeSettings() = edit { copy(screen = Screen.Library) }
   fun updateDefaults(change: (ReaderPrefs) -> ReaderPrefs) {
     val next = change(defaults.value)

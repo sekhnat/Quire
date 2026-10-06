@@ -131,12 +131,15 @@ class LibraryRepository(
         copied++
       }
     }
-    if (copied > 0) {
-      ensureFolder(dir.absolutePath)
-      scanner.scan()
-      indexer.request()
-    }
+    if (copied > 0) scanImported()
     copied
+  }
+
+  /** Puts the imported-books folder in the library and scans it, after books were copied into it. */
+  suspend fun scanImported() = withContext(Dispatchers.IO) {
+    ensureFolder(File(app.filesDir, "imported").apply { mkdirs() }.absolutePath)
+    scanner.scan()
+    indexer.request()
   }
 
   suspend fun setFinished(bookId: Long, finished: Boolean) = db.states().edit(bookId) {

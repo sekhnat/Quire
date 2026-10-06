@@ -11,7 +11,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
   entities = [
     FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
   ],
-  version = 5,
+  version = QuireDatabase.VERSION,
   exportSchema = false,
 )
 abstract class QuireDatabase : RoomDatabase() {
@@ -92,6 +92,8 @@ abstract class QuireDatabase : RoomDatabase() {
     val LEGACY_INDEX_TABLES = listOf("text_chunk_fts_terms", "text_chunk_fts", "text_chunk", "index_state")
 
     const val FILE_NAME = "quire.db"
+    /** The schema version; a full backup from a newer one cannot be restored. */
+    const val VERSION = 5
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =

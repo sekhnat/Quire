@@ -56,6 +56,57 @@ local settings. A book's edit sheet and Missing books rows offer **Export notes*
 chapter labels and `quire://` locator comments. New highlights stamp their chapter title; older
 highlights use a best-effort TOC-per-resource label, then a resource-name fallback.
 
+## Full backup
+
+The reading-data snapshot leaves out everything that can be rebuilt. A **full backup** carries it too, so a new
+install comes back exactly as it was without the hours of indexing. Settings → *Full backup* writes one zip archive
+(`FullBackupWriter`), by hand to a file the user picks or on a schedule (`BackupWorker`).
+
+| Entry | Contents |
+|---|---|
+| `manifest.json` | Always first: format version, library and index schema versions, contents, counts, every entry's size |
+| `user-data.json` | The portable snapshot above |
+| `settings/settings.preferences_pb` | The whole DataStore file, layout and sort included |
+| `imported/*.epub` | Optional: books added with Import, which live only inside the app |
+| `covers/*.webp` | Optional: cover thumbnails |
+| `db/quire.db` | The library database, copied with `VACUUM INTO` (consistent while the app runs) |
+| `db/quire-index.db` | Optional: the search index, the same way; deflated at the fastest level |
+
+The archive is not encrypted: it holds notes and book text. User data comes before the databases, so inspecting reads
+one entry and a merge stops before the databases.
+
+**Restore** (Settings, or the welcome screen of a new install) offers two modes:
+
+- *Merge reading data* copies in imported books the library lacks, scans them, and imports the snapshot with the
+  same rules as a reading-data file. Nothing local is replaced; the backup's index and settings are not used.
+- *Replace everything* (`FullRestore`) extracts the archive into `noBackupFilesDir/full-restore/staged`, checks it,
+  then restarts the app:
+  - The library database is opened once with this build's migrations.
+  - The index gets a quick check and a schema check; an index from another `IndexDatabase.VERSION` is dropped and
+    rebuilt.
+  - Both databases are left without journal files.
+
+  The first thing `QuireApplication.onCreate` does is swap the staged files in by rename (`StagedRestore`); each step
+  is idempotent, so a crash mid-swap finishes on the next start. Files it replaces:
+  - databases, settings and covers are moved aside and deleted once the restored app has started;
+  - imported books are only ever added;
+  - the current index is deleted when the backup has none, since its book ids belong to the old library.
+
+  A library schema newer than the build is refused.
+
+**Keeping the index across devices.** Copying books to a new phone changes their modification times, which used to
+mean indexing every book again. The index now records the fingerprint of the file each book was indexed from
+(`index_source`, created on open, so existing indexes are kept). A book whose mtime moved but whose size and
+fingerprint match is re-signed instead of re-read (`canCarryIndex`). The fingerprint hashes the file's tail, the zip
+central directory with every entry's CRC, so any change to the content changes it. Books indexed before this was
+recorded get their fingerprint backfilled once, when their index still matches the file.
+
+**Scheduled backups** run daily or weekly, battery and storage permitting, into a shared-storage folder (default
+`Documents/Quire Backups`). They write `*.partial` and rename it, then delete the oldest `Quire backup … .zip` files
+past the number to keep; no other file in the folder is touched. Backups run as a foreground `dataSync` worker with a
+progress notification. Android 12+ does not let a scheduled run start one from the background, and the worker then
+runs without it.
+
 ## Reproducible verification
 
 From the project root, build the ordinary debug APK (not the `.dbtest` APK), then run:

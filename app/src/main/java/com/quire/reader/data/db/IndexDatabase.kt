@@ -97,17 +97,22 @@ interface IndexStateDao {
  * over. The full-text tables are not Room entities: they are created with the database, and [com.quire.reader.data.index.IndexStore]
  * keeps them in step with `chunk` and `seam` by hand, in the same transactions.
  */
-@Database(entities = [ChunkEntity::class, SeamEntity::class, IndexStateEntity::class], version = 1, exportSchema = false)
+@Database(entities = [ChunkEntity::class, SeamEntity::class, IndexStateEntity::class], version = IndexDatabase.VERSION, exportSchema = false)
 abstract class IndexDatabase : RoomDatabase() {
   abstract fun states(): IndexStateDao
 
   companion object {
     const val FILE_NAME = "quire-index.db"
+    /** The schema version; a full backup records it, and its index is only restored into a build with the same one. */
+    const val VERSION = 1
 
     /** Statements that create everything Room does not: per-book strings and the full-text tables. */
     val CREATE_EXTRA = listOf(
       // The hrefs and chapter labels of a book, which chunks point to by index; `media_type` is set on href rows.
       "CREATE TABLE IF NOT EXISTS book_string (book_id INTEGER NOT NULL, idx INTEGER NOT NULL, value TEXT NOT NULL, media_type TEXT, PRIMARY KEY (book_id, idx)) WITHOUT ROWID",
+      // The fingerprint of the file each book's index state was built from, so a file whose mtime changed but whose content
+      // did not (copied to a new device, touched) keeps its index; see canCarryIndex. Created on open, so no schema bump.
+      "CREATE TABLE IF NOT EXISTS index_source (book_id INTEGER PRIMARY KEY, fingerprint TEXT NOT NULL) WITHOUT ROWID",
       "CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(text, content='chunk', content_rowid='id', tokenize='unicode61 remove_diacritics 2', detail=full)",
       "CREATE VIRTUAL TABLE IF NOT EXISTS seam_fts USING fts5(text, content='seam', content_rowid='id', tokenize='unicode61 remove_diacritics 2', detail=full)",
       // rowid = chunk id, for chunks that contain CJK text only; see CjkGrams.

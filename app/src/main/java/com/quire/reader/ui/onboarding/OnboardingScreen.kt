@@ -59,6 +59,8 @@ import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.Toggle
 import com.quire.reader.ui.UiState
 import com.quire.reader.ui.cornerGlow
+import com.quire.reader.ui.settings.BACKUP_PICK_TYPES
+import com.quire.reader.ui.settings.RestoreSheet
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -79,12 +81,15 @@ fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
       OnboardStep.Scan -> Scanning(s, vm)
     }
     FolderPickerSheet(pickingFolder && s.onboardStep == OnboardStep.Folders, { pickingFolder = false }, vm::addPickedFolder)
+    // A new install can start from a full backup instead: there is no library yet, so only "replace" makes sense.
+    RestoreSheet(vm, allowMerge = false)
   }
 }
 
 @Composable
 private fun Welcome(vm: QuireViewModel) {
   val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris, fromOnboarding = true) }
+  val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.inspectBackup(uri) }
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 28.dp, end = 28.dp, top = 22.dp, bottom = 40.dp), verticalArrangement = Arrangement.SpaceBetween) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -100,6 +105,7 @@ private fun Welcome(vm: QuireViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
       QButton("Choose folders", vm::chooseFolders, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FolderOpen, height = 46.dp)
       QButton("Import individual files instead", { picker.launch(arrayOf("application/epub+zip", "application/octet-stream")) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
+      QButton("Restore from a Quire backup", { backupOpen.launch(BACKUP_PICK_TYPES) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
     }
   }
 }
