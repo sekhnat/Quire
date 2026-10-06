@@ -6,9 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -18,14 +17,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
@@ -42,7 +45,9 @@ import com.quire.reader.ui.Scope
 import com.quire.reader.ui.ScopeKind
 import com.quire.reader.ui.SeriesCover
 import com.quire.reader.ui.Tag
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // ── authors ─────────────────────────────────────────────────────────────────
 
@@ -132,7 +137,10 @@ internal fun SeriesView(lib: LibraryData, vm: QuireViewModel) {
 
 private class Smart(val label: String, val rule: String, val icon: Int, val count: String, val onPick: () -> Unit)
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Smart collections, then every tag as a chip cloud. The cloud is packed into lines off the main thread and each
+ * line is its own lazy item, so only the chips on screen are composed however many tags the library has.
+ */
 @Composable
 internal fun TagsView(lib: LibraryData, vm: QuireViewModel) {
   val counts = lib.counts
@@ -142,8 +150,23 @@ internal fun TagsView(lib: LibraryData, vm: QuireViewModel) {
     Smart("Unread", "Never opened", Ic.CircleDashed, fmt(counts.getValue(LibFilter.Unread))) { vm.showFilter(LibFilter.Unread) },
     Smart("Finished", "Marked as read", Ic.Star, fmt(counts.getValue(LibFilter.Finished))) { vm.showFilter(LibFilter.Finished) },
   )
-  LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 32.dp + navBottomPadding()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-    item {
+  val metrics = rememberTagChipMetrics()
+  val density = LocalDensity.current
+  BoxWithConstraints(Modifier.fillMaxSize()) {
+    // The list's 20dp content padding, rounded per side as LazyColumn does.
+    val available = constraints.maxWidth - 2 * with(density) { 20.dp.roundToPx() }
+    // Keeps the previous lines while a library change is repacked, so the cloud doesn't blink.
+    val lines by produceState<List<TagLine>?>(null, lib, available, metrics) {
+      value = withContext(Dispatchers.Default) { tagLines(lib.tags, available, metrics) }
+    }
+    TagsList(lines, lib.loaded, smart, vm)
+  }
+}
+
+@Composable
+private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>, vm: QuireViewModel) {
+  LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 32.dp + navBottomPadding()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    item(contentType = "smart") {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Kicker("Smart collections")
         smart.forEach { sm ->
@@ -161,17 +184,15 @@ internal fun TagsView(lib: LibraryData, vm: QuireViewModel) {
         }
       }
     }
-    item {
-      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Kicker("Tags · from your books")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          lib.tags.forEach { (name, n) ->
-            Tag(name, { vm.setScope(Scope(ScopeKind.Tag, name)) }, size = 13f, count = n.toString(), hPad = 12.dp, vPad = 7.dp)
-          }
+    item(contentType = "kicker") { Kicker("Tags · from your books", Modifier.padding(top = 12.dp)) }
+    items(lines.orEmpty(), key = { it.tags.first().first }, contentType = { "tagLine" }) { line ->
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        line.tags.forEach { (name, n) ->
+          Tag(name, { vm.setScope(Scope(ScopeKind.Tag, name)) }, size = 13f, count = n.toString(), hPad = 12.dp, vPad = 7.dp)
         }
-        if (lib.tags.isEmpty() && lib.loaded) QText("No tags yet. Tags come from Calibre, or add your own from a book's page.", 12f, color = Nq.neutral500)
       }
     }
+    if (lines?.isEmpty() == true && loaded) item { QText("No tags yet. Tags come from Calibre, or add your own from a book's page.", 12f, color = Nq.neutral500) }
   }
 }
 
