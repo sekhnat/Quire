@@ -14,6 +14,12 @@ class LibraryLayoutTest {
     assertEquals(LibLayout.Grid, libLayoutOf("Carousel"))
   }
 
+  @Test fun `a saved sort comes back by name, and nothing saved or an unknown name is Recently opened`() {
+    SortKey.entries.forEach { assertEquals(it, sortKeyOf(it.name)) }
+    assertEquals(SortKey.Opened, sortKeyOf(null))
+    assertEquals(SortKey.Opened, sortKeyOf("Rating"))
+  }
+
   @Test fun `a synopsis runs its paragraphs together`() {
     assertEquals("One. Two. Three", synopsisPreview("  One.\n\n  Two. Three \n"))
     assertEquals("A B", synopsisPreview("A\n   \nB"))

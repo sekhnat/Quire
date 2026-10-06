@@ -125,6 +125,12 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
     // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
     viewModelScope.launch { settings.libraryLayout.first().let { saved -> edit { copy(layout = libLayoutOf(saved)) } } }
+    viewModelScope.launch {
+      val sort = sortKeyOf(settings.librarySort.first())
+      val ascending = settings.librarySortAscending.first() ?: false
+      // A sort picked while the saved one was loading is newer, and stays.
+      if (!sortChosen) edit { copy(sort = sort, sortAscending = ascending) }
+    }
   }
 
   fun toast(text: String) {
@@ -211,9 +217,22 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   }
   fun openImport(open: Boolean) = edit { copy(importOpen = open) }
   fun openSort(open: Boolean) = edit { copy(sortOpen = open) }
-  fun setSortAscending(asc: Boolean) = edit { copy(sortAscending = asc) }
-  fun flipSort() = edit { copy(sortAscending = !sortAscending) }
-  fun pickSort(k: SortKey) = edit { copy(sort = k, sortOpen = false, view = LibView.Books, layout = if (layout == LibLayout.Shelves) LibLayout.Grid else layout) }
+  fun setSortAscending(asc: Boolean) { edit { copy(sortAscending = asc) }; saveSort() }
+  fun flipSort() { edit { copy(sortAscending = !sortAscending) }; saveSort() }
+  fun pickSort(k: SortKey) {
+    edit { copy(sort = k, sortOpen = false, view = LibView.Books, layout = if (layout == LibLayout.Shelves) LibLayout.Grid else layout) }
+    saveSort()
+  }
+
+  /** Set once a sort is picked here; the saved sort, loaded at start, never replaces it. Main thread only. */
+  private var sortChosen = false
+
+  /** Remembers the sort and its direction, so the library opens the same way next time. */
+  private fun saveSort() {
+    val s = _state.value
+    sortChosen = true
+    viewModelScope.launch { settings.setLibrarySort(s.sort.name, s.sortAscending) }
+  }
 
   fun cycleLayout() {
     val next = when (_state.value.layout) {

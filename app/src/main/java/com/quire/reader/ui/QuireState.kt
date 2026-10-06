@@ -108,6 +108,9 @@ fun statusLabel(b: Book) = when {
 /** The saved layout with that name; anything unknown (or nothing saved yet) is the grid. */
 fun libLayoutOf(name: String?): LibLayout = LibLayout.entries.firstOrNull { it.name == name } ?: LibLayout.Grid
 
+/** The saved sort with that name; anything unknown (or nothing saved yet) is Recently opened. */
+fun sortKeyOf(name: String?): SortKey = SortKey.entries.firstOrNull { it.name == name } ?: SortKey.Opened
+
 /** `author · series #n`, or just the author for a book outside a series. */
 fun authorLine(b: Book): String =
   if (b.series != null) "${b.author} · ${b.series}${b.seriesNoLabel?.let { " $it" } ?: ""}" else b.author
