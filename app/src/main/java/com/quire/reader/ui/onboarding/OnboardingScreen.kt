@@ -3,6 +3,7 @@ package com.quire.reader.ui.onboarding
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -38,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.quire.reader.data.scan.DiscoveryProgress
 import com.quire.reader.data.scan.ScanPhase
 import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.theme.Nq
@@ -49,6 +52,7 @@ import com.quire.reader.ui.IconBtn
 import com.quire.reader.ui.Kicker
 import com.quire.reader.ui.OnboardStep
 import com.quire.reader.ui.Ph
+import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QuireViewModel
@@ -133,7 +137,7 @@ private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit)
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         val shape = RoundedCornerShape(8.dp)
-        if (s.discovering) QText("Looking for books…", 13f, Modifier.padding(vertical = 8.dp), color = Nq.neutral500)
+        s.discovery?.let { DiscoveryLine(it) }
         s.candidates.forEach { f ->
           val on = f.path in s.pickedFolders
           Row(
@@ -150,8 +154,10 @@ private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit)
             QText(fmt(f.epubCount) + " EPUB", 12f, color = Nq.neutral400, tabular = true)
           }
         }
+        // Locked while discovery runs; it would race the folders still being found.
         Row(
-          Modifier.fillMaxWidth().clip(shape).border(1.dp, Nq.neutral700, shape).clickable(onClick = onAddFolder).padding(12.dp),
+          Modifier.fillMaxWidth().alpha(if (s.discovering) 0.45f else 1f).clip(shape).border(1.dp, Nq.neutral700, shape)
+            .clickable(enabled = !s.discovering, onClick = onAddFolder).padding(12.dp),
           horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
           Ph(Ic.Plus, 18.dp, Nq.accent)
@@ -167,7 +173,20 @@ private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit)
     val total = picked.sumOf { it.epubCount }
     QButton(
       "Scan ${picked.size} ${if (picked.size == 1) "folder" else "folders"} · ${fmt(total)} books", vm::startScan,
-      Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.Search, height = 46.dp, enabled = picked.isNotEmpty(),
+      Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.Search, height = 46.dp, enabled = picked.isNotEmpty() && !s.discovering,
+    )
+  }
+}
+
+/** The bar and caption shown while discovery walks the storage roots. */
+@Composable
+private fun DiscoveryLine(p: DiscoveryProgress) {
+  val fraction by animateFloatAsState(p.fraction, label = "discovery")
+  Column(Modifier.padding(top = 4.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    ProgressLine(fraction, Modifier.fillMaxWidth())
+    QText(
+      if (p.current.isEmpty()) "Looking for books…" else "Looking in ${p.current} · ${fmt(p.epubs)} EPUB found",
+      11f, color = Nq.neutral500, family = QuireFonts.Mono, maxLines = 1,
     )
   }
 }
