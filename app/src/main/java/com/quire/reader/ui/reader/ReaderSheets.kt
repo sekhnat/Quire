@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -59,6 +60,7 @@ import com.quire.reader.data.TextAlignPref
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.ReaderFontList
+import com.quire.reader.reader.ReaderPreferenceContext
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.QuireFonts
@@ -94,7 +96,7 @@ import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
 // ── display settings ────────────────────────────────────────────────────────
 
 @Composable
-internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, hasOverride: Boolean, vm: QuireViewModel) {
+internal fun DisplaySheet(s: UiState, session: ReaderSession, prefs: ReaderPrefs, hasOverride: Boolean, hasAdvancedOverride: Boolean, vm: QuireViewModel) {
   val maxH = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
   SheetHost(s.sheet == Sheet.Display, { vm.openSheet(null) }, Modifier.heightIn(max = maxH), backdrop = 0.5f) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -104,7 +106,42 @@ internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, hasOverride: Boolean, 
         Ph(Ic.Sun, 20.dp, Nq.neutral200)
       }
 
-      ReadingControls(prefs) { change -> vm.updatePrefs(change) }
+      ReadingControls(prefs, session.preferenceContext) { change -> vm.updatePrefs(change) }
+
+      // The advanced controls, only when they are switched on in Settings. The section's
+      // collapse state lives in session memory and resets for a new book.
+      val advancedEnabled by vm.advancedReadingEnabled.collectAsStateWithLifecycle()
+      if (advancedEnabled) {
+        Row(
+          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { vm.setAdvancedOpen(!s.advancedOpen) }.padding(vertical = 10.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          QText("Advanced", 13f, weight = 500)
+          Ph(Ic.CaretDown, 14.dp, Nq.neutral400, Modifier.rotate(if (s.advancedOpen) 180f else 0f))
+        }
+        AnimatedVisibility(s.advancedOpen) {
+          Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            AdvancedReadingControls(prefs.advanced, session.preferenceContext, vm::updateBookAdvanced, vm::chooseParagraphPreset)
+            var confirmRestore by remember { mutableStateOf(false) }
+            QButton("Restore advanced defaults", { confirmRestore = true }, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = hasAdvancedOverride)
+            if (confirmRestore) SheetHost(true, { confirmRestore = false }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+              Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                QText("Restore this book's advanced settings?", 17f, weight = 500, lh = 1.3f)
+                QText(
+                  "Paragraphs, spacing, weight, hyphenation, direction, images and page layout go back to your defaults. This book's other settings stay.",
+                  13f, color = Nq.neutral400, lh = 1.5f,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                  QButton("Cancel", { confirmRestore = false }, Modifier.weight(1f), size = 13f, height = 42.dp)
+                  QButton("Restore", { confirmRestore = false; vm.restoreBookAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
+                }
+              }
+            }
+            QText("Availability varies by book: a book's own typography, its writing system, the theme or the reading mode can hold a control back.", 11.5f, color = Nq.neutral500)
+          }
+        }
+      }
 
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         QButton("Tap zones", { vm.showZones(true) }, Modifier.weight(1f), icon = Ic.HandTap, size = 12.5f)
@@ -118,7 +155,7 @@ internal fun DisplaySheet(s: UiState, prefs: ReaderPrefs, hasOverride: Boolean, 
 
 /** The reading settings, shared by the reader's Display sheet and the Settings screen. */
 @Composable
-internal fun ReadingControls(prefs: ReaderPrefs, onChange: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
+internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceContext? = null, onChange: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ReaderTheme.entries.forEach { t ->
@@ -158,16 +195,16 @@ internal fun ReadingControls(prefs: ReaderPrefs, onChange: ((ReaderPrefs) -> Rea
           SegOption("Scroll", prefs.mode == ReadMode.Scroll, { onChange { it.copy(mode = ReadMode.Scroll) } }, Ic.Scroll),
         ))
       }
-      SettingRow("Line spacing") {
-        Segmented(listOf(1.4f to "1.4", 1.6f to "1.6", 1.85f to "1.8").map { (v, label) -> SegOption(label, prefs.lineHeight == v, { onChange { it.copy(lineHeight = v) } }) })
+      SettingRow("Line spacing", availability?.lineHeight.reasonText()) {
+        Segmented(listOf(1.4f to "1.4", 1.6f to "1.6", 1.85f to "1.8").map { (v, label) -> SegOption(label, prefs.lineHeight == v, { onChange { it.copy(lineHeight = v) } }, enabled = availability?.lineHeight?.available != false) })
       }
       SettingRow("Margins") {
         Segmented(listOf(16 to "S", 26 to "M", 40 to "L").map { (v, label) -> SegOption(label, prefs.margin == v, { onChange { it.copy(margin = v) } }) })
       }
-      SettingRow("Alignment") {
+      SettingRow("Alignment", availability?.textAlign.reasonText()) {
         Segmented(listOf(
-          SegOption("", prefs.align == TextAlignPref.Left, { onChange { it.copy(align = TextAlignPref.Left) } }, Ic.AlignLeft),
-          SegOption("", prefs.align == TextAlignPref.Justify, { onChange { it.copy(align = TextAlignPref.Justify) } }, Ic.AlignJustify),
+          SegOption("", prefs.align == TextAlignPref.Left, { onChange { it.copy(align = TextAlignPref.Left) } }, Ic.AlignLeft, enabled = availability?.textAlign?.available != false),
+          SegOption("", prefs.align == TextAlignPref.Justify, { onChange { it.copy(align = TextAlignPref.Justify) } }, Ic.AlignJustify, enabled = availability?.textAlign?.available != false),
         ))
       }
 
@@ -175,10 +212,20 @@ internal fun ReadingControls(prefs: ReaderPrefs, onChange: ((ReaderPrefs) -> Rea
 }
 
 @Composable
-internal fun SettingRow(label: String, control: @Composable () -> Unit) {
-  Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-    QText(label, 13f, color = Nq.neutral300)
-    control()
+internal fun SettingRow(label: String, reason: String? = null, control: @Composable () -> Unit) {
+  if (reason == null) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      QText(label, 13f, color = Nq.neutral300)
+      control()
+    }
+  } else {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        QText(label, 13f, color = Nq.neutral500)
+        QText(reason, 11f, color = Nq.neutral500)
+      }
+      control()
+    }
   }
 }
 
