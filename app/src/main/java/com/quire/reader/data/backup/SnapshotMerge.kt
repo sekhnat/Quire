@@ -77,6 +77,7 @@ object SnapshotMerge {
       indexChargingOnly = incoming.indexChargingOnly ?: local.indexChargingOnly,
       brightness = incoming.brightness ?: local.brightness,
       readerDefaults = incoming.readerDefaults ?: local.readerDefaults,
+      advancedReadingEnabled = incoming.advancedReadingEnabled ?: local.advancedReadingEnabled,
     )
   }
 }

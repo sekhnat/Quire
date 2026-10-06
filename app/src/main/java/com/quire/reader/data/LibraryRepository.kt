@@ -24,6 +24,8 @@ import com.quire.reader.data.scan.CoverStore
 import com.quire.reader.data.scan.LibraryScanner
 import com.quire.reader.data.scan.ScanResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -205,15 +207,37 @@ class LibraryRepository(
   suspend fun deleteHighlight(id: Long) = db.annotations().deleteHighlight(id)
   suspend fun setHighlightNote(id: Long, note: String?) = db.annotations().setHighlightNote(id, note?.trim()?.takeIf { it.isNotEmpty() })
 
-  /** This book's reading settings: its own if it has any, otherwise the defaults. */
-  fun readerPrefs(bookId: Long): Flow<ReaderPrefs> =
-    combine(settings.readerDefaults, db.states().observe(bookId)) { defaults, state -> ReaderPrefs.fromJson(state?.prefsJson) ?: defaults }
+  /** Serializes preference writes: a read-reduce-write never interleaves with another. */
+  private val prefsMutex = Mutex()
 
-  fun hasBookOverride(bookId: Long): Flow<Boolean> = db.states().observe(bookId).map { ReaderPrefs.fromJson(it?.prefsJson) != null }
+  /**
+   * This book's effective reading settings: each group from the book's own row when it
+   * carries one, otherwise from the global defaults. An advanced-only row therefore keeps
+   * inheriting the global basics.
+   */
+  fun readerPrefs(bookId: Long): Flow<ReaderPrefs> =
+    combine(settings.readerDefaults, db.states().observe(bookId)) { defaults, state ->
+      BookReaderPrefs.fromJson(state?.prefsJson)?.appliedTo(defaults) ?: defaults
+    }
+
+  /** True when the book overrides the basic settings with a whole set of its own. */
+  fun hasBookOverride(bookId: Long): Flow<Boolean> =
+    db.states().observe(bookId).map { BookReaderPrefs.fromJson(it?.prefsJson)?.hasBasic == true }
+
+  /** True when the book carries an advanced object of its own (the book restore action). */
+  fun hasBookAdvancedOverride(bookId: Long): Flow<Boolean> =
+    db.states().observe(bookId).map { BookReaderPrefs.fromJson(it?.prefsJson)?.hasAdvanced == true }
+
+  /** Whether the stored global defaults carry non-factory advanced values; reads stored JSON only. */
+  val advancedDefaultsCustomized: Flow<Boolean> = settings.readerDefaults.map { !it.advanced.isFactory }
 
   /** The settings every book without its own settings uses. */
   val readerDefaults: Flow<ReaderPrefs> = settings.readerDefaults
   suspend fun setReaderDefaults(prefs: ReaderPrefs) = settings.setReaderDefaults(prefs)
+
+  /** Whether the advanced reading controls are shown at all; independent of their values. */
+  val advancedReadingEnabled: Flow<Boolean> = settings.advancedReadingEnabled
+  suspend fun setAdvancedReadingEnabled(v: Boolean) = settings.setAdvancedReadingEnabled(v)
 
   suspend fun clearBookPrefs(bookId: Long) = db.states().edit(bookId) { it.copy(prefsJson = null) }
   suspend fun clearAllBookPrefs() = db.states().clearAllPrefs()
@@ -228,10 +252,33 @@ class LibraryRepository(
   suspend fun setIndexingEnabled(v: Boolean) = settings.setIndexingEnabled(v)
   suspend fun setIndexChargingOnly(v: Boolean) = settings.setIndexChargingOnly(v)
 
-  suspend fun setBookPrefs(bookId: Long, prefs: ReaderPrefs) = db.states().edit(bookId) { it.copy(prefsJson = prefs.toJson()) }
+  /** A basic edit: writes the basic group and leaves the book's advanced object as it is. */
+  suspend fun setBookPrefs(bookId: Long, prefs: ReaderPrefs) = prefsMutex.withLock {
+    db.states().edit(bookId) { state ->
+      val stored = BookReaderPrefs.fromJson(state.prefsJson) ?: BookReaderPrefs()
+      state.copy(prefsJson = stored.withBasicFrom(prefs).toJson())
+    }
+  }
+
+  /** An advanced edit: writes the effective advanced object and leaves the basic group as it is. */
+  suspend fun setBookAdvancedPrefs(bookId: Long, advanced: AdvancedReaderPrefs) = prefsMutex.withLock {
+    db.states().edit(bookId) { state ->
+      val stored = BookReaderPrefs.fromJson(state.prefsJson) ?: BookReaderPrefs()
+      state.copy(prefsJson = stored.copy(advanced = advanced).toJson())
+    }
+  }
+
+  /** Restores this book's advanced controls to the globals; its basic override stays. */
+  suspend fun clearBookAdvancedPrefs(bookId: Long) = prefsMutex.withLock {
+    db.states().edit(bookId) { state ->
+      val stored = BookReaderPrefs.fromJson(state.prefsJson) ?: return@edit state
+      val next = stored.copy(advanced = null)
+      state.copy(prefsJson = if (next.isEmpty) null else next.toJson())
+    }
+  }
 
   /** "Use for all books": these become the defaults and this book stops overriding them. */
-  suspend fun useForAllBooks(bookId: Long, prefs: ReaderPrefs) {
+  suspend fun useForAllBooks(bookId: Long, prefs: ReaderPrefs) = prefsMutex.withLock {
     settings.setReaderDefaults(prefs)
     db.states().edit(bookId) { it.copy(prefsJson = null) }
   }
