@@ -67,6 +67,13 @@ class LibraryScanner(
   private suspend fun doScan(): ScanResult {
     val startedAt = System.currentTimeMillis()
     val useCalibre = settings.useCalibre.first()
+    // Books a cover-broken build stored without a cover are never re-read (their file is unchanged), so once, reset
+    // their mtime: this scan re-reads them and tries the cover again, then they settle (see queueCoverBackfill).
+    if (!settings.coversBackfilled.first()) {
+      db.books().queueCoverBackfill()
+      settings.setCoversBackfilled(true)
+      Log.i(TAG, "queued cover backfill for cover-less books")
+    }
     val folders = db.folders().watched()
     val folderById = folders.associateBy { it.id }
     val known = db.books().knownFiles().associateBy { it.path }
@@ -199,6 +206,10 @@ class LibraryScanner(
         } finally { pub.close() }
       }.onFailure { readable = false }
     }
+
+    // Both cover paths ran (Calibre cover.jpg, then the EPUB itself) and still nothing: say so, so a silent
+    // extraction regression is visible in logcat instead of just an empty card in the library.
+    if (coverPath == null) Log.i(TAG, "no cover extracted for ${file.path}")
 
     val m = meta ?: OpfMetadata(
       title = epub.nameWithoutExtension.replace('_', ' ').trim().ifEmpty { "Untitled" },

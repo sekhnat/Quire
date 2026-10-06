@@ -27,11 +27,14 @@ class SettingsStore(context: Context) {
   /** Index only while the device is charging. */
   val indexChargingOnly: Flow<Boolean> = flow(INDEX_CHARGING_ONLY, false)
 
+  /** False until the scan has re-read the books a cover-broken build stored without one (see [LibraryScanner]). */
+  val coversBackfilled: Flow<Boolean> = flow(COVERS_BACKFILLED, false)
   suspend fun setOnboardingDone(v: Boolean) = store.edit { it[ONBOARDING_DONE] = v }
   suspend fun setUseCalibre(v: Boolean) = store.edit { it[USE_CALIBRE] = v }
   suspend fun setWatchNewBooks(v: Boolean) = store.edit { it[WATCH_NEW] = v }
   suspend fun setIndexingEnabled(v: Boolean) = store.edit { it[INDEXING_ENABLED] = v }
   suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
+  suspend fun setCoversBackfilled(v: Boolean) = store.edit { it[COVERS_BACKFILLED] = v }
 
   /** Whether the full-text index was merged into its fastest form after the first complete build; cleared when the index is. */
   val indexOptimized: Flow<Boolean> = flow(INDEX_OPTIMIZED, false)
@@ -53,6 +56,7 @@ class SettingsStore(context: Context) {
     val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     val USE_CALIBRE = booleanPreferencesKey("use_calibre")
     val WATCH_NEW = booleanPreferencesKey("watch_new_books")
+    val COVERS_BACKFILLED = booleanPreferencesKey("covers_backfilled")
     val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")
     val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
