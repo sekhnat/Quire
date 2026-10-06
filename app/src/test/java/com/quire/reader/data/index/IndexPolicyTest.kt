@@ -35,6 +35,16 @@ class IndexPolicyTest {
     assertFalse(BatchResult(processed = 0, stop = BatchStop.Superseded).needsContinuation)
   }
 
+  @Test fun `a request with no worker running starts the chain afresh, even over queued work`() {
+    assertEquals(EnqueueChoice.Replace, enqueueChoice(workerActive = false, successorQueued = false))
+    assertEquals(EnqueueChoice.Replace, enqueueChoice(workerActive = false, successorQueued = true))
+  }
+
+  @Test fun `a request while a worker runs queues one successor and no more`() {
+    assertEquals(EnqueueChoice.Append, enqueueChoice(workerActive = true, successorQueued = false))
+    assertEquals(EnqueueChoice.Skip, enqueueChoice(workerActive = true, successorQueued = true))
+  }
+
   @Test fun `a disabled setting outranks every other reason`() {
     val inputs = running.copy(enabled = false, permissionMissing = true, readerBusy = true)
     assertEquals(IndexActivity.Disabled, deriveActivity(inputs))
