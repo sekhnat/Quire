@@ -57,12 +57,15 @@ class ReaderSession(
   /** Cancelled when the session closes; holds the navigator collectors. */
   val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-
-  /** The publication layout, determined exactly as EpubNavigatorFactory determines it. */
   /** The publication layout, determined exactly as EpubNavigatorFactory determines it. */
   val layout: Layout get() = publication.metadata.layout ?: Layout.REFLOWABLE
+
   private val _current = MutableStateFlow(initialLocator ?: positions.firstOrNull())
   val current: StateFlow<Locator?> = _current
+
+  private val _toc = MutableStateFlow(flatten(publication.tableOfContents))
+  val toc: List<TocEntry> get() = _toc.value
+  val tocFlow: StateFlow<List<TocEntry>> = _toc
 
   private val navigatorFlow = MutableStateFlow<EpubNavigatorFragment?>(null)
   val navigator: EpubNavigatorFragment? get() = navigatorFlow.value
@@ -70,24 +73,29 @@ class ReaderSession(
   /** The latest mapped navigator preferences, kept for a navigator that is not attached yet. */
   private var latestPreferences: EpubPreferences? = null
 
+  /** The controls' availability against the latest submitted preferences, for the reader UI. */
+  var preferenceContext: ReaderPreferenceContext? = null
+    private set
+
   /**
-   * Submits mapped reading preferences to the navigator. Deduplicates by equality and
-   * keeps the latest value for a detached navigator, so accepted changes are applied
-   * exactly once and fast changes are never lost to flow conflation.
+   * Submits mapped reading preferences to the navigator. Deduplicates by equality and keeps
+   * the latest value for a detached navigator, so accepted changes are applied exactly once
+   * and fast changes are never lost to flow conflation. The advanced controls' availability
+   * is computed here, once per submitted preferences (C8).
    */
   fun submit(preferences: EpubPreferences) {
     if (latestPreferences == preferences) return
     latestPreferences = preferences
+    preferenceContext = ReaderPreferenceContext.of(publication, preferences)
     navigator?.submitPreferences(preferences)
   }
 
-  private val _toc = MutableStateFlow(flatten(publication.tableOfContents))
-  val toc: List<TocEntry> get() = _toc.value
-  val tocFlow: StateFlow<List<TocEntry>> = _toc
-
   fun attach(nav: EpubNavigatorFragment) {
     navigatorFlow.value = nav
-    latestPreferences?.let(nav::submitPreferences)
+    latestPreferences?.let {
+      preferenceContext = ReaderPreferenceContext.of(publication, it)
+      nav.submitPreferences(it)
+    }
   }
   fun detach() { navigatorFlow.value = null }
   fun onLocator(locator: Locator) { _current.value = locator }
