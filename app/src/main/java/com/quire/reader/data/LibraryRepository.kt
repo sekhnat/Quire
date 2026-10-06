@@ -58,12 +58,13 @@ class LibraryRepository(
   /** Persisted chunk text across all books (not the search index or position data built on top of it). */
   val indexedTextBytes: Flow<Long> = indexer.catalog.observeTextBytes()
 
-  /** Bytes the library and its search index take on disk: both database files with their write-ahead logs (and shared memory). */
-  suspend fun databaseBytes(): Long = withContext(Dispatchers.IO) {
-    listOf(QuireDatabase.FILE_NAME, IndexDatabase.FILE_NAME).sumOf { name ->
+  /** Separate disk usage, including each database's WAL and shared-memory sidecars. */
+  suspend fun storageBytes(): com.quire.reader.data.index.IndexStorageBytes = withContext(Dispatchers.IO) {
+    fun bytes(name: String): Long {
       val main = app.getDatabasePath(name)
-      listOf("", "-wal", "-shm").sumOf { File(main.path + it).length() }
+      return listOf("", "-wal", "-shm").sumOf { File(main.path + it).length() }
     }
+    com.quire.reader.data.index.IndexStorageBytes(bytes(QuireDatabase.FILE_NAME), bytes(IndexDatabase.FILE_NAME))
   }
 
   /** Books whose text matches [query], grouped and ranked, narrowed by the library [filters]. Follows the database. */
