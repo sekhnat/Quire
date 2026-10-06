@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.index.BookTextResult
+import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.BtnKind
@@ -100,6 +101,16 @@ internal fun TextSearchResults(s: UiState, lib: LibraryData, search: LibraryText
           Ph(Ic.Search, 26.dp, Nq.neutral500)
           QText(c.title, 15f, weight = 500, align = TextAlign.Center)
           c.detail?.let { QText(it, 12.5f, color = Nq.neutral400, lh = 1.5f, align = TextAlign.Center) }
+        }
+      }
+    }
+    if (status is TextSearchStatus.Results && status.result.books.size > 1) {
+      item {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+          QText("Order by", 11.5f, color = Nq.neutral500)
+          SearchOrder.entries.forEach { order ->
+            Tag(order.label, { vm.setTextSearchOrder(order) }, accent = s.textSearchOrder == order, size = 12f, hPad = 10.dp, vPad = 6.dp)
+          }
         }
       }
     }

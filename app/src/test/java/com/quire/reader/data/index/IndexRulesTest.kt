@@ -50,6 +50,8 @@ class IndexRulesTest {
     assertEquals("cafe", foldedTerm("Café"))
     assertEquals("cafe", foldedTerm("cafe\u0301")) // decomposed accent
     assertEquals("日本", foldedTerm("日本"))
+    assertEquals("싱숑", foldedTerm("싱숑")) // Hangul syllables stay whole, as SQLite keeps them
+    assertEquals("싱숑".length, foldedTerm("싱숑").length)
   }
 
   @Test fun `the term range for a prefix covers every term that starts with it and nothing else`() {

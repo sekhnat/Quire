@@ -11,11 +11,13 @@ fun needsIndexing(bookMtime: Long, bookSize: Long, state: IndexSignature?): Bool
   state == null || state.mtime != bookMtime || state.sizeBytes != bookSize
 
 /**
- * At most this many matching passages are examined per library query. Finding who owns a match costs about 5 µs per
- * row, so the cap keeps very common queries ("the") near the 100 ms target. Counts stay exact below it.
- * It favours the books indexed first, because the engine visits those rows first. To be tuned against measurements.
+ * At most this many matching passages are counted per library query; past it counts read "N+". Matches stream from the
+ * index in id order at about 0.4 µs each for a word and about 1 µs for a phrase or a filtered scan, so this is the largest
+ * cap that keeps every capped query of the benchmark under 100 ms (the slowest, a very common word inside a broad filter,
+ * takes 84 ms; at 100,000 it takes 147 ms). It also matches the point past which relevance ranking is skipped
+ * ([TextSearcher.MAX_RANKED_MATCHES]). It favours the books indexed first, because the engine visits those rows first.
  */
-const val MAX_COUNTED_PASSAGES = 5000
+const val MAX_COUNTED_PASSAGES = 50_000
 
 /** A matching-passage count that may be a lower bound: shown "N+" when [isCapped]. */
 data class PassageCount(val value: Int, val isCapped: Boolean) {
@@ -36,17 +38,24 @@ val rankBooks: Comparator<BookRank> =
 
 /**
  * A final word prefix whose terms appear in more than this many chunks in total is searched as the exact word instead.
- * FTS4 reads and merges the whole doclist of every term with the prefix before returning a row, which the counting cap
- * cannot bound: about 0.13 µs per document on the emulator, so a prefix at this limit costs about 26 ms to merge plus
- * about 8 ms to measure (reading counts from `fts4aux` costs about 0.04 µs per document and stops once the limit is
- * passed). That keeps a typed query near 85 ms warm with the 5000-passage cap and 40 snippet-bearing books.
- * Measured on 505k chunks; to be tuned at scale verification.
+ * FTS5 merges the doclists of every term with the prefix, and for a prefix of a very common word (`the`, `th`) that costs
+ * more than a second, which the counting cap cannot bound. The terms' document counts come from the index vocabulary, so
+ * measuring costs about as much as the limit's worth of document reads. Every other prefix of the benchmark (`hous`, `wh`,
+ * `com`, `gre`, `sta`) stays under 50 ms at the 50,000-passage cap without a prefix index, so no `prefix=` option is used.
  */
 const val MAX_PREFIX_DOCUMENTS = 200_000
 
-/** [word] as the index stores it: lower case with accents removed (SQLite's `unicode61` folding, to the extent the JVM matches it). */
-fun foldedTerm(word: String): String =
-  java.text.Normalizer.normalize(word, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "").lowercase(java.util.Locale.ROOT)
+private val COMBINING_MARKS = Regex("\\p{M}+")
+
+/**
+ * [word] as the index stores it: lower case with accents removed (SQLite's `unicode61 remove_diacritics 2` folding, to the
+ * extent the JVM matches it). Recomposed afterwards, because decomposing also splits Hangul syllables into jamo, which
+ * SQLite leaves whole.
+ */
+fun foldedTerm(word: String): String {
+  val stripped = java.text.Normalizer.normalize(word, java.text.Normalizer.Form.NFD).replace(COMBINING_MARKS, "")
+  return java.text.Normalizer.normalize(stripped, java.text.Normalizer.Form.NFC).lowercase(java.util.Locale.ROOT)
+}
 
 /** The prefix's term-range end: sorts after every term that starts with [prefix]. */
 fun prefixRangeEnd(prefix: String): String = prefix + "\uDBFF\uDFFF"

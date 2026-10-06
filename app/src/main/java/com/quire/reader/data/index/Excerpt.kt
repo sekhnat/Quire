@@ -1,31 +1,83 @@
 package com.quire.reader.data.index
 
-/** One matched token in a chunk's text: the byte range FTS `offsets()` reports (a quadruple is column, term, offset, size). */
-data class ByteMatch(val byteStart: Int, val byteSize: Int) {
-  val byteEnd: Int get() = byteStart + byteSize
-}
-
-/** The matches in an `offsets()` string, in the order SQLite lists them. Anything that is not whole quadruples of numbers is dropped. */
-fun parseOffsets(offsets: String): List<ByteMatch> {
-  val numbers = offsets.split(' ').mapNotNull { it.toIntOrNull() }
-  return (0 until numbers.size / 4).map { ByteMatch(numbers[it * 4 + 2], numbers[it * 4 + 3]) }
+/**
+ * The matches marked in FTS `highlight()` output, as char ranges of the text without the markers ([TextChunker.HIGHLIGHT_OPEN]
+ * and [TextChunker.HIGHLIGHT_CLOSE], which indexed text never contains). An unclosed final match runs to the end.
+ */
+fun highlightRanges(marked: String): List<IntRange> {
+  val out = ArrayList<IntRange>()
+  var removed = 0
+  var open = -1
+  for (i in marked.indices) {
+    when (marked[i]) {
+      TextChunker.HIGHLIGHT_OPEN -> { open = i - removed; removed++ }
+      TextChunker.HIGHLIGHT_CLOSE -> {
+        val end = i - removed
+        if (open >= 0 && end > open) out += open until end
+        open = -1
+        removed++
+      }
+    }
+  }
+  if (open >= 0 && marked.length - removed > open) out += open until marked.length - removed
+  return out
 }
 
 /**
- * The byte offset at which the first match in an `offsets()` string starts, or null when it has none. The first one is
- * the lowest, so it alone decides which chunk owns the match: a chunk owns it only if this is before its `primaryEndByte`.
+ * Where [terms] match in [text], as char ranges in order: the words of each term in consecutive tokens, case and accents
+ * folded as the index folds them, the last word of a term a prefix when it says so. This is what FTS5's `highlight()` would
+ * mark, without asking the index: that costs about a millisecond a chunk, against microseconds here. Tokens are found by
+ * [Tokenizer], which agrees with the index's tokenizer except on rare characters, so a caller that finds nothing here for a
+ * chunk the index says matches should ask the index.
  */
-fun firstMatchByte(offsets: String): Int? {
-  var field = 0
-  var start = 0
-  for (i in 0..offsets.length) {
-    if (i < offsets.length && offsets[i] != ' ') continue
-    if (field == 2) return offsets.substring(start, i).toIntOrNull()
-    field++
-    start = i + 1
+fun matchRanges(text: String, terms: List<MatchTerm>): List<IntRange> {
+  if (terms.isEmpty()) return emptyList()
+  val want = terms.map { t -> t.words.map(::foldWord) }
+  val tokens = Tokenizer.tokenize(text)
+  val out = ArrayList<IntRange>()
+  for ((ti, term) in terms.withIndex()) {
+    val words = want[ti]
+    val last = words.lastIndex
+    var i = 0
+    while (i + last < tokens.size) {
+      var ok = true
+      for (k in 0..last) {
+        val t = tokens[i + k]
+        if (!tokenIs(text, t.startChar, t.endChar, words[k], prefix = k == last && term.prefix)) { ok = false; break }
+      }
+      if (ok) out += tokens[i].startChar until tokens[i + last].endChar
+      i++
+    }
   }
-  return null
+  return out.sortedBy { it.first }
 }
+
+/** Whether chars [start, end) of [text], folded, equal [want] (already folded) or, for a [prefix], start with it. Plain ASCII tokens are compared in place. */
+private fun tokenIs(text: String, start: Int, end: Int, want: String, prefix: Boolean): Boolean {
+  val length = end - start
+  var ascii = true
+  for (i in start until end) if (text[i].code >= 0x80) { ascii = false; break }
+  if (ascii) return if (prefix) length >= want.length && text.regionMatches(start, want, 0, want.length, ignoreCase = true) else length == want.length && text.regionMatches(start, want, 0, length, ignoreCase = true)
+  val folded = foldedTerm(text.substring(start, end))
+  return if (prefix) folded.startsWith(want) else folded == want
+}
+
+/** [word] as the index folds it; plain ASCII, nearly all text, skips the normaliser. */
+private fun foldWord(word: String): String {
+  for (c in word) if (c.code >= 0x80) return foldedTerm(word)
+  return word.lowercase(java.util.Locale.ROOT)
+}
+
+/** Every place in [text] where one of the CJK [runs] occurs, as char ranges; for excerpts of the CJK index, which has no `highlight()`. */
+fun substringRanges(text: String, runs: List<String>): List<IntRange> = buildList {
+  for (run in runs) {
+    var at = text.indexOf(run)
+    while (at >= 0) {
+      add(at until at + run.length)
+      at = text.indexOf(run, at + run.length)
+    }
+  }
+}.sortedBy { it.first }
 
 /** A stretch of an excerpt, either plain text or a highlighted match. */
 data class ExcerptSpan(val text: String, val hit: Boolean)
@@ -44,33 +96,28 @@ private const val MAX_EXCERPT = 2 * (EXCERPT_BEFORE + EXCERPT_AFTER)
  * Cuts a short excerpt from a chunk's stored text around its first match and marks every match inside it.
  * A later match — a second query term — that falls just past the window is pulled in ([MAX_EXCERPT] bounds the
  * growth), so a multi-term search shows more than the word that happened to come first.
- * Matches are given as [offsets], the `offsets()` string for this chunk. Adjacent matches (the words of a phrase,
- * or neighbouring query words) are merged into one highlight, and the first one becomes the locator target's highlight.
+ * Matches are [hits], char ranges of [chunkText] in any order. Adjacent matches (the words of a phrase, or neighbouring
+ * query words) are merged into one highlight, and the first one becomes the locator target's highlight; [href] and
+ * [mediaType] are the chunk's resource, which completes the target's locator.
  *
- * Everything is cut from the stored text by char index; the byte offsets are converted first, never used as indexes.
- * Returns null when the offsets do not fit the text or no mapped segment contains the first match, which means the
- * row no longer agrees with its index.
+ * Returns null when no hit fits the text or no mapped segment contains the first one, which means the row no longer agrees
+ * with its index.
  */
-fun buildExcerpt(chunkText: String, segments: List<MappingSegment>, offsets: String): Excerpt? {
-  val map = ByteCharMap(chunkText)
-  val hits = mergeAdjacent(chunkText, parseOffsets(offsets).sortedBy { it.byteStart }.mapNotNull { m ->
-    val start = map.charIndexOrNull(m.byteStart) ?: return@mapNotNull null
-    val end = map.charIndexOrNull(m.byteEnd) ?: return@mapNotNull null
-    if (end > start) start until end else null
-  })
-  val first = hits.firstOrNull() ?: return null
-  val target = resolveMatch(chunkText, segments, map.byteOf(first.first), map.byteOf(first.last + 1) - map.byteOf(first.first)) ?: return null
+fun buildExcerpt(chunkText: String, segments: List<MappingSegment>, href: String, mediaType: String?, hits: List<IntRange>): Excerpt? {
+  val merged = mergeAdjacent(chunkText, hits.filter { it.first >= 0 && it.last < chunkText.length && !it.isEmpty() }.sortedBy { it.first })
+  val first = merged.firstOrNull() ?: return null
+  val target = resolveMatch(chunkText, segments, href, mediaType, first.first, first.last + 1) ?: return null
 
   val start = cutStart(chunkText, first.first - EXCERPT_BEFORE)
   var end = cutEnd(chunkText, first.last + 1 + EXCERPT_AFTER)
-  val beyond = hits.firstOrNull { it.first >= end }
+  val beyond = merged.firstOrNull { it.first >= end }
   if (beyond != null) {
     val extended = cutEnd(chunkText, beyond.last + 1 + EXCERPT_AFTER)
     if (extended - start <= MAX_EXCERPT) end = extended
   }
   val spans = ArrayList<ExcerptSpan>()
   var at = start
-  for (hit in hits) {
+  for (hit in merged) {
     if (hit.first >= end) break
     if (hit.last < start) continue
     val from = maxOf(hit.first, start)

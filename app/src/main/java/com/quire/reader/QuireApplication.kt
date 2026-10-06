@@ -3,6 +3,7 @@ package com.quire.reader
 import android.app.Application
 import com.quire.reader.data.LibraryRepository
 import com.quire.reader.data.SettingsStore
+import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.data.index.LibraryIndexer
 import com.quire.reader.data.scan.CoverStore
@@ -31,10 +32,11 @@ class QuireApplication : Application() {
   /** For work that must outlive a screen, such as saving the reading position as the reader closes. */
   val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
   val database by lazy { QuireDatabase.create(this) }
+  val indexDatabase by lazy { IndexDatabase.create(this) }
   val settings by lazy { SettingsStore(this) }
   val covers by lazy { CoverStore(this) }
   val publicationLoader by lazy { PublicationLoader(this) }
   val scanner by lazy { LibraryScanner(database, publicationLoader, covers, settings) }
-  val indexer by lazy { LibraryIndexer(this, database, publicationLoader, settings, appScope) }
-  val library by lazy { LibraryRepository(this, database, scanner, covers, settings, indexer) }
+  val indexer by lazy { LibraryIndexer(this, database, indexDatabase, publicationLoader, settings, appScope) }
+  val library by lazy { LibraryRepository(this, database, indexDatabase, scanner, covers, settings, indexer) }
 }

@@ -2,6 +2,9 @@ package com.quire.reader.data.index
 
 import com.quire.reader.data.Book
 
+/** How matching books are ordered: by how well their best passage matches, or by passage count and recent reading. */
+enum class SearchOrder(val label: String) { Relevance("Relevance"), Library("Most passages") }
+
 /** The reading-status chips that narrow a library text search, as the library's own status filter does. */
 enum class TextStatusFilter { Reading, Unread, Finished, Recent }
 

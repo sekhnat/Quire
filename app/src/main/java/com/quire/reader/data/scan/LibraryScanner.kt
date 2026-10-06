@@ -148,7 +148,6 @@ class LibraryScanner(
     vanished.chunked(MAX_SQL_ARGS).forEach { db.books().markMissing(it, now) }
     val moves = reconcile()
     covers.deleteAll(db.books().purgeMissing())
-    db.index().forgetMissing()
 
     reachable.forEach { db.folders().markScanned(it, now) }
     val read = queued.get()

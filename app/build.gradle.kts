@@ -17,6 +17,8 @@ android {
         versionCode = providers.gradleProperty("versionCode").getOrElse("1").toInt()
         versionName = providers.gradleProperty("versionName").getOrElse("1.0")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The bundled SQLite (search index) is native code; 64-bit only keeps the APK small.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     signingConfigs {
@@ -98,6 +100,7 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
   ksp(libs.androidx.room.compiler)
+  implementation(libs.androidx.sqlite.bundled)
   testImplementation(libs.androidx.room.testing)
   implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.work.runtime)
