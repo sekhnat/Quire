@@ -34,6 +34,27 @@ fun deriveActivity(i: ActivityInputs): IndexActivity = when {
   else -> IndexActivity.Idle
 }
 
+/** How a request for indexing joins the WorkManager chain. */
+enum class EnqueueChoice {
+  /** Start the chain afresh: nothing is indexing, so whatever it still holds has not started or never will. */
+  Replace,
+  /** Queue one worker behind the running one. */
+  Append,
+  /** A worker already waits behind the running one, and it will see every book when it starts. */
+  Skip,
+}
+
+/**
+ * The chain's persisted state is not trusted while no worker runs in this process: queued work can go stale (a job that
+ * is never scheduled, or a successor blocked behind a run that died), and skipping requests because of it left new books
+ * unindexed until the setting was toggled. Replacing unstarted work costs nothing.
+ */
+fun enqueueChoice(workerActive: Boolean, successorQueued: Boolean): EnqueueChoice = when {
+  !workerActive -> EnqueueChoice.Replace
+  successorQueued -> EnqueueChoice.Skip
+  else -> EnqueueChoice.Append
+}
+
 /** What extracting one book came to, before anything is written. */
 sealed interface Extracted {
   /** The publication could not be opened or read (corrupt, DRM, not an EPUB). */

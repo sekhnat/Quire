@@ -38,6 +38,7 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.getOrElse
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -95,7 +96,23 @@ class LibraryIndexer(
 
   // ── scheduling ───────────────────────────────────────────────────────────
 
-  /** Asks for indexing to run: queues one worker behind any running one, unless one is already waiting. Safe to call often. */
+  /** Workers running [IndexWorker.doWork] in this process, the only place they run. Unlike WorkManager's records, never stale. */
+  private val activeWorkers = AtomicInteger()
+
+  /** Runs [block] as the worker, so requests made meanwhile queue behind it instead of replacing it. */
+  internal suspend fun <T> asWorker(block: suspend () -> T): T {
+    activeWorkers.incrementAndGet()
+    try {
+      return block()
+    } finally {
+      activeWorkers.decrementAndGet()
+    }
+  }
+
+  /**
+   * Asks for indexing to run. With no worker running, starts the chain afresh (see [enqueueChoice]); otherwise queues one
+   * worker behind the running one, unless one is already waiting. Safe to call often.
+   */
   fun request() {
     scope.launch { requestLock.withLock { enqueueIfAllowed() } }
   }
@@ -173,12 +190,15 @@ class LibraryIndexer(
   private suspend fun enqueueIfAllowed() {
     _permissionMissing.value = !StoragePaths.hasAllFilesAccess()
     if (!settings.indexingEnabled.first() || _permissionMissing.value) return
-    // A request that has not started yet will see everything, so another would only lengthen the chain.
     val waiting = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).first().any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
-    if (waiting) return
+    val policy = when (enqueueChoice(workerActive = activeWorkers.get() > 0, successorQueued = waiting)) {
+      EnqueueChoice.Skip -> return
+      EnqueueChoice.Append -> ExistingWorkPolicy.APPEND_OR_REPLACE
+      EnqueueChoice.Replace -> ExistingWorkPolicy.REPLACE.also { if (waiting) Log.i(TAG, "request: replacing queued work that has not started") }
+    }
     val constraints = Constraints.Builder().setRequiresCharging(settings.indexChargingOnly.first()).build()
     val work = OneTimeWorkRequestBuilder<IndexWorker>().setConstraints(constraints).build()
-    workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, work)
+    workManager.enqueueUniqueWork(WORK_NAME, policy, work)
   }
 
   /** Called by the worker, which knows best whether it could run. */
@@ -312,6 +332,6 @@ class LibraryIndexer(
     /** The unique WorkManager chain every indexing request joins. */
     const val WORK_NAME = "indexing-chain"
 
-    private const val TAG = "LibraryIndexer"
+    internal const val TAG = "LibraryIndexer"
   }
 }

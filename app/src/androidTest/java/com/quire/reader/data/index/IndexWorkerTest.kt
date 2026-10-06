@@ -2,6 +2,10 @@ package com.quire.reader.data.index
 
 import android.os.ParcelFileDescriptor
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.await
 import com.quire.reader.QuireApplication
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.FolderEntity
@@ -18,6 +22,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 /**
  * Runs the real worker chain inside the app under test, which must be a throwaway application id (`.dbtest`):
@@ -44,6 +49,7 @@ class IndexWorkerTest {
   }
 
   @After fun tearDown() {
+    WorkManager.getInstance(app).cancelUniqueWork(LibraryIndexer.WORK_NAME)
     runBlocking {
       app.settings.setIndexingEnabled(true)
       app.database.books().delete(bookIds)
@@ -75,6 +81,17 @@ class IndexWorkerTest {
 
     awaitStatus(id, IndexStateEntity.STATUS_DONE)
     assertEquals(IndexActivity.Idle, withTimeout(30_000) { app.indexer.activity.first { it == IndexActivity.Idle } })
+  }
+
+  @Test fun `a request replaces queued work that never runs`() = runBlocking {
+    // Stands in for a stale entry in the chain: queued, so it looks like it will run, but it never starts.
+    val stale = OneTimeWorkRequestBuilder<IndexWorker>().setInitialDelay(1, TimeUnit.DAYS).build()
+    WorkManager.getInstance(app).enqueueUniqueWork(LibraryIndexer.WORK_NAME, ExistingWorkPolicy.REPLACE, stale).await()
+    val id = addBook("sanditon", "The Parkers built a seaside town.")
+
+    app.indexer.request()
+
+    awaitStatus(id, IndexStateEntity.STATUS_DONE)
   }
 
   @Test fun `a disabled setting stops new books being indexed until it is enabled again`() = runBlocking {
