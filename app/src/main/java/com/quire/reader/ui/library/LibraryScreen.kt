@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -36,12 +38,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
@@ -87,6 +95,7 @@ import com.quire.reader.ui.cssGradient
 import com.quire.reader.ui.visibleBooks
 import java.text.NumberFormat
 import java.util.Locale
+import kotlinx.coroutines.isActive
 
 internal fun syncedLabel(at: Long): String {
   if (at <= 0) return "not scanned yet"
@@ -104,11 +113,37 @@ internal fun fmt(n: Int): String = NumberFormat.getIntegerInstance(Locale.US).fo
 @Composable
 internal fun navBottomPadding() = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
+/**
+ * Keeps a sideways row's leftover drag and fling to itself. Without it a row scrolled to its end hands the rest of the
+ * swipe to the library pager as a plain scroll, and the pager is left stopped between two views instead of snapping.
+ */
+private object KeepSidewaysScroll : NestedScrollConnection {
+  override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource) = available.copy(y = 0f)
+  override suspend fun onPostFling(consumed: Velocity, available: Velocity) = available.copy(y = 0f)
+}
+
 @Composable
 fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
   var pickingFolder by remember { mutableStateOf(false) }
   val textMode = s.searchOpen && s.searchScope == SearchScope.Text
   BackHandler(enabled = s.scope != null) { vm.setScope(null) }
+  // The views sit side by side so a swipe moves between them. The pager follows the view model (tab taps, picking an
+  // author…), and a swipe that lands tells it. `steering` keeps the in-between page of a scroll cut short by another
+  // (two quick tab taps) from being reported as a swipe.
+  val pager = rememberPagerState(initialPage = s.view.ordinal) { LibView.entries.size }
+  var steering by remember { mutableStateOf(false) }
+  LaunchedEffect(s.view) {
+    val page = s.view.ordinal
+    if (pager.currentPage == page && pager.currentPageOffsetFraction == 0f) { steering = false; return@LaunchedEffect }
+    steering = true
+    // Still active when a drag took the pager over, so that swipe is reported.
+    try { pager.animateScrollToPage(page) } finally { if (isActive) steering = false }
+  }
+  LaunchedEffect(pager) {
+    snapshotFlow { pager.settledPage }.collect { page ->
+      if (!steering && page != vm.state.value.view.ordinal) vm.setView(LibView.entries[page])
+    }
+  }
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
       Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -129,10 +164,10 @@ fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
             )
           }
         }
-        TabRow2(LibView.entries.map { it.label }, s.view.ordinal, { vm.setView(LibView.entries[it]) })
+        TabRow2(LibView.entries.map { it.label }, pager.targetPage, { vm.setView(LibView.entries[it]) })
       }
-      Box(Modifier.weight(1f)) {
-        when (s.view) {
+      HorizontalPager(pager, Modifier.weight(1f)) { page ->
+        when (LibView.entries[page]) {
           LibView.Books -> if (textMode) {
             // Only observed while the text search is on screen, so the library does no search work otherwise.
             val search by vm.textSearch.collectAsStateWithLifecycle()
@@ -250,7 +285,7 @@ private fun BooksHeader(s: UiState, lib: LibraryData, vm: QuireViewModel, list: 
 
 @Composable
 internal fun FilterChips(s: UiState, lib: LibraryData, vm: QuireViewModel) {
-  LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+  LazyRow(Modifier.bleed(20.dp).nestedScroll(KeepSidewaysScroll), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     items(LibFilter.entries) { f ->
       val on = s.filter == f
       val shape = RoundedCornerShape(999.dp)
@@ -352,7 +387,7 @@ private fun ShelfRow(shelf: ShelfDef, sort: SortKey, vm: QuireViewModel) {
       QText(shelf.title, 15f, weight = 500)
       QButton(shelf.sub, { vm.showShelf(shelf.filter, shelf.scope) }, kind = BtnKind.Ghost, size = 12f, height = 28.dp)
     }
-    LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyRow(Modifier.bleed(20.dp).nestedScroll(KeepSidewaysScroll), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       items(shelf.books, key = { it.id }) { b ->
         Column(Modifier.width(shelf.coverWidthDp.dp).clickable { vm.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
           ShelfCover(b)
