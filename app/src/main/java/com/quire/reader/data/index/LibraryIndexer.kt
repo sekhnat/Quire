@@ -54,7 +54,7 @@ import kotlin.coroutines.cancellation.CancellationException
 class LibraryIndexer(
   context: Context,
   private val db: QuireDatabase,
-  indexDb: IndexDatabase,
+  private val indexDb: IndexDatabase,
   private val loader: PublicationLoader,
   private val settings: SettingsStore,
   private val scope: CoroutineScope,
@@ -142,6 +142,8 @@ class LibraryIndexer(
    */
   suspend fun optimizeIfDue() {
     if (settings.indexOptimized.first() || _readerBusy.value || !isCharging()) return
+    // An empty library drains at once; the merge is for after the first build that put text in the index.
+    if (indexDb.states().searchable().isEmpty()) return
     val file = app.getDatabasePath(IndexDatabase.FILE_NAME)
     val size = listOf("", "-wal").sumOf { File(file.path + it).length() }
     if (file.parentFile!!.usableSpace < size) return

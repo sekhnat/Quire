@@ -13,6 +13,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -335,5 +336,19 @@ class LibraryIndexerTest : DbTestCase() {
     assertNull(f.index.stateOf(gone.id))
     assertEquals(1, f.index.hits("highbury").size)
     assertEquals(IndexStateEntity.STATUS_DONE, f.index.stateOf(kept.id)!!.status)
+  }
+
+  @Test fun `the one-off merge waits for a first build that put text in the index`() = runBlocking<Unit> {
+    val f = fixture()
+    val settings = SettingsStore(target)
+    settings.setIndexOptimized(false)
+    f.indexer.optimizeIfDue() // nothing indexed: must not be recorded as done
+    assertFalse(settings.indexOptimized.first())
+    f.add("Emma", epub("emma", EpubFixtures.chapter("One", "Highbury was quiet.")))
+    f.indexer.runBatch(deadline)
+    f.indexer.optimizeIfDue()
+    // Done when charging, still waiting otherwise; either way the index keeps answering.
+    assertEquals(1, f.index.hits("highbury").size)
+    settings.setIndexOptimized(false)
   }
 }
