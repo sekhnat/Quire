@@ -48,6 +48,13 @@ android {
         }
     }
 
+    // Readium's preference types parse their default colours with android.graphics.Color in
+    // static initializers; unit tests run without Android, so unmocked framework calls
+    // return defaults instead of throwing.
+    testOptions {
+      unitTests.isReturnDefaultValues = true
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
