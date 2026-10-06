@@ -46,10 +46,14 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
     }.sortedBy { it.name.lowercase() }
   }
 
+  /** Every tag with its book count, most used first, then by name. */
   val tags: List<Pair<String, Int>> by lazy {
-    books.flatMap { it.tags }.groupingBy { it }.eachCount().entries
-      .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key.lowercase() })
-      .map { it.key to it.value }
+    val count = LinkedHashMap<String, Int>()
+    books.forEach { b -> b.tags.forEach { count[it] = (count[it] ?: 0) + 1 } }
+    // Lowercased once per tag rather than on every comparison.
+    count.entries.map { Triple(it.key, it.value, it.key.lowercase()) }
+      .sortedWith(compareByDescending<Triple<String, Int, String>> { it.second }.thenBy { it.third })
+      .map { it.first to it.second }
   }
 
   val ratedFive: Int by lazy { books.count { it.rating == 5 } }
