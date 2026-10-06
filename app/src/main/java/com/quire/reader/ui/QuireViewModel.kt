@@ -40,12 +40,14 @@ import android.util.Log
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.getOrElse
+import com.quire.reader.data.scan.DiscoveryProgress
 import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.data.scan.FolderDiscovery
 import com.quire.reader.data.scan.ScanResult
 import com.quire.reader.data.scan.StoragePaths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -107,6 +109,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   private var toastJob: Job? = null
   private var scanJob: Job? = null
+  private var discoverJob: Job? = null
 
   private fun edit(block: UiState.() -> UiState) = _state.update(block)
 
@@ -147,10 +150,18 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   }
 
   private fun goToFolders() {
-    edit { copy(onboardStep = OnboardStep.Folders, hasAccess = true, discovering = true) }
-    viewModelScope.launch(Dispatchers.IO) {
-      val found = FolderDiscovery.discover()
-      edit { copy(candidates = (found + candidates).distinctBy { it.path }, discovering = false, pickedFolders = pickedFolders + found.map { it.path }) }
+    edit { copy(onboardStep = OnboardStep.Folders, hasAccess = true, discovery = DiscoveryProgress(0, 0, "", 0)) }
+    discoverJob?.cancel()
+    discoverJob = viewModelScope.launch(Dispatchers.IO) {
+      // Folders join the list as they are found; once the walk ends they are put in order, most books first.
+      val found = FolderDiscovery.discover { progress, candidate ->
+        ensureActive()
+        edit {
+          if (candidate == null) copy(discovery = progress)
+          else copy(discovery = progress, candidates = (candidates + candidate).distinctBy { it.path }, pickedFolders = pickedFolders + candidate.path)
+        }
+      }
+      edit { copy(candidates = (found + candidates).distinctBy { it.path }, discovery = null) }
     }
   }
 

@@ -5,6 +5,7 @@ import com.quire.reader.data.BookStatus
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextStatusFilter
+import com.quire.reader.data.scan.DiscoveryProgress
 import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.theme.ReaderTheme
 import java.time.LocalDate
@@ -48,7 +49,8 @@ data class UiState(
   val onboardStep: OnboardStep = OnboardStep.Welcome,
   val hasAccess: Boolean = false,
   val candidates: List<FolderCandidate> = emptyList(),
-  val discovering: Boolean = false,
+  /** Progress of the automatic folder discovery on the Folders step; null when it isn't running. */
+  val discovery: DiscoveryProgress? = null,
   val pickedFolders: Set<String> = emptySet(),
   val useCalibre: Boolean = true,
   val watchFolders: Boolean = true,
@@ -91,6 +93,7 @@ data class UiState(
 
   val toast: String? = null,
 ) {
+  val discovering get() = discovery != null
   val readerOverlayOpen get() = sheet != null || textSearchOpen || showZones || chrome || activeHighlight != null || noteFor != null
 }
 
