@@ -50,6 +50,11 @@ class SettingsStore(context: Context) {
   val libraryLayout: Flow<String?> = store.data.map { it[LIBRARY_LAYOUT] }
   suspend fun setLibraryLayout(name: String) = store.edit { it[LIBRARY_LAYOUT] = name }
 
+  /** The library sort last picked, by name, and its direction; null until one is. */
+  val librarySort: Flow<String?> = store.data.map { it[LIBRARY_SORT] }
+  val librarySortAscending: Flow<Boolean?> = store.data.map { it[LIBRARY_SORT_ASCENDING] }
+  suspend fun setLibrarySort(name: String, ascending: Boolean) = store.edit { it[LIBRARY_SORT] = name; it[LIBRARY_SORT_ASCENDING] = ascending }
+
   /** The reading settings new books start with. */
   val readerDefaults: Flow<ReaderPrefs> = store.data.map { ReaderPrefs.fromJson(it[READER_DEFAULTS]) ?: ReaderPrefs() }
   suspend fun setReaderDefaults(prefs: ReaderPrefs) = store.edit { it[READER_DEFAULTS] = prefs.toJson() }
@@ -101,5 +106,7 @@ class SettingsStore(context: Context) {
     val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
     val TEXT_SEARCH_ORDER = stringPreferencesKey("text_search_order")
     val LIBRARY_LAYOUT = stringPreferencesKey("library_layout")
+    val LIBRARY_SORT = stringPreferencesKey("library_sort")
+    val LIBRARY_SORT_ASCENDING = booleanPreferencesKey("library_sort_ascending")
   }
 }
