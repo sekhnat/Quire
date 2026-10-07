@@ -107,7 +107,8 @@ fun EpubHost(
               // not need an assets-host entry.
               servedAssets = listOf("fonts/.*")
               decorationTemplates = HtmlDecorationTemplates.defaultTemplates()
-              ReaderFontList.forEach { font ->
+              // A font with no files of ours is one Readium declares itself.
+              ReaderFontList.filter { it.files.isNotEmpty() }.forEach { font ->
                 addFontFamilyDeclaration(FontFamily(font.name)) {
                   font.files.forEach { file ->
                     addFontFace {
