@@ -139,4 +139,13 @@ class SnapshotCodecTest {
     val b = SnapshotCodec.canonicalLocatorJson("""{"locations":{"progression":0.25},"href":"c1.xhtml"}""")
     assertEquals(a, b)
   }
+  @Test fun `the advanced visibility flag travels and older snapshots decode without it`() {
+    val withFlag = snapshot(settings = SnapshotSettings(advancedReadingEnabled = true))
+    val decoded = decode(SnapshotCodec.encode(withFlag)) as SnapshotCodec.Decoded.Ok
+    assertEquals(true, decoded.snapshot.settings.advancedReadingEnabled)
+    // A snapshot written before the flag existed keeps decoding; the field stays null there.
+    val oldText = SnapshotCodec.encode(withFlag).replace("\"advancedReadingEnabled\":true", "")
+    val old = decode(oldText) as SnapshotCodec.Decoded.Ok
+    assertNull(old.snapshot.settings.advancedReadingEnabled)
+  }
 }

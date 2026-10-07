@@ -69,7 +69,6 @@ fun EpubHost(
   val tap by rememberUpdatedState(onTap)
   val selection by rememberUpdatedState(onSelectionAction)
   val tapped by rememberUpdatedState(onHighlightTapped)
-  var lastPrefs = remember(session) { arrayOfNulls<EpubPreferences>(1) }
 
   DisposableEffect(session) {
     onDispose {
@@ -139,10 +138,9 @@ fun EpubHost(
           })
           session.attach(nav)
           session.scope.launch { nav.currentLocator.collect { session.onLocator(it) } }
-          lastPrefs[0] = preferences
-        } else if (lastPrefs[0] != preferences) {
-          (fm.findFragmentByTag(tag) as? EpubNavigatorFragment)?.submitPreferences(preferences)
-          lastPrefs[0] = preferences
+          // Preference submissions belong to the session: ReaderScreen submits mapped
+          // preferences through it, deduplicated and latest-wins, so no update-pass
+          // dedup happens here and detached navigators never miss a change.
         }
       },
     )

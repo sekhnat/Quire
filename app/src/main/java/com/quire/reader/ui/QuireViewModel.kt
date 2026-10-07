@@ -19,6 +19,8 @@ import com.quire.reader.data.backup.NotesExporter
 import com.quire.reader.data.backup.SnapshotCodec
 import com.quire.reader.data.backup.SnapshotImporter
 import com.quire.reader.data.backup.identityKeyFor
+import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.ParagraphPreset
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
@@ -117,6 +119,18 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   val hasBookOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookOverride(id) }
     .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+  /** Whether the open book carries an advanced object of its own (the book restore action). */
+  val hasBookAdvancedOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookAdvancedOverride(id) }
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  /** Whether the global defaults carry non-factory advanced values (the global restore action). */
+  val advancedDefaultsCustomized: StateFlow<Boolean> = repo.advancedDefaultsCustomized
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+  /** Whether the advanced reading controls are shown at all; independent of their values. */
+  val advancedReadingEnabled: StateFlow<Boolean> = repo.advancedReadingEnabled
+    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
   private var toastJob: Job? = null
   private var scanJob: Job? = null
   private var discoverJob: Job? = null
@@ -130,7 +144,17 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       app.restore.prepare()
       val done = settings.onboardingDone.first()
       val useCalibre = settings.useCalibre.first()
-      edit { copy(screen = if (done) Screen.Library else Screen.Onboard, hasAccess = StoragePaths.hasAllFilesAccess(), useCalibre = useCalibre) }
+      val access = StoragePaths.hasAllFilesAccess()
+      // A library of folder books is unreadable without all-files access, which no restore can carry over: ask for it first.
+      val needsAccess = done && !access && repo.hasWatchedFolders()
+      edit {
+        copy(
+          screen = if (done && !needsAccess) Screen.Library else Screen.Onboard,
+          onboardStep = if (needsAccess) OnboardStep.Access else onboardStep,
+          accessForLibrary = needsAccess,
+          hasAccess = access, useCalibre = useCalibre,
+        )
+      }
     }
     viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
     // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
@@ -155,7 +179,9 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     val granted = StoragePaths.hasAllFilesAccess()
     edit { copy(hasAccess = granted) }
     // Coming back from the Settings screen with access granted moves on by itself.
-    if (granted && _state.value.onboardStep == OnboardStep.Access) goToFolders()
+    if (granted && _state.value.screen == Screen.Onboard && _state.value.onboardStep == OnboardStep.Access) {
+      if (_state.value.accessForLibrary) returnToLibrary() else goToFolders()
+    }
     if (granted) app.indexer.request()
   }
 
@@ -163,6 +189,15 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   fun chooseFolders() {
     if (StoragePaths.hasAllFilesAccess()) goToFolders() else edit { copy(onboardStep = OnboardStep.Access, hasAccess = false) }
+  }
+
+  /** Access is back for a library that already exists: open it and scan its folders, which could not be read until now. */
+  private fun returnToLibrary() {
+    edit { copy(screen = Screen.Library, accessForLibrary = false) }
+    viewModelScope.launch {
+      val r = repo.rescan()
+      if (r.added > 0 || r.removed > 0 || r.moved > 0) toast(describe(r))
+    }
   }
 
   private fun goToFolders() {
@@ -612,7 +647,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       if (libraryBook == null) { publication.close(); _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
       val session = ReaderSession(libraryBook, publication, positions, initial)
       _reader.value = ReaderLoad.Ready(session)
-      edit { copy(brightness = 100) }
+      edit { copy(brightness = 100, advancedOpen = false) }
       startReaderJobs(session)
       if (target != null) targetJob = launch { reportOutcome(session.goToTarget(target)) }
       if (libraryQuery != null) enterBookSearch(id, libraryQuery)
@@ -679,11 +714,17 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun setChrome(show: Boolean) = edit { copy(chrome = show) }
   fun openSheet(sheet: Sheet?, tab: TocTab? = null) = edit { copy(sheet = sheet, tocTab = tab ?: tocTab) }
   fun setTocTab(tab: TocTab) = edit { copy(tocTab = tab) }
+  fun setAdvancedOpen(open: Boolean) = edit { copy(advancedOpen = open) }
   fun showZones(show: Boolean) = edit { copy(showZones = show, sheet = if (show) null else sheet, chrome = if (show) false else chrome) }
   fun closeReaderOverlays() = edit { copy(sheet = null, chrome = false, textSearchOpen = false, showZones = false, activeHighlight = null, noteFor = null) }
 
   // reading settings
 
+  /**
+   * Applies a change to the open book's basic settings: the accepted state is published
+   * once, and a persistence echo equal to it is just an acknowledgment (the state flow
+   * drops it); an echo that differs is the stored truth and wins.
+   */
   fun updatePrefs(change: (ReaderPrefs) -> ReaderPrefs) {
     val id = session()?.book?.id ?: return
     val next = change(_prefs.value)
@@ -691,9 +732,33 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     viewModelScope.launch { repo.setBookPrefs(id, next) }
   }
 
+  /** Applies a change to the open book's advanced controls; its basic group is untouched. */
+  fun updateBookAdvanced(change: (AdvancedReaderPrefs) -> AdvancedReaderPrefs) {
+    val id = session()?.book?.id ?: return
+    val next = change(_prefs.value.advanced)
+    _prefs.value = _prefs.value.copy(advanced = next)
+    viewModelScope.launch { repo.setBookAdvancedPrefs(id, next) }
+  }
+
+  /** Chooses a paragraph preset, setting indent and spacing in one reduction. */
+  fun chooseParagraphPreset(preset: ParagraphPreset) {
+    val levels = AdvancedReaderPrefs.levelsFor(preset) ?: return
+    updateBookAdvanced { it.copy(paragraphIndent = levels.first, paragraphSpacing = levels.second) }
+  }
+
   fun resetBookPrefs() {
     val id = session()?.book?.id ?: return
     viewModelScope.launch { repo.clearBookPrefs(id); toast("Using your default settings") }
+  }
+
+  /** Restores this book's advanced controls to the globals; its basic override stays. */
+  fun restoreBookAdvanced() {
+    val id = session()?.book?.id ?: return
+    _prefs.value = _prefs.value.copy(advanced = defaults.value.advanced)
+    viewModelScope.launch {
+      repo.clearBookAdvancedPrefs(id)
+      toast("This book's advanced settings follow your defaults")
+    }
   }
 
   // settings screen
@@ -704,6 +769,14 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     val next = change(defaults.value)
     viewModelScope.launch { repo.setReaderDefaults(next) }
   }
+
+  /** Restores the global advanced controls to the factory values; book overrides stay. */
+  fun restoreGlobalAdvanced() = viewModelScope.launch {
+    repo.setReaderDefaults(defaults.value.copy(advanced = AdvancedReaderPrefs()))
+    toast("Advanced reading settings restored")
+  }
+
+  fun setAdvancedReadingEnabled(v: Boolean) = viewModelScope.launch { repo.setAdvancedReadingEnabled(v) }
   fun resetAllBookPrefs() = viewModelScope.launch { repo.clearAllBookPrefs(); toast("Every book now uses your defaults") }
   fun setUseCalibreSetting(v: Boolean) = viewModelScope.launch { repo.setUseCalibre(v); toast("Takes effect on the next full rescan") }
   fun setWatchSetting(v: Boolean) = viewModelScope.launch { repo.setWatchNewBooks(v) }

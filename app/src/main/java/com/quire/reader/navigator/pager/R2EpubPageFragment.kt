@@ -41,6 +41,8 @@ import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import com.quire.reader.R
 import com.quire.reader.navigator.R2BasicWebView
 import com.quire.reader.navigator.R2WebView
@@ -103,6 +105,22 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
     @InternalReadiumApi
     override suspend fun awaitLoaded() {
         isLoaded.first { it }
+    }
+
+    /**
+     * Suspends until the WebView paints a frame after the current style changes, so a
+     * position-preserving re-scroll sees the re-laid-out content and not the previous
+     * layout. Bounded: a view that never paints again releases the caller.
+     */
+    internal suspend fun awaitVisualStateUpdate() {
+        val view = webView ?: return
+        withTimeoutOrNull(VISUAL_STATE_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                WebViewCompat.postVisualStateCallback(view, 0) {
+                    if (cont.isActive) cont.resume(Unit)
+                }
+            }
+        }
     }
 
     private val navigator: EpubNavigatorFragment?
@@ -487,6 +505,9 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
 
     companion object {
         private const val textZoomBundleKey = "org.readium.textZoom"
+
+        /** How long a reflow waits for the WebView to paint the re-laid-out content. */
+        private const val VISUAL_STATE_TIMEOUT_MS = 2_000L
 
         fun newInstance(
             url: AbsoluteUrl,

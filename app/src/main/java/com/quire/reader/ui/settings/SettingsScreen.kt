@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -45,6 +46,7 @@ import com.quire.reader.reader.ReaderFontList
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.Ic
+import com.quire.reader.ui.reader.AdvancedReadingControls
 import com.quire.reader.ui.IconBtn
 import com.quire.reader.ui.Kicker
 import com.quire.reader.ui.IndexStatusText
@@ -67,6 +69,8 @@ import kotlin.math.roundToInt
 @Composable
 fun SettingsScreen(vm: QuireViewModel) {
   BackHandler { vm.closeSettings() }
+  /** The neutral reflowable availability the globals are authored against (C9). */
+  val neutralAvailability = remember { com.quire.reader.reader.ReaderPreferenceContext.neutralReflowable() }
   val defaults by vm.defaults.collectAsStateWithLifecycle()
   val useCalibre by vm.useCalibreSetting.collectAsStateWithLifecycle()
   val watch by vm.watchSetting.collectAsStateWithLifecycle()
@@ -119,9 +123,41 @@ fun SettingsScreen(vm: QuireViewModel) {
         Kicker("Reading defaults")
         QText("How a book looks the first time you open it. You can still change a single book from its Display menu.", 12.5f, color = Nq.neutral400, lh = 1.5f)
         Preview(defaults)
-        ReadingControls(defaults) { change -> vm.updateDefaults(change) }
+        ReadingControls(defaults, neutralAvailability) { change -> vm.updateDefaults(change) }
         QButton("Reset every book to these defaults", vm::resetAllBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
         QText("Books you have given their own settings keep them until you do this.", 11.5f, color = Nq.neutral500)
+
+        val advancedEnabled by vm.advancedReadingEnabled.collectAsStateWithLifecycle()
+        val advancedCustomized by vm.advancedDefaultsCustomized.collectAsStateWithLifecycle()
+        var confirmingAdvancedRestore by remember { mutableStateOf(false) }
+        BackHandler(enabled = confirmingAdvancedRestore) { confirmingAdvancedRestore = false }
+        Toggle("Advanced reading", "Show extra typography and page-layout controls.", advancedEnabled) { vm.setAdvancedReadingEnabled(!advancedEnabled) }
+        if (!advancedEnabled && advancedCustomized) QText("Advanced reading settings are customized", 11.5f, color = Nq.neutral500)
+        AnimatedVisibility(advancedEnabled) {
+          Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            AdvancedReadingControls(
+              defaults.advanced,
+              neutralAvailability,
+              onAdvanced = { change -> vm.updateDefaults { it.copy(advanced = change(it.advanced)) } },
+              onPreset = { preset -> vm.updateDefaults { it.copy(advanced = it.advanced.withPreset(preset) ?: it.advanced) } },
+            )
+            QText("The preview above shows the basic settings; the advanced options apply when reading, and each book can still hold a control back.", 11.5f, color = Nq.neutral500)
+            QButton("Restore advanced defaults", { confirmingAdvancedRestore = true }, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = advancedCustomized)
+          }
+        }
+        if (confirmingAdvancedRestore) SheetHost(true, { confirmingAdvancedRestore = false }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+          Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            QText("Restore the advanced reading settings?", 17f, weight = 500, lh = 1.3f)
+            QText(
+              "Every book without its own settings goes back to the factory typography and page layout. Books with their own settings keep them.",
+              13f, color = Nq.neutral400, lh = 1.5f,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+              QButton("Cancel", { confirmingAdvancedRestore = false }, Modifier.weight(1f), size = 13f, height = 42.dp)
+              QButton("Restore", { confirmingAdvancedRestore = false; vm.restoreGlobalAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
+            }
+          }
+        }
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

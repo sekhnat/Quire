@@ -1,8 +1,17 @@
 package com.quire.reader.reader
 
+import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.BookReaderPrefs
+import com.quire.reader.data.PageLayoutPref
+import com.quire.reader.data.ParagraphPreset
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.ReaderPrefs
+import com.quire.reader.data.SpacingLevel
 import com.quire.reader.data.TextAlignPref
+import com.quire.reader.data.TriState
+import com.quire.reader.data.TypographySource
+import com.quire.reader.data.WidenLevel
+import com.quire.reader.data.WeightLevel
 import com.quire.reader.theme.ReaderTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -62,5 +71,36 @@ class ReaderLogicTest {
     assertTrue(after.dropLast(1).endsWith("amet") || after.dropLast(1).endsWith("sit") || after.dropLast(1).endsWith("dolor") || after.dropLast(1).endsWith("ipsum") || after.dropLast(1).endsWith("lorem"))
     assertEquals("short text", ReaderSession.snippetAfter("short text"))
     assertEquals("short  text".replace("  ", " "), ReaderSession.snippetBefore("short  text"))
+  }
+
+  @Test fun `the pre-advanced defaults JSON still reads as the factory settings`() {
+    val text = javaClass.getResourceAsStream("/reader-prefs/pre-advanced.json")!!.readBytes().decodeToString().trim()
+    assertEquals(ReaderPrefs(), ReaderPrefs.fromJson(text))
+    val row = BookReaderPrefs.fromJson(text)!!
+    assertTrue(row.hasBasic)
+    assertTrue(!row.hasAdvanced)
+  }
+
+  @Test fun `advanced prefs survive a round trip and tolerate unknown nested keys`() {
+    val advanced = AdvancedReaderPrefs(
+      typographySource = TypographySource.Book, paragraphIndent = SpacingLevel.Small, letterSpacing = WidenLevel.Wider,
+      fontWeight = WeightLevel.Heavy, hyphens = TriState.Off, simplifyTypography = true, pageLayout = PageLayoutPref.Two,
+    )
+    val prefs = ReaderPrefs(advanced = advanced)
+    assertEquals(prefs, ReaderPrefs.fromJson(prefs.toJson()))
+    val decoded = ReaderPrefs.fromJson("""{"theme":"Night","advanced":{"letterSpacing":"Max","somedayNew":true}}""")!!
+    assertEquals(WidenLevel.Max, decoded.advanced.letterSpacing)
+    assertEquals(AdvancedReaderPrefs().paragraphIndent, decoded.advanced.paragraphIndent)
+  }
+
+  @Test fun `the paragraph preset is derived from indent and spacing`() {
+    assertEquals(ParagraphPreset.Default, AdvancedReaderPrefs().paragraphPreset)
+    assertEquals(ParagraphPreset.Traditional, AdvancedReaderPrefs(paragraphIndent = SpacingLevel.Medium, paragraphSpacing = SpacingLevel.None).paragraphPreset)
+    assertEquals(ParagraphPreset.Screen, AdvancedReaderPrefs(paragraphIndent = SpacingLevel.None, paragraphSpacing = SpacingLevel.Medium).paragraphPreset)
+    assertEquals(ParagraphPreset.Custom, AdvancedReaderPrefs(paragraphIndent = SpacingLevel.Small).paragraphPreset)
+    assertEquals(SpacingLevel.Medium to SpacingLevel.None, AdvancedReaderPrefs.levelsFor(ParagraphPreset.Traditional))
+    assertNull(AdvancedReaderPrefs.levelsFor(ParagraphPreset.Custom))
+    assertTrue(AdvancedReaderPrefs().isFactory)
+    assertTrue(!AdvancedReaderPrefs(wordSpacing = WidenLevel.Slight).isFactory)
   }
 }

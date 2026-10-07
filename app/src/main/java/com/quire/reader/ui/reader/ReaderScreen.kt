@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -100,6 +101,7 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
   val search by vm.search.collectAsStateWithLifecycle()
   val bookSearch by vm.bookSearchUi.collectAsStateWithLifecycle()
   val hasOverride by vm.hasBookOverride.collectAsStateWithLifecycle()
+  val hasAdvancedOverride by vm.hasBookAdvancedOverride.collectAsStateWithLifecycle()
   val locator by session.current.collectAsStateWithLifecycle()
   val theme = prefs.theme
   val book = session.book
@@ -108,7 +110,10 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
   val bgColor by animateColorAsState(theme.bg, tween(300), label = "readerBg")
   val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val epubPrefs = remember(prefs) { prefs.toEpubPreferences() }
+  val epubPrefs = remember(prefs, session.layout) { prefs.toEpubPreferences(session.layout) }
+  // The single submission path: mapped preferences go to the session, which deduplicates
+  // by equality and applies them through the navigator in one serialized pass.
+  LaunchedEffect(session, epubPrefs) { session.submit(epubPrefs) }
   val bookmarked = vm.isBookmarked(session, bookmarks)
 
   BackHandler {
@@ -156,7 +161,7 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
 
     ReaderChrome(s, session, vm, bookmarked, locator?.locations?.totalProgression?.toFloat() ?: 0f)
     HighlightActions(s, vm, navBottom)
-    DisplaySheet(s, prefs, hasOverride, vm)
+    DisplaySheet(s, session, prefs, hasOverride, hasAdvancedOverride, vm)
     ContentsSheet(s, session, bookmarks, highlights, vm)
     SearchOverlay(s, search, bookSearch, vm)
     NoteSheet(s, highlights, vm)

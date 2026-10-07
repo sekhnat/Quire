@@ -33,6 +33,8 @@ data class SnapshotSettings(
   val readerDefaults: ReaderPrefs? = null,
   /** Search-order preference introduced by search index v2; absent in older snapshots. */
   val textSearchOrder: String? = null,
+  /** Whether the advanced reading controls are shown; absent in older snapshots. */
+  val advancedReadingEnabled: Boolean? = null,
 )
 
 /** A book's identity keys, mirroring what a scan can read again from the file (see `BookIdentity`). */
