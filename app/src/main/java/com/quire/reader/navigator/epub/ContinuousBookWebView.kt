@@ -52,8 +52,8 @@ import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
@@ -194,6 +195,23 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     enum class DragType { Start, Move, End }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    /** True once [dispose] ran; every later call is a rejected no-op. */
+    private var disposed = false
+
+    /**
+     * Completed when [dispose] runs. In-flight callers (`withFrame` waiting for a frame to
+     * load) race against it so a disposed surface releases them at once instead of at the
+     * frame-load timeout.
+     */
+    private val disposedSignal = Job()
+
+    /**
+     * Callers suspended on a shell evaluation (`evaluateOnShell`), each able to answer
+     * itself with a null-ish result. Main-confined like everything touching the shell, but
+     * copy-on-write because a cancelled caller unregisters from its own thread.
+     */
+    private val pendingShellEvaluations = CopyOnWriteArrayList<() -> Unit>()
 
     /** The one native WebView showing the shell document. */
     private val shell: WebView = ShellWebView(context)
@@ -352,12 +370,15 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     private fun notifyProgressionThrottled() {
         if (progressionNotifyPending) return
         progressionNotifyPending = true
-        shell.postDelayed({
-            progressionNotifyPending = false
-            if (_state.value == ContinuousBookState.Ready) {
-                navigator.bookHost.onProgressionChanged()
-            }
-        }, PROGRESSION_NOTIFY_INTERVAL_MS)
+        shell.postDelayed(progressionNotifyRunnable, PROGRESSION_NOTIFY_INTERVAL_MS)
+    }
+
+    /** The throttled progression publication; a named field so [dispose] can cancel it. */
+    private val progressionNotifyRunnable = Runnable {
+        progressionNotifyPending = false
+        if (_state.value == ContinuousBookState.Ready) {
+            navigator.bookHost.onProgressionChanged()
+        }
     }
 
     // ── preparation ─────────────────────────────────────────────────────────────
@@ -368,6 +389,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
      * images settle, and one complete geometry table is committed.
      */
     fun prepare(initialLocator: Locator?) {
+        if (disposed) return
         // Frames are created when the shell document finishes loading (onPageFinished).
         // The scroll frame adapter is injected next to Readium's scripts in every frame
         // document served from now on.
@@ -477,12 +499,18 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
      * the book, the surface is gone, or the document did not load in time.
      */
     suspend fun <T> withFrame(href: Url, block: suspend (FrameRunner) -> T): T? {
+        if (disposed) return null
         val index = indexOfHref(href) ?: return null
         val runner = runners[index]
         pinFrame(hrefs[index], true)
         try {
-            if (withTimeoutOrNull(FRAME_LOAD_TIMEOUT_MS) { runner.awaitLoaded() } == null) {
-                Log.w(TAG, "withFrame: ${hrefs[index]} did not load in ${FRAME_LOAD_TIMEOUT_MS}ms")
+            if (!awaitFrameLoaded(runner)) {
+                Log.w(
+                    TAG,
+                    "withFrame: ${hrefs[index]} " +
+                        if (disposed) "not loaded: surface disposed"
+                        else "did not load in ${FRAME_LOAD_TIMEOUT_MS}ms",
+                )
                 return null
             }
             return block(runner)
@@ -491,23 +519,61 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         }
     }
 
-    /** How many documents the shell currently holds (loading or live): the size of the live window. For tests. */
-    internal suspend fun liveFrameCount(): Int = withContext(Dispatchers.Main.immediate) {
-        suspendCoroutine { cont ->
-            shell.evaluateJavascript("window.QuireShellHost ? QuireShellHost.liveCount() : -1") { result ->
-                cont.resume(result?.trim()?.toIntOrNull() ?: -1)
+    /**
+     * Waits for [runner] to load, bounded by [FRAME_LOAD_TIMEOUT_MS]. The load wait races
+     * [disposedSignal] in `select`, so a surface disposed mid-wait releases the caller at
+     * once instead of holding it for the whole timeout: [dispose] unloads the runner, and
+     * the read after the race reports that. The load job lives in the surface's scope
+     * (cancelled by [dispose]) and is cancelled here on every other exit.
+     */
+    private suspend fun awaitFrameLoaded(runner: FrameRunner): Boolean {
+        if (disposed) return false
+        return withTimeoutOrNull(FRAME_LOAD_TIMEOUT_MS) {
+            val load = scope.launch { runner.awaitLoaded() }
+            try {
+                select {
+                    load.onJoin { }
+                    disposedSignal.onJoin { }
+                }
+            } finally {
+                load.cancel()
+            }
+            runner.isLoaded.value
+        } ?: false
+    }
+
+    /**
+     * Runs [script] on the shell and answers with [parse] of the WebView's result. The
+     * caller suspends on a cancellable continuation registered in [pendingShellEvaluations]:
+     * [dispose] answers it with `parse(null)` at once (a destroyed WebView never delivers
+     * the callback), and a cancelled caller scope releases it without waiting for the shell.
+     */
+    private suspend fun <T> evaluateOnShell(script: String, parse: (String?) -> T): T {
+        if (disposed) return parse(null)
+        return withContext(Dispatchers.Main.immediate) {
+            suspendCancellableCoroutine { cont ->
+                val release = { if (cont.isActive) cont.resume(parse(null)) }
+                cont.invokeOnCancellation { pendingShellEvaluations.remove(release) }
+                pendingShellEvaluations.add(release)
+                shell.evaluateJavascript(script) { result ->
+                    pendingShellEvaluations.remove(release)
+                    if (cont.isActive) cont.resume(parse(result))
+                }
             }
         }
     }
 
-    /** How many resources the shell has measured so far; the background pass is done at the book's size. For tests. */
-    internal suspend fun measuredFrameCount(): Int = withContext(Dispatchers.Main.immediate) {
-        suspendCoroutine { cont ->
-            shell.evaluateJavascript("window.QuireShellHost ? QuireShellHost.measuredCount() : -1") { result ->
-                cont.resume(result?.trim()?.toIntOrNull() ?: -1)
-            }
+    /** How many documents the shell currently holds (loading or live): the size of the live window. For tests. */
+    internal suspend fun liveFrameCount(): Int =
+        evaluateOnShell("window.QuireShellHost ? QuireShellHost.liveCount() : -1") { result ->
+            result?.trim()?.toIntOrNull() ?: -1
         }
-    }
+
+    /** How many resources the shell has measured so far; the background pass is done at the book's size. For tests. */
+    internal suspend fun measuredFrameCount(): Int =
+        evaluateOnShell("window.QuireShellHost ? QuireShellHost.measuredCount() : -1") { result ->
+            result?.trim()?.toIntOrNull() ?: -1
+        }
 
     /** Asks the shell to keep (or stop keeping) the document of [href] loaded. */
     private fun pinFrame(href: Url, pinned: Boolean) {
@@ -624,6 +690,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
      * its original frame, then scrolls the outer surface. Keeps the latest request.
      */
     fun go(locator: Locator): Boolean {
+        if (disposed) return false
         if (_state.value != ContinuousBookState.Ready) {
             initialJump = jumpFactory(locator)
             return true
@@ -679,7 +746,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         val max = (bookHeight * scale).toInt() - shell.height
         val clamped = target.coerceIn(0, max.coerceAtLeast(0))
         if (clamped == current) return false
-        shell.post { shell.scrollTo(0, clamped) }
+        shell.post { if (!disposed) shell.scrollTo(0, clamped) }
         navigator.bookHost.onProgressionChanged()
         return true
     }
@@ -734,13 +801,10 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     }
 
     /** The shell's `captureAnchor()` answer: `{href, within, height, anchor: {selector, top} | null}`. */
-    private suspend fun shellCapture(): JSONObject? = withContext(Dispatchers.Main.immediate) {
-        suspendCoroutine { cont ->
-            shell.evaluateJavascript("JSON.stringify(window.QuireShellHost ? QuireShellHost.captureAnchor() : null)") { result ->
-                cont.resume(result.frameResultJson())
-            }
+    private suspend fun shellCapture(): JSONObject? =
+        evaluateOnShell("JSON.stringify(window.QuireShellHost ? QuireShellHost.captureAnchor() : null)") { result ->
+            result.frameResultJson()
         }
-    }
 
     /**
      * Restores [anchor] exactly once after the layout generation [targetGeneration]
@@ -1022,26 +1086,51 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
     // ── disposal ────────────────────────────────────────────────────────────────
 
-    /** Closes the surface: generation bump, callback rejection, WebView teardown. */
+    /**
+     * Closes the surface. Idempotent, and must run on the main thread (every caller does):
+     * it owns the shell WebView's teardown.
+     *
+     * The order matters. The generation bump first rejects every late bridge callback and
+     * posted runnable (they all capture and compare the generation); the state flip tells
+     * the navigator and any reader of [state] that the book is gone; then the owned
+     * coroutines and pending callbacks are cancelled, in-flight script callers are
+     * released, and the shell is torn down synchronously — calling WebView methods after
+     * `destroy()` is undefined behavior, so nothing here may be posted.
+     */
     fun dispose() {
+        if (disposed) return
+        disposed = true
         Log.d(TAG, "dispose surface #${System.identityHashCode(this)}")
         generation++
         layoutGeneration++
         layoutGenerationFlow.value = layoutGeneration
+        disposedSignal.complete()
         _state.value = ContinuousBookState.Disposed
         runners.forEach { it.dispose() }
+        releasePendingShellEvaluations()
         scope.cancel()
-        shell.post {
-            shell.stopLoading()
-            shell.removeJavascriptInterface("QuireShell")
-        }
+        shell.removeCallbacks(progressionNotifyRunnable)
+        // Synchronous teardown, mirroring R2BasicWebView.destroy(): the JavaScript
+        // interfaces are inner classes retaining this surface and its navigator, and no
+        // method may be called on a destroyed WebView (readium/r2-navigator-kotlin#52).
+        shell.stopLoading()
+        shell.removeJavascriptInterface("QuireShell")
+        shell.removeJavascriptInterface("QuireBookBridge")
         removeAllViews()
         shell.destroy()
     }
 
-    // Note: disposal happens explicitly from resetContainer/onDestroyView. Detaching from the
-    // window does NOT dispose the surface: a transient detach (fragment re-layout, container
-    // reparenting) must not destroy the prepared book.
+    /** Answers every caller still suspended on a shell evaluation with its null-ish result. */
+    private fun releasePendingShellEvaluations() {
+        val waiting = pendingShellEvaluations.toList()
+        pendingShellEvaluations.clear()
+        waiting.forEach { it() }
+    }
+
+    // Note: disposal happens explicitly from the navigator's terminal paths — container
+    // rebuilds (resetContainer), the fragment's onDestroyView, and a renderer lost twice.
+    // Detaching from the window does NOT dispose the surface: a transient detach (fragment
+    // re-layout, container reparenting) must not destroy the prepared book.
 
     // ── per-frame scripting ─────────────────────────────────────────────────────
 
@@ -1056,6 +1145,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
         private val _loaded = MutableStateFlow(false)
         override val isLoaded: StateFlow<Boolean> = _loaded.asStateFlow()
+
+        /** Pending script callers, released by [dispose] with a null answer. Copy-on-write: a cancelled caller unregisters from its own thread. */
+        private val pendingScripts = CopyOnWriteArrayList<() -> Unit>()
 
         /** Loaded AND settled: the shell has laid out fonts and images; false again once the document is unloaded. */
         val settled = MutableStateFlow(false)
@@ -1090,6 +1182,12 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         }
 
         override fun runJavaScript(script: String, callback: ((String) -> Unit)?) {
+            if (disposed) {
+                // The surface is gone: complete the caller deterministically instead of
+                // queueing on a scope that dispose cancelled.
+                callback?.invoke("null")
+                return
+            }
             if (!_loaded.value) {
                 // Queue until loaded, mirroring the chapter view's contract.
                 scope.launch {
@@ -1099,13 +1197,27 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
                 return
             }
             shell.post {
+                // The body can run after dispose (it was posted in the same main-loop turn
+                // the disposal ran): a destroyed WebView must not be called again, and the
+                // caller was already answered by the disposal's release.
+                if (disposed) return@post
                 runInFrame(script, callback)
             }
         }
 
-        override suspend fun runJavaScriptSuspend(javascript: String): String = suspendCoroutine { cont ->
-            runJavaScript(javascript) { result -> cont.resume(result) }
-        }
+        override suspend fun runJavaScriptSuspend(javascript: String): String =
+            suspendCancellableCoroutine { cont ->
+                // Registered so [dispose][ContinuousBookWebView.dispose] can answer this
+                // caller with a null result when the surface dies before the WebView
+                // answers — and cancellable, so a cancelled caller scope releases it too.
+                val release = { if (cont.isActive) cont.resume("null") }
+                cont.invokeOnCancellation { pendingScripts.remove(release) }
+                pendingScripts.add(release)
+                runJavaScript(javascript) { result ->
+                    pendingScripts.remove(release)
+                    if (cont.isActive) cont.resume(result)
+                }
+            }
 
         /** Evaluates [script] inside this frame's contentWindow, synchronously by href. */
         private fun runInFrame(script: String, callback: ((String) -> Unit)?) {
@@ -1156,8 +1268,17 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
             return runJavaScriptSuspend(script).frameResultTop()
         }
 
+        /**
+         * Unloads the frame's state and answers its pending script callers with a null
+         * result: after [ContinuousBookWebView.dispose] the shell is destroyed and no
+         * callback will ever arrive. Idempotent like the surface's disposal.
+         */
         fun dispose() {
-            // Nothing per-frame: the shell document owns the iframes and dies with the WebView.
+            _loaded.value = false
+            settled.value = false
+            val waiting = pendingScripts.toList()
+            pendingScripts.clear()
+            waiting.forEach { it() }
         }
     }
 }

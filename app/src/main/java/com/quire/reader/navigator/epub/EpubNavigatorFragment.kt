@@ -647,6 +647,19 @@ public class EpubNavigatorFragment internal constructor(
         }
     }
 
+    /**
+     * Disposes the live continuous surface and removes it from its container. The
+     * surface's terminal paths all end here: container rebuilds (resetContainer disposes
+     * the children it scans directly), the navigator view's destruction, and a renderer
+     * lost twice.
+     */
+    private fun disposeContinuousBook() {
+        val book = continuousBook ?: return
+        continuousBook = null
+        book.dispose()
+        (book.parent as? ViewGroup)?.removeView(book)
+    }
+
     /** Builds and installs an empty resource pager (paged mode). */
     private fun resetPager(parent: ViewGroup) {
         // The scroll frames' adapter must not leak into documents served for the pager:
@@ -830,6 +843,9 @@ public class EpubNavigatorFragment internal constructor(
                 "This book ran out of memory in scroll mode. Switch to pages in Display.",
                 android.widget.Toast.LENGTH_LONG,
             ).show()
+            // The surface died with the renderer: dispose it now instead of holding the
+            // dead WebView until the reader closes.
+            disposeContinuousBook()
             return
         }
         publishReadiness(Readiness.Preparing)
@@ -962,8 +978,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     override fun onDestroyView() {
-        continuousBook?.dispose()
-        continuousBook = null
+        disposeContinuousBook()
         super.onDestroyView()
     }
 
@@ -1018,6 +1033,9 @@ public class EpubNavigatorFragment internal constructor(
         if (publication.metadata.layout != Layout.FIXED) {
             val book = continuousBook
             if (book != null) return book.go(locator)
+            // Scroll mode with the surface gone (renderer lost twice): the pager was never
+            // built, so the navigation is dropped.
+            if (!::resourcePager.isInitialized) return false
             setCurrent(resourcesSingle)
         } else {
             when (viewModel.dualPageMode) {
@@ -1428,7 +1446,7 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     private val currentFragment: Fragment? get() =
-        fragmentAt(resourcePager.currentItem)
+        if (!::resourcePager.isInitialized) null else fragmentAt(resourcePager.currentItem)
 
     private fun fragmentAt(index: Int): Fragment? =
         r2PagerAdapter?.mFragments?.get(adapter.getItemId(index))
