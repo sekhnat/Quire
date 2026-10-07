@@ -91,6 +91,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
   /** The library screen's state; it outlives visits to other screens, so filters and scope are still there on return. */
   val library: LibraryState = features.library(this, toaster, viewModelScope.childScope())
 
+  private val notes: NotesExport = MarkdownNotesExport(app, toaster, viewModelScope)
+
   private fun navigate(next: Destination) { _destination.value = next }
 
   val scan = repo.scanner.progress
@@ -281,13 +283,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   // ── detail ───────────────────────────────────────────────────────────────
 
-  override fun openDetail(bookId: Long) { edit { copy(editOpen = false) }; navigate(Destination.Detail(bookId)) }
-  fun goLibrary() { edit { copy(chrome = false) }; navigate(Destination.Library) }
-  fun openEdit(open: Boolean) = edit { copy(editOpen = open) }
-  fun setFinished(id: Long, finished: Boolean) = viewModelScope.launch { repo.setFinished(id, finished); toast(if (finished) "Marked as finished" else "Marked as unread") }
-  fun setRating(id: Long, rating: Int?) = viewModelScope.launch { repo.setUserRating(id, rating) }
-  fun addTag(id: Long, tag: String) = viewModelScope.launch { repo.addTag(id, tag) }
-  fun removeTag(id: Long, tag: String) = viewModelScope.launch { repo.removeTag(id, tag) }
+  override fun openDetail(bookId: Long) = navigate(Destination.Detail(features.detail(bookId, notes, this, toaster, viewModelScope)))
 
   // ── export and import ────────────────────────────────────────────────────
 
@@ -321,21 +317,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
     }
   }
 
-  /** Exports a book's highlights as Markdown; missing books export what they kept. */
-  fun exportNotes(bookId: Long, uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-    val book = repo.book(bookId)
-    if (book == null) { toast("That book is no longer in the library"); return@launch }
-    val highlights = repo.highlights(bookId).first()
-    if (highlights.isEmpty()) { toast("No highlights to export"); return@launch }
-    val chapterTitles = if (book.missingSince == null && File(book.path).isFile) {
-      NotesExporter.chapterTitles(app.publicationLoader, book.path)
-    } else emptyMap()
-    val markdown = NotesExporter.markdown(book.title, book.author, identityKeyFor(book), highlights, chapterTitles)
-    val ok = runCatching {
-      app.contentResolver.openOutputStream(uri)?.use { it.write(markdown.toByteArray(Charsets.UTF_8)) } != null
-    }.getOrDefault(false)
-    toast(if (ok) "Notes exported" else "Couldn't write the file")
-  }
+  fun exportNotes(bookId: Long, uri: Uri) = notes.export(bookId, uri)
 
   // ── full backup ──────────────────────────────────────────────────────────
 
