@@ -47,6 +47,7 @@ import com.quire.reader.R
 import com.quire.reader.navigator.R2BasicWebView
 import com.quire.reader.navigator.R2WebView
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.navigator.hardenForReaderContent
 import com.quire.reader.navigator.epub.EpubNavigatorViewModel
 import com.quire.reader.navigator.extensions.htmlId
 import org.readium.r2.navigator.preferences.ReadingProgression
@@ -169,7 +170,9 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
             webView.listener = listener
 
             link?.let { link ->
-                // Setup custom Javascript interfaces.
+                // Setup custom Javascript interfaces. (Quire registers none; anything
+                // registered here is exposed to untrusted EPUB content and must validate
+                // its inputs like the "Android" bridge does.)
                 for ((name, obj) in listener.javascriptInterfacesForResource(link)) {
                     if (obj != null) {
                         webView.addJavascriptInterface(obj, name)
@@ -181,6 +184,7 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
         webView.disablePageTurnsWhileScrolling =
             navigator?.config?.disablePageTurnsWhileScrolling ?: false
         webView.settings.javaScriptEnabled = true
+        webView.settings.hardenForReaderContent()
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
         webView.settings.useWideViewPort = true
@@ -191,6 +195,11 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
         webView.settings.textZoom = textZoom
         webView.resourceUrl = resourceUrl
         webView.setPadding(0, 0, 0, 0)
+        // Upstream Readium contract: the WebView itself is the "Android" bridge. Its
+        // @JavascriptInterface methods are the whole exposed surface — untrusted EPUB
+        // content can call them, so each must validate its inputs (JSON payloads parsed
+        // defensively, hrefs resolved against the publication only). Any future
+        // @JavascriptInterface method added to R2BasicWebView must do the same.
         webView.addJavascriptInterface(webView, "Android")
 
         var endReached = false

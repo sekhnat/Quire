@@ -30,6 +30,7 @@ import androidx.webkit.WebViewClientCompat
 import com.quire.reader.R
 import com.quire.reader.navigator.R2BasicWebView
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.navigator.hardenForReaderContent
 import com.quire.reader.navigator.epub.EpubNavigatorViewModel
 import com.quire.reader.navigator.epub.fxl.R2FXLLayout
 import com.quire.reader.navigator.epub.fxl.R2FXLOnDoubleTapListener
@@ -137,6 +138,7 @@ internal class R2FXLPageFragment : Fragment() {
         }
 
         webView.settings.javaScriptEnabled = true
+        webView.settings.hardenForReaderContent()
         webView.isVerticalScrollBarEnabled = false
         webView.isHorizontalScrollBarEnabled = false
         webView.settings.useWideViewPort = true
@@ -152,6 +154,11 @@ internal class R2FXLPageFragment : Fragment() {
         webView.setInitialScale(1)
 
         webView.setPadding(0, 0, 0, 0)
+        // Upstream Readium contract: the WebView itself is the "Android" bridge. Its
+        // @JavascriptInterface methods are the whole exposed surface — untrusted EPUB
+        // content can call them, so each must validate its inputs (JSON payloads parsed
+        // defensively, hrefs resolved against the publication only). Any future
+        // @JavascriptInterface method added to R2BasicWebView must do the same.
         webView.addJavascriptInterface(webView, "Android")
 
         webView.webViewClient = object : WebViewClientCompat() {
