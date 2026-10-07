@@ -35,6 +35,14 @@ import com.quire.reader.ui.detail.DetailState
 import com.quire.reader.ui.library.LibraryPrefs
 import com.quire.reader.ui.library.LibraryState
 import com.quire.reader.ui.library.LibraryStore
+import com.quire.reader.ui.onboarding.OnboardingState
+import com.quire.reader.ui.onboarding.OnboardingStore
+import com.quire.reader.ui.onboarding.OnboardingUiState
+import com.quire.reader.ui.onboarding.StorageAccess
+import com.quire.reader.data.scan.DiscoveryProgress
+import com.quire.reader.data.scan.FolderCandidate
+import com.quire.reader.data.scan.FolderDiscovery
+import kotlinx.coroutines.ensureActive
 import com.quire.reader.ui.reader.ReaderState
 import com.quire.reader.ui.reader.ReaderStore
 import com.quire.reader.ui.settings.BackupService
@@ -238,6 +246,29 @@ class Features(private val app: QuireApplication) {
 
   fun settings(restore: RestoreState, notes: NotesExport, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
     SettingsState(librarySettings, indexer, notes, BackupState(backupService, toasts, scope, persist), restore, nav, toasts, scope, persist, app.appScope)
+
+  private val onboardingStore = object : OnboardingStore {
+    override val scan get() = repo.scanner.progress
+    override suspend fun setUseCalibre(v: Boolean) { settings.setUseCalibre(v) }
+    override suspend fun setWatchNewBooks(v: Boolean) { settings.setWatchNewBooks(v) }
+    override suspend fun setOnboardingDone(v: Boolean) { settings.setOnboardingDone(v) }
+    override suspend fun addFolder(path: String) = repo.addFolder(path)
+    override suspend fun rescan() = repo.rescan()
+    override suspend fun importFiles(uris: List<Uri>) = repo.importFiles(uris)
+  }
+
+  private val storageAccess = object : StorageAccess {
+    override fun hasAllFilesAccess() = StoragePaths.hasAllFilesAccess()
+    override fun isUsableDirectory(path: String) = StoragePaths.isUsableDirectory(path)
+    override fun displayName(path: String) = StoragePaths.displayName(path)
+    override suspend fun discover(onFound: (DiscoveryProgress, FolderCandidate?) -> Unit) = withContext(Dispatchers.IO) {
+      FolderDiscovery.discover { progress, candidate -> ensureActive(); onFound(progress, candidate) }
+    }
+    override suspend fun countEpubs(path: String) = withContext(Dispatchers.IO) { FolderDiscovery.countEpubs(File(path)) }
+  }
+
+  fun onboarding(initial: OnboardingUiState, restore: RestoreState, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
+    OnboardingState(initial, onboardingStore, storageAccess, indexer, restore, nav, toasts, scope, persist)
 
   fun library(nav: AppNavigator, toasts: Toasts, scope: CoroutineScope) =
     LibraryState(libraryStore, libraryPrefs, indexer, nav, toasts, StoragePaths::hasAllFilesAccess, scope)

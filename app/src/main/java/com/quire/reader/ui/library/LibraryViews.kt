@@ -40,7 +40,6 @@ import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.MissingCover
 import com.quire.reader.ui.Ph
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.LibraryUiState
 import com.quire.reader.ui.Scope
 import com.quire.reader.ui.ScopeKind
 import com.quire.reader.ui.SeriesCover

@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.ui.detail.DetailState
+import com.quire.reader.ui.onboarding.OnboardingState
 import com.quire.reader.ui.reader.ReaderState
 import com.quire.reader.ui.settings.SettingsState
 import kotlinx.coroutines.CoroutineScope
@@ -16,7 +17,7 @@ import kotlinx.coroutines.launch
 /** Where the app is. A destination that carries a state holder owns it: leaving the destination closes it. */
 sealed interface Destination {
   data object Splash : Destination
-  data object Onboard : Destination
+  data class Onboard(val state: OnboardingState) : Destination
   data object Library : Destination
   data class Detail(val state: DetailState) : Destination
   data class Reader(val state: ReaderState) : Destination
