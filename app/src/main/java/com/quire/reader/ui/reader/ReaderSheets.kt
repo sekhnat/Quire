@@ -60,6 +60,7 @@ import com.quire.reader.data.TextAlignPref
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.ReaderFontList
+import com.quire.reader.reader.previewFamily
 import com.quire.reader.reader.ReaderPreferenceContext
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.theme.Nq
@@ -180,7 +181,7 @@ internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceC
           val on = prefs.font == i
           val shape = RoundedCornerShape(8.dp)
           Box(Modifier.clip(shape).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { onChange { it.copy(font = i) } }.padding(horizontal = 14.dp, vertical = 9.dp)) {
-            QText(font.name, 15f, color = if (on) Nq.accent200 else Nq.neutral200, family = font.preview, maxLines = 1)
+            QText(font.name, 15f, color = if (on) Nq.accent200 else Nq.neutral200, family = font.previewFamily(), maxLines = 1)
           }
         }
       }

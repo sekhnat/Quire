@@ -43,6 +43,7 @@ import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
 import com.quire.reader.reader.ReaderFontList
+import com.quire.reader.reader.previewFamily
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.Ic
@@ -348,7 +349,7 @@ private fun Preview(p: ReaderPrefs) {
     Text(
       "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood…",
       style = TextStyle(
-        fontFamily = font.preview, fontSize = p.fontSize.sp, lineHeight = (p.fontSize * p.lineHeight).sp, color = p.theme.fg,
+        fontFamily = font.previewFamily(), fontSize = p.fontSize.sp, lineHeight = (p.fontSize * p.lineHeight).sp, color = p.theme.fg,
         textAlign = if (p.align == TextAlignPref.Justify) TextAlign.Justify else TextAlign.Start, hyphens = Hyphens.Auto, lineBreak = LineBreak.Paragraph,
       ),
       maxLines = 6,
