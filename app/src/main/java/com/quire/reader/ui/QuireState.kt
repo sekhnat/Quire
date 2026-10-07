@@ -48,6 +48,11 @@ data class UiState(
   // onboarding
   val onboardStep: OnboardStep = OnboardStep.Welcome,
   val hasAccess: Boolean = false,
+  /**
+   * The Access step is guarding an existing library (a full restore brings back "onboarding done" but never the
+   * permission): granting access returns to the library instead of moving on to choosing folders.
+   */
+  val accessForLibrary: Boolean = false,
   val candidates: List<FolderCandidate> = emptyList(),
   /** Progress of the automatic folder discovery on the Folders step; null when it isn't running. */
   val discovery: DiscoveryProgress? = null,
