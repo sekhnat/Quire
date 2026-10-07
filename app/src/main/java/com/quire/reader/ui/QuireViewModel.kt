@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.quire.reader.QuireApplication
 import com.quire.reader.ui.library.LibraryState
+import com.quire.reader.ui.settings.RestoreState
 import android.content.ComponentName
 import android.content.Intent
 import androidx.work.WorkInfo
@@ -93,6 +94,9 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   private val notes: NotesExport = MarkdownNotesExport(app, toaster, viewModelScope)
 
+  /** The restore sheet; one for the app, since a restore carries on when Settings or onboarding is left. */
+  val restore: RestoreState = features.restore(toaster, viewModelScope)
+
   private fun navigate(next: Destination) = navigate { next }
 
   /**
@@ -105,34 +109,14 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
   }
 
   private fun closeHolder(d: Destination) {
-    if (d is Destination.Reader) d.state.close()
+    when (d) {
+      is Destination.Reader -> d.state.close()
+      is Destination.Settings -> d.state.close()
+      else -> Unit
+    }
   }
 
   val scan = repo.scanner.progress
-
-  /** The reading settings new books start with (edited in Settings). */
-  val defaults: StateFlow<ReaderPrefs> = repo.readerDefaults.stateIn(viewModelScope, SharingStarted.Eagerly, ReaderPrefs())
-  val useCalibreSetting: StateFlow<Boolean> = repo.useCalibre.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-  val watchSetting: StateFlow<Boolean> = repo.watchNewBooks.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-  val indexingEnabledSetting: StateFlow<Boolean> = repo.indexingEnabled.stateIn(viewModelScope, SharingStarted.Eagerly, true)
-  val indexChargingOnlySetting: StateFlow<Boolean> = repo.indexChargingOnly.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-  /** How much of the library is searchable and what the indexer is doing, for Settings. */
-  val indexCoverage: StateFlow<IndexCoverage?> = repo.indexCoverage.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-  val indexActivity: StateFlow<IndexActivity> = app.indexer.activity
-  val indexedTextBytes: StateFlow<Long> = repo.indexedTextBytes.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
-
-  private val _storageBytes = MutableStateFlow<IndexStorageBytes?>(null)
-  /** Disk the library and the search index each take, or null until first measured. */
-  val storageBytes: StateFlow<IndexStorageBytes?> = _storageBytes
-
-  /** Whether the global defaults carry non-factory advanced values (the global restore action). */
-  val advancedDefaultsCustomized: StateFlow<Boolean> = repo.advancedDefaultsCustomized
-    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-  /** Whether the advanced reading controls are shown at all, for Settings; independent of their values. */
-  val advancedReadingEnabled: StateFlow<Boolean> = repo.advancedReadingEnabled
-    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
   private var scanJob: Job? = null
   private var discoverJob: Job? = null
@@ -267,12 +251,6 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
     }
   }
 
-  /** Books whose file is gone but whose reading history is kept; Settings lists them. */
-  val missingBooks: StateFlow<List<MissingBookRow>> = repo.missingBooks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-  fun forgetMissing(id: Long) = viewModelScope.launch { repo.forgetMissing(listOf(id)); toast("Reading history deleted") }
-  fun forgetAllMissing() = viewModelScope.launch { repo.forgetAllMissing(); toast("Reading history of missing books deleted") }
-
   /** Onboarding's "Import EPUB files": books that come in finish onboarding and open the library. */
   fun importFiles(uris: List<android.net.Uri>) {
     if (uris.isEmpty()) return
@@ -287,161 +265,6 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   override fun openDetail(bookId: Long) = navigate { Destination.Detail(features.detail(bookId, notes, this, toaster, viewModelScope)) }
 
-  // ── export and import ────────────────────────────────────────────────────
-
-  /** Writes the reading-data snapshot to a file the user picked (Settings → Export reading data). */
-  fun exportReadingData(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-    val ok = runCatching {
-      app.contentResolver.openOutputStream(uri)?.use { it.write(app.snapshotWriter.encoded().toByteArray(Charsets.UTF_8)) } != null
-    }.getOrDefault(false)
-    toast(if (ok) "Reading data exported" else "Couldn't write the file")
-  }
-
-  /** Merges a picked reading-data file into the library; what the library has is never overwritten. */
-  fun importReadingData(uri: Uri) = viewModelScope.launch(Dispatchers.IO) {
-    val text = runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
-    if (text == null) { toast("Couldn't read the file"); return@launch }
-    when (val decoded = SnapshotCodec.decode(text)) {
-      is SnapshotCodec.Decoded.Ok -> {
-        try {
-          val result = SnapshotImporter(app.database, app.settings).import(decoded.snapshot, applySettings = false)
-          app.snapshotWriter.flush()
-          toast(importSummary(result))
-        } catch (e: CancellationException) {
-          throw e
-        } catch (e: Exception) {
-          Log.w("QuireViewModel", "reading-data import failed", e)
-          toast("Couldn't import the reading data")
-        }
-      }
-      is SnapshotCodec.Decoded.UnsupportedVersion -> toast("That file was written by a newer Quire")
-      is SnapshotCodec.Decoded.Malformed -> toast("That file isn't Quire reading data")
-    }
-  }
-
-  fun exportNotes(bookId: Long, uri: Uri) = notes.export(bookId, uri)
-
-  // ── full backup ──────────────────────────────────────────────────────────
-
-  private val backupPrefs = combine(
-    settings.backupContents, settings.autoBackupEnabled, settings.autoBackupInterval, settings.autoBackupFolder, settings.autoBackupKeep,
-  ) { contents, auto, interval, folder, keep -> BackupUi(contents, auto, interval, folder, keep) }
-
-  private val backupWork = WorkManager.getInstance(app).let { wm ->
-    combine(
-      wm.getWorkInfosForUniqueWorkFlow(BackupWorker.MANUAL_WORK),
-      wm.getWorkInfosForUniqueWorkFlow(BackupWorker.PERIODIC_WORK),
-      settings.lastBackupAt,
-      settings.lastBackupError,
-    ) { manual, periodic, lastAt, lastError ->
-      val running = (manual + periodic).firstOrNull { it.state == WorkInfo.State.RUNNING }
-      val queued = manual.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
-      BackupUi(
-        running = running != null || queued,
-        progress = running?.progress?.takeIf { it.keyValueMap.containsKey(BackupWorker.KEY_PROGRESS) }?.getFloat(BackupWorker.KEY_PROGRESS, 0f),
-        lastAt = lastAt, lastError = lastError,
-      )
-    }
-  }
-
-  /** Full-backup settings and the state of the last or running backup. */
-  val backup: StateFlow<BackupUi> = combine(backupPrefs, backupWork) { prefs, work ->
-    prefs.copy(running = work.running, progress = work.progress, lastAt = work.lastAt, lastError = work.lastError)
-  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUi())
-
-  private val _backupSizes = MutableStateFlow<BackupSizes?>(null)
-  /** What covers and imported books add to a full backup, or null until measured. */
-  val backupSizes: StateFlow<BackupSizes?> = _backupSizes
-
-  fun refreshBackupSizes() = viewModelScope.launch(Dispatchers.IO) {
-    fun measure(dir: File) = dir.listFiles()?.filter { it.isFile }.orEmpty().let { it.size to it.sumOf(File::length) }
-    val (covers, coverBytes) = measure(app.backupLocations.covers)
-    val (imported, importedBytes) = measure(app.backupLocations.imported)
-    _backupSizes.value = BackupSizes(covers, coverBytes, imported, importedBytes)
-  }
-
-  fun setBackupContents(contents: BackupContents) = viewModelScope.launch { settings.setBackupContents(contents) }
-  fun setAutoBackup(enabled: Boolean) = viewModelScope.launch { settings.setAutoBackupEnabled(enabled) }
-  fun setAutoBackupInterval(interval: BackupInterval) = viewModelScope.launch { settings.setAutoBackupInterval(interval) }
-  fun setAutoBackupKeep(keep: Int) = viewModelScope.launch { settings.setAutoBackupKeep(keep) }
-  fun setAutoBackupFolder(path: String) = viewModelScope.launch { settings.setAutoBackupFolder(path) }
-
-  /** Starts a full backup into the document the user just created; it runs in the background with a notification. */
-  fun startBackup(uri: Uri) {
-    // The worker may start after this screen is gone; a persistable grant keeps the document writable until it is done.
-    runCatching { app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
-    BackupWorker.startManual(app, uri)
-    toast("Backing up in the background")
-  }
-
-  private val _restore = MutableStateFlow<RestoreUi>(RestoreUi.Idle)
-  /** Where a restore from a full backup is; drives the restore sheet. */
-  val restore: StateFlow<RestoreUi> = _restore
-
-  /** Reads the picked backup's manifest and shows what it holds, so the user can choose how to restore it. */
-  fun inspectBackup(uri: Uri) = viewModelScope.launch {
-    _restore.value = RestoreUi.Reading
-    _restore.value = try {
-      RestoreUi.Ready(uri, app.fullRestore.inspect(uri))
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      toast((e as? BackupException)?.message ?: "Couldn't read that backup")
-      RestoreUi.Idle
-    }
-  }
-
-  /** Closes the restore sheet; a restore already underway carries on. */
-  fun dismissRestore() { if (_restore.value !is RestoreUi.Working) _restore.value = RestoreUi.Idle }
-
-  /**
-   * Replaces the library, reading data, index and settings with the backup, then restarts the app so the restored files
-   * are opened fresh. Runs on the app's scope: leaving the screen must not abandon a half-extracted restore.
-   */
-  fun replaceFromBackup() {
-    val ready = _restore.value as? RestoreUi.Ready ?: return
-    _restore.value = RestoreUi.Working("Restoring…", 0f)
-    app.appScope.launch {
-      try {
-        app.fullRestore.stage(ready.uri) { p -> _restore.value = RestoreUi.Working(if (p == null) "Checking the backup…" else "Restoring…", p) }
-        _restore.value = RestoreUi.Working("Restarting…", null)
-        withContext(Dispatchers.Main) { restartApp() }
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Log.w("QuireViewModel", "full restore failed", e)
-        _restore.value = RestoreUi.Idle
-        toast((e as? BackupException)?.message ?: "Couldn't restore that backup")
-      }
-    }
-  }
-
-  /** Adds the backup's reading data (and imported books the library lacks) to the library; nothing here is replaced. */
-  fun mergeFromBackup() {
-    val ready = _restore.value as? RestoreUi.Ready ?: return
-    _restore.value = RestoreUi.Working("Adding the backup's reading data…", null)
-    app.appScope.launch {
-      try {
-        val outcome = app.fullRestore.merge(ready.uri)
-        toast(mergeSummary(outcome))
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        Log.w("QuireViewModel", "full-backup merge failed", e)
-        toast((e as? BackupException)?.message ?: "Couldn't import that backup")
-      } finally {
-        _restore.value = RestoreUi.Idle
-      }
-    }
-  }
-
-  /** Starts the app again in a new process; the staged restore is swapped in before anything opens it. */
-  private fun restartApp() {
-    app.startActivity(Intent.makeRestartActivityTask(ComponentName(app, MainActivity::class.java)))
-    Runtime.getRuntime().exit(0)
-  }
-
-
   // ── reader ───────────────────────────────────────────────────────────────
 
   override fun openReader(request: ReaderRequest) =
@@ -449,49 +272,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   override fun onCleared() { closeHolder(_destination.value); super.onCleared() }
 
-  // settings screen
+  // ── settings ─────────────────────────────────────────────────────────────
 
-  override fun openSettings() { navigate(Destination.Settings); refreshDatabaseBytes(); refreshBackupSizes() }
-  fun closeSettings() = navigate(Destination.Library)
-  fun updateDefaults(change: (ReaderPrefs) -> ReaderPrefs) {
-    val next = change(defaults.value)
-    viewModelScope.launch { repo.setReaderDefaults(next) }
-  }
-
-  /** Restores the global advanced controls to the factory values; book overrides stay. */
-  fun restoreGlobalAdvanced() = viewModelScope.launch {
-    repo.setReaderDefaults(defaults.value.copy(advanced = AdvancedReaderPrefs()))
-    toast("Advanced reading settings restored")
-  }
-
-  fun setAdvancedReadingEnabled(v: Boolean) = viewModelScope.launch { repo.setAdvancedReadingEnabled(v) }
-  fun resetAllBookPrefs() = viewModelScope.launch { repo.clearAllBookPrefs(); toast("Every book now uses your defaults") }
-  fun setUseCalibreSetting(v: Boolean) = viewModelScope.launch { repo.setUseCalibre(v); toast("Takes effect on the next full rescan") }
-  fun setWatchSetting(v: Boolean) = viewModelScope.launch { repo.setWatchNewBooks(v) }
-  fun setIndexingEnabledSetting(v: Boolean) = viewModelScope.launch { repo.setIndexingEnabled(v) }
-  fun setIndexChargingOnlySetting(v: Boolean) = viewModelScope.launch { repo.setIndexChargingOnly(v) }
-
-  /** Measures the library and index files on disk, off the main thread. */
-  fun refreshDatabaseBytes() = viewModelScope.launch(Dispatchers.IO) { _storageBytes.value = repo.storageBytes() }
-
-  /** Clears the search index and indexes the library again under the current charging and reader rules. Books and reading state stay. */
-  fun rebuildIndex() {
-    // On the app's scope: the clear must finish and the run be requested even if this screen goes away meanwhile.
-    app.appScope.launch {
-      app.indexer.rebuild()
-      refreshDatabaseBytes()
-    }
-    toast("Rebuilding the search index")
-  }
-
-  /** Turns indexing off and deletes the search index. Books, metadata and reading state are untouched. */
-  fun deleteSearchIndex() {
-    app.appScope.launch {
-      app.indexer.deleteIndex()
-      refreshDatabaseBytes()
-    }
-    toast("Search index deleted")
-  }
-
+  override fun openSettings() = navigate { Destination.Settings(features.settings(restore, notes, this, toaster, viewModelScope.childScope(), viewModelScope)) }
 }
-

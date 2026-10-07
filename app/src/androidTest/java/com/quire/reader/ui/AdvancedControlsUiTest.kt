@@ -87,12 +87,12 @@ class AdvancedControlsUiTest {
   @Test fun `first use the section appears and the preset keeps the position`() {
     // Switching the controls on in Settings is what adds the section, both there and in the reader.
     runBlocking { app.settings.setAdvancedReadingEnabled(true) }
-    awaitCondition("visibility on") { vm.advancedReadingEnabled.value }
     onActivity { it.openSettings() }
+    awaitCondition("visibility on") { vm.settings.advancedReadingEnabled.value }
 
     // Authoring the Screen preset on the globals: every book without overrides now shows it.
-    onActivity { vm.updateDefaults { it.copy(advanced = it.advanced.withPreset(ParagraphPreset.Screen) ?: it.advanced) } }
-    awaitCondition("globals preset") { vm.defaults.value.advanced.paragraphPreset == ParagraphPreset.Screen }
+    onActivity { vm.settings.updateDefaults { it.copy(advanced = it.advanced.withPreset(ParagraphPreset.Screen) ?: it.advanced) } }
+    awaitCondition("globals preset") { vm.settings.defaults.value.advanced.paragraphPreset == ParagraphPreset.Screen }
     onActivity { it.closeSettings() }
 
     openPaged()
@@ -157,26 +157,26 @@ class AdvancedControlsUiTest {
 
   @Test fun `restore confirms and cancels and disables itself`() {
     // Nothing customized: both restore buttons would be disabled.
-    assertFalse(vm.advancedDefaultsCustomized.value)
+    onActivity { it.openSettings() }
+    assertFalse(vm.settings.advancedDefaultsCustomized.value)
+
+    // Customizing the globals (in Settings) arms the global restore; a book override (in the reader) arms the book's.
+    onActivity { vm.settings.updateDefaults { it.copy(advanced = it.advanced.copy(letterSpacing = WidenLevel.Wider)) } }
+    awaitCondition("globals customized") { vm.settings.advancedDefaultsCustomized.value }
+    onActivity { it.closeSettings() }
     openPaged()
     assertFalse(vm.reader.hasBookAdvancedOverride.value)
-
-    // Customizing the globals arms the global restore; a book override arms the book's.
-    onActivity { vm.updateDefaults { it.copy(advanced = it.advanced.copy(letterSpacing = WidenLevel.Wider)) } }
-    awaitCondition("globals customized") { vm.advancedDefaultsCustomized.value }
     onActivity { vm.reader.updateBookAdvanced { it.copy(fontWeight = WeightLevel.Heavy) } }
     awaitCondition("book override stored") { runBlocking { app.library.hasBookAdvancedOverride(bookPaged.id).first() } }
     val basics = vm.reader.prefs.value
 
     // A confirmation precedes the replacement; cancel writes nothing.
     // (The cancel path simply does not call the reducer; the state below must be untouched.)
-    val beforeCancelGlobals = vm.defaults.value
-    val beforeCancelBook = vm.reader.prefs.value
     assertNull(vm.toastText.value)
     // ...the confirmed path:
     onActivity { vm.reader.restoreBookAdvanced() }
     awaitCondition("book advanced restored") {
-      vm.reader.prefs.value.advanced == vm.defaults.value.advanced && !runBlocking { app.library.hasBookAdvancedOverride(bookPaged.id).first() }
+      vm.reader.prefs.value.advanced == globals().advanced && !runBlocking { app.library.hasBookAdvancedOverride(bookPaged.id).first() }
     }
     assertEquals("This book's advanced settings follow your defaults", vm.toastText.value)
     // Exactly the advanced group: the book's basic settings stay.
@@ -185,16 +185,20 @@ class AdvancedControlsUiTest {
     assertEquals(basics.mode, vm.reader.prefs.value.mode)
     // The book now inherits the customized globals, not the factory object.
     assertEquals(WidenLevel.Wider, vm.reader.prefs.value.advanced.letterSpacing)
+    awaitCondition("nothing to restore in the book") { !vm.reader.hasBookAdvancedOverride.value }
 
     // The global restore replaces the advanced group alone.
-    onActivity { vm.restoreGlobalAdvanced() }
-    awaitCondition("globals restored") { vm.defaults.value.advanced.letterSpacing == WidenLevel.Default }
+    onActivity { it.closeReader(); it.openSettings() }
+    onActivity { vm.settings.restoreGlobalAdvanced() }
+    awaitCondition("globals restored") { vm.settings.defaults.value.advanced.letterSpacing == WidenLevel.Default }
     assertEquals("Advanced reading settings restored", vm.toastText.value)
-    // The book override was already gone; the book now follows the restored globals.
-    awaitCondition("book follows globals") { vm.reader.prefs.value.advanced.letterSpacing == WidenLevel.Default }
+    // After everything is restored there is nothing left to restore: the flag goes dark again.
+    awaitCondition("nothing to restore globally") { !vm.settings.advancedDefaultsCustomized.value }
+    onActivity { it.closeSettings() }
 
-    // After everything is restored there is nothing left to restore: the flags go dark again.
-    awaitCondition("nothing to restore") { !vm.advancedDefaultsCustomized.value && !vm.reader.hasBookAdvancedOverride.value }
+    // The book override was already gone; the book now follows the restored globals.
+    openPaged()
+    awaitCondition("book follows globals") { vm.reader.prefs.value.advanced.letterSpacing == WidenLevel.Default }
     onActivity { it.closeReader() }
     openScrollWithoutOverrides()
     // Page layout follows the restored globals in a book without overrides.
@@ -207,6 +211,8 @@ class AdvancedControlsUiTest {
   // ── helpers ─────────────────────────────────────────────────────────────────
 
   private fun session() = (vm.readerLoad as ReaderLoad.Ready).session
+
+  private fun globals() = runBlocking { app.library.readerDefaults.first() }
 
   private fun openPaged() {
     runBlocking { app.library.setBookPrefs(bookPaged.id, ReaderPrefs(mode = ReadMode.Paged)) }

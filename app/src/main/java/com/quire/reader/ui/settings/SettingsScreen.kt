@@ -54,7 +54,6 @@ import com.quire.reader.ui.IndexStatusText
 import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.Toggle
 import com.quire.reader.ui.coverageFraction
@@ -68,20 +67,20 @@ import java.util.Date
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(vm: QuireViewModel) {
-  BackHandler { vm.closeSettings() }
+fun SettingsScreen(settings: SettingsState) {
+  BackHandler { settings.leave() }
   /** The neutral reflowable availability the globals are authored against (C9). */
   val neutralAvailability = remember { com.quire.reader.reader.ReaderPreferenceContext.neutralReflowable() }
-  val defaults by vm.defaults.collectAsStateWithLifecycle()
-  val useCalibre by vm.useCalibreSetting.collectAsStateWithLifecycle()
-  val watch by vm.watchSetting.collectAsStateWithLifecycle()
-  val indexing by vm.indexingEnabledSetting.collectAsStateWithLifecycle()
-  val chargingOnly by vm.indexChargingOnlySetting.collectAsStateWithLifecycle()
-  val coverage by vm.indexCoverage.collectAsStateWithLifecycle()
-  val activity by vm.indexActivity.collectAsStateWithLifecycle()
-  val textBytes by vm.indexedTextBytes.collectAsStateWithLifecycle()
-  val storage by vm.storageBytes.collectAsStateWithLifecycle()
-  val missing by vm.missingBooks.collectAsStateWithLifecycle()
+  val defaults by settings.defaults.collectAsStateWithLifecycle()
+  val useCalibre by settings.useCalibre.collectAsStateWithLifecycle()
+  val watch by settings.watch.collectAsStateWithLifecycle()
+  val indexing by settings.indexingEnabled.collectAsStateWithLifecycle()
+  val chargingOnly by settings.indexChargingOnly.collectAsStateWithLifecycle()
+  val coverage by settings.indexCoverage.collectAsStateWithLifecycle()
+  val activity by settings.indexActivity.collectAsStateWithLifecycle()
+  val textBytes by settings.indexedTextBytes.collectAsStateWithLifecycle()
+  val storage by settings.storageBytes.collectAsStateWithLifecycle()
+  val missing by settings.missingBooks.collectAsStateWithLifecycle()
   var confirmingDelete by remember { mutableStateOf(false) }
   BackHandler(enabled = confirmingDelete) { confirmingDelete = false }
   var choosingBackup by remember { mutableStateOf(false) }
@@ -90,7 +89,7 @@ fun SettingsScreen(vm: QuireViewModel) {
   var forgetting by remember { mutableStateOf<List<MissingBookRow>?>(null) }
   BackHandler(enabled = forgetting != null) { forgetting = null }
   // The database grows as books are indexed, so measure again whenever the searchable count changes.
-  LaunchedEffect(coverage?.searchable) { vm.refreshDatabaseBytes() }
+  LaunchedEffect(coverage?.searchable) { settings.refreshDatabaseBytes() }
 
   // Document pickers. The picked book is remembered across the picker round trip, and a cancelled
   // picker (null uri) changes nothing.
@@ -98,22 +97,22 @@ fun SettingsScreen(vm: QuireViewModel) {
   val notesExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
     val bookId = pendingNotesFor
     pendingNotesFor = null
-    if (uri != null && bookId != null) vm.exportNotes(bookId, uri)
+    if (uri != null && bookId != null) settings.exportNotes(bookId, uri)
   }
   val readingDataExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-    if (uri != null) vm.exportReadingData(uri)
+    if (uri != null) settings.backup.exportReadingData(uri)
   }
   val readingDataImport = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    if (uri != null) vm.importReadingData(uri)
+    if (uri != null) settings.backup.importReadingData(uri)
   }
   val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-    if (uri != null) vm.inspectBackup(uri)
+    if (uri != null) settings.restore.inspect(uri)
   }
 
   Box(Modifier.fillMaxSize()) {
   Column(Modifier.fillMaxSize().background(Nq.bg).statusBarsPadding()) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-      IconBtn(Ic.ArrowLeft, vm::closeSettings)
+      IconBtn(Ic.ArrowLeft, settings::leave)
       QText("Settings", 20f, Modifier.padding(start = 4.dp), weight = 500)
     }
     Column(
@@ -124,25 +123,25 @@ fun SettingsScreen(vm: QuireViewModel) {
         Kicker("Reading defaults")
         QText("How a book looks the first time you open it. You can still change a single book from its Display menu.", 12.5f, color = Nq.neutral400, lh = 1.5f)
         Preview(defaults)
-        ReadingControls(defaults, neutralAvailability) { change -> vm.updateDefaults(change) }
-        QButton("Reset every book to these defaults", vm::resetAllBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
+        ReadingControls(defaults, neutralAvailability) { change -> settings.updateDefaults(change) }
+        QButton("Reset every book to these defaults", settings::resetAllBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
         QText("Books you have given their own settings keep them until you do this.", 11.5f, color = Nq.neutral500)
 
-        val advancedEnabled by vm.advancedReadingEnabled.collectAsStateWithLifecycle()
-        val advancedCustomized by vm.advancedDefaultsCustomized.collectAsStateWithLifecycle()
+        val advancedEnabled by settings.advancedReadingEnabled.collectAsStateWithLifecycle()
+        val advancedCustomized by settings.advancedDefaultsCustomized.collectAsStateWithLifecycle()
         var confirmingAdvancedRestore by remember { mutableStateOf(false) }
         BackHandler(enabled = confirmingAdvancedRestore) { confirmingAdvancedRestore = false }
-        Toggle("Advanced reading", "Show extra typography and page-layout controls.", advancedEnabled) { vm.setAdvancedReadingEnabled(!advancedEnabled) }
+        Toggle("Advanced reading", "Show extra typography and page-layout controls.", advancedEnabled) { settings.setAdvancedReadingEnabled(!advancedEnabled) }
         if (!advancedEnabled && advancedCustomized) QText("Advanced reading settings are customized", 11.5f, color = Nq.neutral500)
         AnimatedVisibility(advancedEnabled) {
           Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AdvancedReadingControls(
               defaults.advanced,
               neutralAvailability,
-              onAdvanced = { change -> vm.updateDefaults { it.copy(advanced = change(it.advanced)) } },
-              onPreset = { preset -> vm.updateDefaults { it.copy(advanced = it.advanced.withPreset(preset) ?: it.advanced) } },
+              onAdvanced = { change -> settings.updateDefaults { it.copy(advanced = change(it.advanced)) } },
+              onPreset = { preset -> settings.updateDefaults { it.copy(advanced = it.advanced.withPreset(preset) ?: it.advanced) } },
               lineHeight = defaults.lineHeight,
-              onLineHeight = { v -> vm.updateDefaults { it.copy(lineHeight = v) } },
+              onLineHeight = { v -> settings.updateDefaults { it.copy(lineHeight = v) } },
             )
             QText("The preview above shows the basic settings; the advanced options apply when reading, and each book can still hold a control back.", 11.5f, color = Nq.neutral500)
             QButton("Restore advanced defaults", { confirmingAdvancedRestore = true }, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = advancedCustomized)
@@ -157,7 +156,7 @@ fun SettingsScreen(vm: QuireViewModel) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               QButton("Cancel", { confirmingAdvancedRestore = false }, Modifier.weight(1f), size = 13f, height = 42.dp)
-              QButton("Restore", { confirmingAdvancedRestore = false; vm.restoreGlobalAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
+              QButton("Restore", { confirmingAdvancedRestore = false; settings.restoreGlobalAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
             }
           }
         }
@@ -165,8 +164,8 @@ fun SettingsScreen(vm: QuireViewModel) {
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Kicker("Library")
-        Toggle("Watch for new books", "Rescan when you open Quire and every few hours", watch) { vm.setWatchSetting(!watch) }
-        Toggle("Use Calibre metadata", "Series, tags and ratings from metadata.opf (applies on a full rescan)", useCalibre) { vm.setUseCalibreSetting(!useCalibre) }
+        Toggle("Watch for new books", "Rescan when you open Quire and every few hours", watch) { settings.setWatch(!watch) }
+        Toggle("Use Calibre metadata", "Series, tags and ratings from metadata.opf (applies on a full rescan)", useCalibre) { settings.setUseCalibre(!useCalibre) }
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -184,8 +183,8 @@ fun SettingsScreen(vm: QuireViewModel) {
       }
 
       BackupSection(
-        vm,
-        onBackUp = { vm.refreshBackupSizes(); choosingBackup = true },
+        settings,
+        onBackUp = { settings.backup.refreshSizes(); choosingBackup = true },
         onRestore = { backupOpen.launch(BACKUP_PICK_TYPES) },
         onPickFolder = { pickingBackupFolder = true },
       )
@@ -203,14 +202,14 @@ fun SettingsScreen(vm: QuireViewModel) {
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Kicker("Library search")
-        Toggle("Index book text", "Lets you search inside books. Runs in the background and steps aside while you read.", indexing) { vm.setIndexingEnabledSetting(!indexing) }
-        Toggle("Index only while charging", "Applies to all indexing, including updates for new and changed books.", chargingOnly) { vm.setIndexChargingOnlySetting(!chargingOnly) }
+        Toggle("Index book text", "Lets you search inside books. Runs in the background and steps aside while you read.", indexing) { settings.setIndexingEnabled(!indexing) }
+        Toggle("Index only while charging", "Applies to all indexing, including updates for new and changed books.", chargingOnly) { settings.setIndexChargingOnly(!chargingOnly) }
         LibrarySearchStatus(indexStatusText(coverage, activity, inSettings = true), coverage)
         Value("Library storage", storage?.let { formatBytes(it.library) } ?: "…", "Books, reading state, highlights and notes. The search index lives in its own file, below.")
         Value("Search index storage", storage?.let { formatBytes(it.index) } ?: "…", "The search index file: book text and the full-text tables built on it. Deleting the index or moving a book removes it, and nothing else.")
         Value("Indexed text", formatBytes(textBytes), "How much of that is book text stored for searching.")
         Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          QButton("Rebuild index", vm::rebuildIndex, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = indexing)
+          QButton("Rebuild index", settings::rebuildIndex, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = indexing)
           QText(
             if (indexing) "Reads every book again. Still follows the charging and reading rules above." else "Turn on indexing to rebuild the index.",
             11.5f, color = Nq.neutral500,
@@ -223,12 +222,12 @@ fun SettingsScreen(vm: QuireViewModel) {
       }
     }
   }
-  BackupSheets(vm, choosingBackup, onDismissChoosing = { choosingBackup = false })
-  FolderPickerSheet(pickingBackupFolder, { pickingBackupFolder = false }) { path -> pickingBackupFolder = false; vm.setAutoBackupFolder(path) }
-  DeleteIndexSheet(confirmingDelete, textBytes, onDismiss = { confirmingDelete = false }) { confirmingDelete = false; vm.deleteSearchIndex() }
+  BackupSheets(settings, choosingBackup, onDismissChoosing = { choosingBackup = false })
+  FolderPickerSheet(pickingBackupFolder, { pickingBackupFolder = false }) { path -> pickingBackupFolder = false; settings.backup.setFolder(path) }
+  DeleteIndexSheet(confirmingDelete, textBytes, onDismiss = { confirmingDelete = false }) { confirmingDelete = false; settings.deleteSearchIndex() }
   ForgetMissingSheet(forgetting, onDismiss = { forgetting = null }) { rows ->
     forgetting = null
-    if (rows.size == 1) vm.forgetMissing(rows.single().id) else vm.forgetAllMissing()
+    if (rows.size == 1) settings.forgetMissing(rows.single().id) else settings.forgetAllMissing()
   }
   }
 }
