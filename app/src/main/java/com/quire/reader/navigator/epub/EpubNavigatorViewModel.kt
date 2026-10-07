@@ -80,9 +80,17 @@ internal class EpubNavigatorViewModel(
     sealed class Event {
         data class OpenInternalLink(val target: Link) : Event()
 
-        /** Refreshes all the resources in the view pager. */
-        object InvalidateViewPager : Event()
-        data class RunScript(val command: RunScriptCommand) : Event()
+        /**
+         * One preferences application, computed in one place: [script] is the CSS property
+         * delta to run on the loaded resources (null when no CSS property changed), and
+         * [needsInvalidation] says the layout structure changed enough to invalidate the
+         * resource pager. The fragment applies both in a single serialized pass that
+         * captures the position first and restores it exactly once.
+         */
+        data class ApplyPreferences(
+            val script: RunScriptCommand?,
+            val needsInvalidation: Boolean,
+        ) : Event()
     }
 
     private val _events = Channel<Event>(Channel.BUFFERED)
@@ -120,39 +128,6 @@ internal class EpubNavigatorViewModel(
         ).update(settings.value, useReadiumCssFontSize = config.useReadiumCssFontSize)
     )
 
-    init {
-        initReadiumCss()
-    }
-
-    /**
-     * Requests the web views to be updated when the Readium CSS properties change.
-     */
-    private fun initReadiumCss() {
-        var previousCss = css.value
-        css
-            .onEach { css ->
-                val properties = mutableMapOf<String, String?>()
-                if (previousCss.rsProperties != css.rsProperties) {
-                    properties += css.rsProperties.toCssProperties()
-                }
-                if (previousCss.userProperties != css.userProperties) {
-                    properties += css.userProperties.toCssProperties()
-                }
-                if (properties.isNotEmpty()) {
-                    _events.send(
-                        Event.RunScript(
-                            RunScriptCommand(
-                                script = "readium.setCSSProperties(${JSONObject(properties.toMap())});",
-                                scope = RunScriptCommand.Scope.LoadedResources
-                            )
-                        )
-                    )
-                }
-
-                previousCss = css
-            }
-            .launchIn(viewModelScope)
-    }
 
     fun onResourceLoaded(href: Url, link: Link): List<RunScriptCommand> =
         buildList {
@@ -225,7 +200,27 @@ internal class EpubNavigatorViewModel(
 
         val newSettings = settingsPolicy.settings(preferences)
         _settings.value = newSettings
-        css.update { it.update(newSettings, useReadiumCssFontSize = config.useReadiumCssFontSize) }
+        val oldCss = css.value
+        val newCss = oldCss.update(newSettings, useReadiumCssFontSize = config.useReadiumCssFontSize)
+        css.value = newCss
+
+        // The CSS property delta and the structural invalidation are computed together and
+        // handed over as one event, so the fragment applies the CSS and the reflow or pager
+        // invalidation it triggers in a single serialized pass — instead of the CSS script
+        // racing the settings collector that used to reflow on its own.
+        val properties = mutableMapOf<String, String?>()
+        if (oldCss.rsProperties != newCss.rsProperties) {
+            properties += newCss.rsProperties.toCssProperties()
+        }
+        if (oldCss.userProperties != newCss.userProperties) {
+            properties += newCss.userProperties.toCssProperties()
+        }
+        val script = properties.takeIf { it.isNotEmpty() }?.let {
+            RunScriptCommand(
+                script = "readium.setCSSProperties(${JSONObject(properties.toMap())});",
+                scope = RunScriptCommand.Scope.LoadedResources
+            )
+        }
 
         val needsInvalidation: Boolean = (
             oldSettings.readingProgression != newSettings.readingProgression ||
@@ -238,8 +233,8 @@ internal class EpubNavigatorViewModel(
                 oldSettings.scroll != newSettings.scroll
             )
 
-        if (needsInvalidation) {
-            _events.send(Event.InvalidateViewPager)
+        if (script != null || needsInvalidation) {
+            _events.send(Event.ApplyPreferences(script, needsInvalidation))
         }
     }
 

@@ -59,6 +59,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -137,6 +139,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
         /** How long a jump or script waits for a document outside the live window to load. */
         private const val FRAME_LOAD_TIMEOUT_MS = 20_000L
+
+        /** How long a reflow waits for its remeasure to commit before restoring best-effort. */
+        private const val LAYOUT_COMMIT_TIMEOUT_MS = 4_000L
     }
 
     /** What the surface needs from the navigator's view model. */
@@ -210,6 +215,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
     /** Layout generation: bumped when every frame is remeasured after a reflow. */
     private var layoutGeneration = 0
+
+    /** Serializes remeasures so two reflows cannot interleave their capture and commit. */
+    private val remeasureMutex = Mutex()
 
     /** Reading-order resources this surface owns, by original href (no fragment). */
     private val resources: List<Link> = navigator.readingOrder
@@ -330,7 +338,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
             if (_state.value == ContinuousBookState.Ready) {
                 navigator.reflowContinuousSurface()
             } else {
-                remeasureAllFrames()
+                scope.launch { remeasureAllFrames() }
             }
         }
     }
@@ -735,48 +743,67 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     }
 
     /**
-     * Restores [anchor] exactly once after the new layout generation committed: every
-     * frame is remeasured, geometry recommitted, then the anchor (or its progression
-     * fallback) is brought back under the viewport top.
+     * Restores [anchor] exactly once after the layout generation [targetGeneration]
+     * committed: every frame is remeasured, geometry recommitted, then the anchor (or its
+     * progression fallback) is brought back under the viewport top. Suspending keeps the
+     * caller's serialized pass in charge; the wait is for *this* reflow's generation —
+     * computed before the remeasure was posted — so a fast commit is never mistaken for
+     * the next reflow's.
      */
-    fun restoreAnchor(anchor: ReflowAnchor?) {
-        scope.launch {
-            awaitLayoutGeneration()
-            if (_state.value != ContinuousBookState.Ready) return@launch
-            commitGeometry()
-            val index = anchor?.let { indexOfHref(it.href) } ?: resourceIndexAt(outerScrollY()) ?: return@launch
-            val runner = runners[index]
-            val anchorOffset = anchor?.textAnchorScript?.let { script ->
-                runCatching { runner.runJavaScriptSuspend(ANCHOR_RESTORE_PREFIX + script + ANCHOR_RESTORE_SUFFIX) }
-                    .getOrNull()
-                    ?.trim('"')
-                    ?.toDoubleOrNull()
-            }
-            val within = when {
-                anchorOffset != null && anchorOffset >= 0 -> anchorOffset
-                anchor?.localOffset != null && anchor.localOffset!! <= heights[index] -> anchor.localOffset!!
-                anchor?.progression != null -> anchor.progression!! * heights[index]
-                else -> 0.0
-            }
-            jumpToResourceOffset(hrefs[index], within)
+    suspend fun restoreAnchor(anchor: ReflowAnchor?, targetGeneration: Int) {
+        if (_state.value != ContinuousBookState.Ready) return
+        awaitLayoutGeneration(targetGeneration)
+        if (_state.value != ContinuousBookState.Ready) return
+        commitGeometry()
+        val index = anchor?.let { indexOfHref(it.href) } ?: resourceIndexAt(outerScrollY()) ?: return
+        val runner = runners[index]
+        val anchorOffset = anchor?.textAnchorScript?.let { script ->
+            runCatching { runner.runJavaScriptSuspend(ANCHOR_RESTORE_PREFIX + script + ANCHOR_RESTORE_SUFFIX) }
+                .getOrNull()
+                ?.trim('"')
+                ?.toDoubleOrNull()
         }
+        val within = when {
+            anchorOffset != null && anchorOffset >= 0 -> anchorOffset
+            anchor?.localOffset != null && anchor.localOffset!! <= heights[index] -> anchor.localOffset!!
+            anchor?.progression != null -> anchor.progression!! * heights[index]
+            else -> 0.0
+        }
+        jumpToResourceOffset(hrefs[index], within)
     }
 
-    /** Waits for the next layout generation commit (all frames remeasured). */
-    suspend fun awaitLayoutGeneration() {
-        val gen = layoutGeneration
-        layoutGenerationFlow.first { it > gen }
+    /**
+     * Waits until the committed layout generation is at or past [target]. The wait is
+     * bounded: a surface that died before committing releases the caller instead of
+     * hanging the serialized apply pass.
+     */
+    private suspend fun awaitLayoutGeneration(target: Int) {
+        withTimeoutOrNull(LAYOUT_COMMIT_TIMEOUT_MS) {
+            layoutGenerationFlow.first { it >= target }
+        } ?: Log.w(TAG, "layout generation $target did not commit within ${LAYOUT_COMMIT_TIMEOUT_MS}ms")
     }
 
     private val layoutGenerationFlow = MutableStateFlow(layoutGeneration)
 
-    /** Remeasures every loaded frame (fonts, images, viewport change) in one batch. */
-    fun remeasureAllFrames() {
+    /**
+     * Remeasures every loaded frame (fonts, images, viewport change) in one batch. Returns
+     * the layout generation this remeasure will commit, computed *before* the request is
+     * posted, so the anchor restore can wait for exactly this commit — a fast remeasure
+     * (nothing changed) must never be mistaken for the next reflow's. Concurrent
+     * remeasures are serialized: one cannot start until the previous one has committed.
+     */
+    suspend fun remeasureAllFrames(): Int = remeasureMutex.withLock {
+        val target = layoutGeneration + 1
         val gen = generation
-        shell.post {
-            if (gen != generation) return@post
-            shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.remeasureAll();", null)
+        if (gen == generation && _state.value == ContinuousBookState.Ready) {
+            withContext(Dispatchers.Main.immediate) {
+                shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.remeasureAll();", null)
+            }
+            withTimeoutOrNull(LAYOUT_COMMIT_TIMEOUT_MS) {
+                layoutGenerationFlow.first { it >= target }
+            } ?: Log.w(TAG, "remeasure to generation $target did not commit in time")
         }
+        target
     }
 
     // ── shell events ────────────────────────────────────────────────────────────
@@ -1000,6 +1027,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         Log.d(TAG, "dispose surface #${System.identityHashCode(this)}")
         generation++
         layoutGeneration++
+        layoutGenerationFlow.value = layoutGeneration
         _state.value = ContinuousBookState.Disposed
         runners.forEach { it.dispose() }
         scope.cancel()
