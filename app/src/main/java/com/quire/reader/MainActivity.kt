@@ -20,8 +20,8 @@ class MainActivity : FragmentActivity() {
     // FragmentManager's factory. The navigator's only constructor is internal and parameterized
     // (the vendored Readium fragment), so the default reflection factory crashes with "could
     // not find Fragment constructor". Readium's supported path: give the framework a factory
-    // that builds a dummy navigator — the real publication opens asynchronously in
-    // QuireViewModel, so no real factory can exist this early.
+    // that builds a dummy navigator — the real publication opens asynchronously in the
+    // reader's ReaderState, so no real factory can exist this early.
     supportFragmentManager.fragmentFactory = EpubNavigatorFragment.createDummyFactory()
     super.onCreate(savedInstanceState)
     // Anything restored is a stale dummy: it would throw RestorationNotSupportedException on

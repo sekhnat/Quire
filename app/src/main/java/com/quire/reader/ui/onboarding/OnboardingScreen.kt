@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
@@ -55,9 +56,7 @@ import com.quire.reader.ui.Ph
 import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.Toggle
-import com.quire.reader.ui.UiState
 import com.quire.reader.ui.cornerGlow
 import com.quire.reader.ui.settings.BACKUP_PICK_TYPES
 import com.quire.reader.ui.settings.RestoreSheet
@@ -67,30 +66,31 @@ import java.util.Locale
 private fun fmt(n: Int) = NumberFormat.getIntegerInstance(Locale.US).format(n)
 
 @Composable
-fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
+fun OnboardingScreen(onboarding: OnboardingState) {
+  val s by onboarding.state.collectAsStateWithLifecycle()
   var pickingFolder by remember { mutableStateOf(false) }
   // Guarding an existing library, the Access step has nothing to go back to.
   BackHandler(enabled = (s.onboardStep == OnboardStep.Access && !s.accessForLibrary) || s.onboardStep == OnboardStep.Folders) {
-    vm.setStep(OnboardStep.Welcome)
+    onboarding.setStep(OnboardStep.Welcome)
   }
-  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshAccess() }
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onboarding.refreshAccess() }
   Box(Modifier.fillMaxSize().background(Nq.bg).cornerGlow(500.dp, 360.dp, Nq.section)) {
     when (s.onboardStep) {
-      OnboardStep.Welcome -> Welcome(vm)
-      OnboardStep.Access -> Access(vm, forLibrary = s.accessForLibrary)
-      OnboardStep.Folders -> PickFolders(s, vm, onAddFolder = { pickingFolder = true })
-      OnboardStep.Scan -> Scanning(s, vm)
+      OnboardStep.Welcome -> Welcome(onboarding)
+      OnboardStep.Access -> Access(onboarding, forLibrary = s.accessForLibrary)
+      OnboardStep.Folders -> PickFolders(s, onboarding, onAddFolder = { pickingFolder = true })
+      OnboardStep.Scan -> Scanning(s, onboarding)
     }
-    FolderPickerSheet(pickingFolder && s.onboardStep == OnboardStep.Folders, { pickingFolder = false }, vm::addPickedFolder)
+    FolderPickerSheet(pickingFolder && s.onboardStep == OnboardStep.Folders, { pickingFolder = false }, onboarding::addPickedFolder)
     // A new install can start from a full backup instead: there is no library yet, so only "replace" makes sense.
-    RestoreSheet(vm.restore, allowMerge = false)
+    RestoreSheet(onboarding.restore, allowMerge = false)
   }
 }
 
 @Composable
-private fun Welcome(vm: QuireViewModel) {
-  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris) }
-  val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.restore.inspect(uri) }
+private fun Welcome(onboarding: OnboardingState) {
+  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> onboarding.importFiles(uris) }
+  val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) onboarding.restore.inspect(uri) }
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 28.dp, end = 28.dp, top = 22.dp, bottom = 40.dp), verticalArrangement = Arrangement.SpaceBetween) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -104,7 +104,7 @@ private fun Welcome(vm: QuireViewModel) {
       )
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-      QButton("Choose folders", vm::chooseFolders, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FolderOpen, height = 46.dp)
+      QButton("Choose folders", onboarding::chooseFolders, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FolderOpen, height = 46.dp)
       QButton("Import individual files instead", { picker.launch(arrayOf("application/epub+zip", "application/octet-stream")) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
       QButton("Restore from a Quire backup", { backupOpen.launch(BACKUP_PICK_TYPES) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
     }
@@ -112,10 +112,10 @@ private fun Welcome(vm: QuireViewModel) {
 }
 
 @Composable
-private fun Access(vm: QuireViewModel, forLibrary: Boolean) {
+private fun Access(onboarding: OnboardingState, forLibrary: Boolean) {
   val context = LocalContext.current
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-    if (forLibrary) Spacer(Modifier.height(40.dp)) else IconBtn(Ic.ArrowLeft, { vm.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
+    if (forLibrary) Spacer(Modifier.height(40.dp)) else IconBtn(Ic.ArrowLeft, { onboarding.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
     Column(Modifier.padding(horizontal = 8.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
       Box(Modifier.size(44.dp).border(1.dp, Nq.accent, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Ph(Ic.FolderOpen, 22.dp, Nq.accent) }
       QText("Allow access to your files", 24f, Modifier.padding(top = 10.dp), weight = 500, ls = -0.01f)
@@ -132,9 +132,9 @@ private fun Access(vm: QuireViewModel, forLibrary: Boolean) {
 }
 
 @Composable
-private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit) {
+private fun PickFolders(s: OnboardingUiState, onboarding: OnboardingState, onAddFolder: () -> Unit) {
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-    IconBtn(Ic.ArrowLeft, { vm.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
+    IconBtn(Ic.ArrowLeft, { onboarding.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
       QText("Where are your books?", 24f, weight = 500, ls = -0.01f)
       QText(
@@ -149,7 +149,7 @@ private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit)
         s.candidates.forEach { f ->
           val on = f.path in s.pickedFolders
           Row(
-            Modifier.fillMaxWidth().clip(shape).background(Nq.surface).border(1.dp, if (on) Nq.accentA(0.45f) else Color.Transparent, shape).clickable { vm.toggleFolder(f.path) }.padding(12.dp),
+            Modifier.fillMaxWidth().clip(shape).background(Nq.surface).border(1.dp, if (on) Nq.accentA(0.45f) else Color.Transparent, shape).clickable { onboarding.toggleFolder(f.path) }.padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
           ) {
             Box(Modifier.size(20.dp).border(1.dp, if (on) Nq.accent else Nq.neutral600, RoundedCornerShape(5.dp)), contentAlignment = Alignment.Center) {
@@ -173,14 +173,14 @@ private fun PickFolders(s: UiState, vm: QuireViewModel, onAddFolder: () -> Unit)
         }
       }
       Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Option("Use Calibre metadata", "Series, tags and ratings from metadata.opf", s.useCalibre) { vm.toggleCalibre() }
-        Option("Watch for new books", "New files are added automatically", s.watchFolders) { vm.toggleWatch() }
+        Option("Use Calibre metadata", "Series, tags and ratings from metadata.opf", s.useCalibre) { onboarding.toggleCalibre() }
+        Option("Watch for new books", "New files are added automatically", s.watchFolders) { onboarding.toggleWatch() }
       }
     }
     val picked = s.candidates.filter { it.path in s.pickedFolders }
     val total = picked.sumOf { it.epubCount }
     QButton(
-      "Scan ${picked.size} ${if (picked.size == 1) "folder" else "folders"} · ${fmt(total)} books", vm::startScan,
+      "Scan ${picked.size} ${if (picked.size == 1) "folder" else "folders"} · ${fmt(total)} books", onboarding::startScan,
       Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.Search, height = 46.dp, enabled = picked.isNotEmpty() && !s.discovering,
     )
   }
@@ -211,8 +211,8 @@ private fun Option(label: String, sub: String, on: Boolean, onClick: () -> Unit)
 }
 
 @Composable
-private fun Scanning(s: UiState, vm: QuireViewModel) {
-  val scan by vm.scan.collectAsState()
+private fun Scanning(s: OnboardingUiState, onboarding: OnboardingState) {
+  val scan by onboarding.scan.collectAsState()
   val done = scan.phase == ScanPhase.Done
   val progress = if (scan.phase == ScanPhase.Finding) 0f else scan.fraction
   // Books already in the library from an earlier scan count as found from the start.
@@ -250,6 +250,6 @@ private fun Scanning(s: UiState, vm: QuireViewModel) {
     }
     Spacer(Modifier.weight(1f))
     QText("You can start reading now. Covers and series fill in while the scan continues in the background.", 12f, color = Nq.neutral500, lh = 1.5f)
-    QButton(if (done) "Open library" else "Start reading now", vm::openLibrary, Modifier.fillMaxWidth(), BtnKind.Primary, trailingIcon = Ic.ArrowRight, height = 46.dp)
+    QButton(if (done) "Open library" else "Start reading now", onboarding::openLibrary, Modifier.fillMaxWidth(), BtnKind.Primary, trailingIcon = Ic.ArrowRight, height = 46.dp)
   }
 }

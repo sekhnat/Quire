@@ -38,7 +38,6 @@ fun QuireApp(
 ) {
   androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { vm.onForeground() }
   androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { vm.onAppStop() }
-  val s by vm.state.collectAsStateWithLifecycle()
   val libState by vm.library.state.collectAsStateWithLifecycle()
   val lib by vm.library.data.collectAsStateWithLifecycle()
   val destination by vm.destination.collectAsStateWithLifecycle()
@@ -48,7 +47,7 @@ fun QuireApp(
     updateTransition(destination, label = "screen").Crossfade(Modifier.fillMaxSize(), animationSpec = tween(180), contentKey = { it::class }) { d ->
       when (d) {
         Destination.Splash -> Box(Modifier.fillMaxSize().background(Nq.bg))
-        Destination.Onboard -> OnboardingScreen(s, vm)
+        is Destination.Onboard -> OnboardingScreen(d.state)
         Destination.Library -> LibraryScreen(libState, lib, vm.library)
         is Destination.Detail -> DetailScreen(d.state, lib)
         is Destination.Reader -> ReaderScreen(d.state)

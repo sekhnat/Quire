@@ -5,8 +5,6 @@ import com.quire.reader.data.BookStatus
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextStatusFilter
-import com.quire.reader.data.scan.DiscoveryProgress
-import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.theme.ReaderTheme
 import java.time.LocalDate
 
@@ -59,25 +57,6 @@ data class LibraryUiState(
   val layout: LibLayout = LibLayout.Grid,
   val importOpen: Boolean = false,
 )
-
-data class UiState(
-  // onboarding
-  val onboardStep: OnboardStep = OnboardStep.Welcome,
-  val hasAccess: Boolean = false,
-  /**
-   * The Access step is guarding an existing library (a full restore brings back "onboarding done" but never the
-   * permission): granting access returns to the library instead of moving on to choosing folders.
-   */
-  val accessForLibrary: Boolean = false,
-  val candidates: List<FolderCandidate> = emptyList(),
-  /** Progress of the automatic folder discovery on the Folders step; null when it isn't running. */
-  val discovery: DiscoveryProgress? = null,
-  val pickedFolders: Set<String> = emptySet(),
-  val useCalibre: Boolean = true,
-  val watchFolders: Boolean = true,
-) {
-  val discovering get() = discovery != null
-}
 
 fun statusLabel(b: Book) = when {
   !b.readable -> "Can't open"
