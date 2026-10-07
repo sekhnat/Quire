@@ -45,11 +45,11 @@ import com.quire.reader.ui.Ph
 import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.QuireViewModel
+import com.quire.reader.ui.LibraryUiState
 import com.quire.reader.ui.SnippetStyle
 import com.quire.reader.ui.Tag
 import com.quire.reader.ui.TextSearchStatus
-import com.quire.reader.ui.UiState
+
 import com.quire.reader.ui.cardNote
 import com.quire.reader.ui.hiddenSnippets
 import com.quire.reader.ui.indexStatusText
@@ -65,7 +65,7 @@ import com.quire.reader.ui.textSearchStatusCopy
  * they do for titles and authors, and narrow these results.
  */
 @Composable
-internal fun TextSearchResults(s: UiState, lib: LibraryData, search: LibraryTextSearch, vm: QuireViewModel) {
+internal fun TextSearchResults(s: LibraryUiState, lib: LibraryData, search: LibraryTextSearch, library: LibraryState) {
   // Cards expanded to five excerpts; typing starts every card over.
   var expanded by remember(s.textLibraryQuery) { mutableStateOf(emptySet<Long>()) }
   val index = indexStatusText(search.coverage, search.activity)
@@ -88,10 +88,10 @@ internal fun TextSearchResults(s: UiState, lib: LibraryData, search: LibraryText
     item {
       if (s.scope != null) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-          Tag(s.scope.label, { vm.setScope(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp)
+          Tag(s.scope.label, { library.setScope(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp)
         }
       } else {
-        FilterChips(s, lib, vm)
+        FilterChips(s, lib, library)
       }
     }
     item { IndexStatusBlock(index) }
@@ -109,7 +109,7 @@ internal fun TextSearchResults(s: UiState, lib: LibraryData, search: LibraryText
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
           QText("Order by", 11.5f, color = Nq.neutral500)
           SearchOrder.entries.forEach { order ->
-            Tag(order.label, { vm.setTextSearchOrder(order) }, accent = s.textSearchOrder == order, size = 12f, hPad = 10.dp, vPad = 6.dp)
+            Tag(order.label, { library.setTextSearchOrder(order) }, accent = s.textSearchOrder == order, size = 12f, hPad = 10.dp, vPad = 6.dp)
           }
         }
       }
@@ -120,7 +120,7 @@ internal fun TextSearchResults(s: UiState, lib: LibraryData, search: LibraryText
         BookCard(
           result, expanded = result.book.id in expanded,
           onToggle = { expanded = if (result.book.id in expanded) expanded - result.book.id else expanded + result.book.id },
-          vm = vm, query = s.textLibraryQuery,
+          library = library, query = s.textLibraryQuery,
         )
       }
     }
@@ -147,13 +147,13 @@ private fun IndexStatusBlock(index: IndexStatusText) {
 }
 
 @Composable
-private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> Unit, vm: QuireViewModel, query: String) {
+private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> Unit, library: LibraryState, query: String) {
   val book = result.book
   val shape = RoundedCornerShape(12.dp)
   val shown = shownSnippets(result.snippets, expanded)
   val hidden = hiddenSnippets(result.snippets, expanded)
   Column(Modifier.fillMaxWidth().clip(shape).background(Nq.surface).border(1.dp, Nq.neutral800, shape)) {
-    Row(Modifier.fillMaxWidth().clickable { vm.openBook(book.id) }.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().clickable { library.openBook(book.id) }.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
       ListCover(book)
       Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         QText(book.title, 14f, weight = 500, maxLines = 2)
@@ -166,7 +166,7 @@ private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> 
     }
     shown.forEach { snippet ->
       Column(
-        Modifier.fillMaxWidth().clickable { vm.openTextHit(snippet.target) }.padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().clickable { library.openTextHit(snippet.target) }.padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
         QText(snippet.chapter.ifEmpty { "—" }, 11f, color = Nq.neutral500, maxLines = 1)
@@ -177,7 +177,7 @@ private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> 
       if (hidden > 0) QButton("Show $hidden more", onToggle, kind = BtnKind.Ghost, size = 12f, height = 32.dp)
       else if (expanded) QButton("Show fewer", onToggle, kind = BtnKind.Ghost, size = 12f, height = 32.dp)
       else Spacer(Modifier)
-      QButton("Show all in this book", { vm.openBookSearch(book.id, query) }, kind = BtnKind.Ghost, size = 12f, height = 32.dp)
+      QButton("Show all in this book", { library.openBookSearch(book.id, query) }, kind = BtnKind.Ghost, size = 12f, height = 32.dp)
     }
   }
 }

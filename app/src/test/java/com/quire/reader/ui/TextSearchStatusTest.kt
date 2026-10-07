@@ -116,7 +116,7 @@ class TextSearchStatusTest {
   }
 
   @Test fun `text search input is blank unless the open search field is in text mode`() {
-    val typed = UiState(textLibraryQuery = "pemberley", query = "austen")
+    val typed = LibraryUiState(textLibraryQuery = "pemberley", query = "austen")
     assertEquals("", textSearchInput(typed).query)
     assertEquals("", textSearchInput(typed.copy(searchOpen = true)).query)
     assertEquals("pemberley", textSearchInput(typed.copy(searchOpen = true, searchScope = SearchScope.Text)).query)

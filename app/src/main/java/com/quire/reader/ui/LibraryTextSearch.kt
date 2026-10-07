@@ -43,7 +43,7 @@ data class LibraryTextSearch(
 data class TextSearchInput(val query: String, val filters: TextSearchFilters, val order: SearchOrder = SearchOrder.Relevance)
 
 /** The text search input for a UI state; blank unless the open search field is in text mode. */
-fun textSearchInput(s: UiState): TextSearchInput =
+fun textSearchInput(s: LibraryUiState): TextSearchInput =
   if (s.searchOpen && s.searchScope == SearchScope.Text) TextSearchInput(s.textLibraryQuery, textFilters(s), s.textSearchOrder) else TextSearchInput("", TextSearchFilters.None)
 
 /**

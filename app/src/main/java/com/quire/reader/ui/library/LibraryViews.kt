@@ -40,7 +40,7 @@ import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.MissingCover
 import com.quire.reader.ui.Ph
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.QuireViewModel
+import com.quire.reader.ui.LibraryUiState
 import com.quire.reader.ui.Scope
 import com.quire.reader.ui.ScopeKind
 import com.quire.reader.ui.SeriesCover
@@ -53,7 +53,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun AuthorsView(lib: LibraryData, vm: QuireViewModel) {
+internal fun AuthorsView(lib: LibraryData, library: LibraryState) {
   val groups = lib.authorGroups
   val letterIndex = remember(groups) {
     var i = 0
@@ -70,7 +70,7 @@ internal fun AuthorsView(lib: LibraryData, vm: QuireViewModel) {
         items(authors.size, key = { authors[it].name }) { i ->
           val a = authors[i]
           Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { vm.setScope(Scope(ScopeKind.Author, a.name)) }.padding(vertical = 9.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { library.setScope(Scope(ScopeKind.Author, a.name)) }.padding(vertical = 9.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
           ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -106,14 +106,14 @@ private fun displayName(name: String): String {
 // ── series ──────────────────────────────────────────────────────────────────
 
 @Composable
-internal fun SeriesView(lib: LibraryData, vm: QuireViewModel) {
+internal fun SeriesView(lib: LibraryData, library: LibraryState) {
   val series = lib.series
   LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 32.dp + navBottomPadding()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
     if (series.isEmpty() && lib.loaded) item { Empty("No series found. Series come from your Calibre metadata.") }
     items(series.size, key = { series[it].name }) { i ->
       val entry = series[i]
       Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nq.surface).clickable { vm.setScope(Scope(ScopeKind.Series, entry.name)) }.padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Nq.surface).clickable { library.setScope(Scope(ScopeKind.Series, entry.name)) }.padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
@@ -142,13 +142,13 @@ private class Smart(val label: String, val rule: String, val icon: Int, val coun
  * line is its own lazy item, so only the chips on screen are composed however many tags the library has.
  */
 @Composable
-internal fun TagsView(lib: LibraryData, vm: QuireViewModel) {
+internal fun TagsView(lib: LibraryData, library: LibraryState) {
   val counts = lib.counts
   val smart = listOf(
-    Smart("In progress", "Opened, not finished", Ic.BookOpen, fmt(counts.getValue(LibFilter.Reading))) { vm.showFilter(LibFilter.Reading) },
-    Smart("Recently added", "Added in the last 30 days", Ic.Sparkle, fmt(counts.getValue(LibFilter.Recent))) { vm.showFilter(LibFilter.Recent) },
-    Smart("Unread", "Never opened", Ic.CircleDashed, fmt(counts.getValue(LibFilter.Unread))) { vm.showFilter(LibFilter.Unread) },
-    Smart("Finished", "Marked as read", Ic.Star, fmt(counts.getValue(LibFilter.Finished))) { vm.showFilter(LibFilter.Finished) },
+    Smart("In progress", "Opened, not finished", Ic.BookOpen, fmt(counts.getValue(LibFilter.Reading))) { library.showFilter(LibFilter.Reading) },
+    Smart("Recently added", "Added in the last 30 days", Ic.Sparkle, fmt(counts.getValue(LibFilter.Recent))) { library.showFilter(LibFilter.Recent) },
+    Smart("Unread", "Never opened", Ic.CircleDashed, fmt(counts.getValue(LibFilter.Unread))) { library.showFilter(LibFilter.Unread) },
+    Smart("Finished", "Marked as read", Ic.Star, fmt(counts.getValue(LibFilter.Finished))) { library.showFilter(LibFilter.Finished) },
   )
   val metrics = rememberTagChipMetrics()
   val density = LocalDensity.current
@@ -159,12 +159,12 @@ internal fun TagsView(lib: LibraryData, vm: QuireViewModel) {
     val lines by produceState<List<TagLine>?>(null, lib, available, metrics) {
       value = withContext(Dispatchers.Default) { tagLines(lib.tags, available, metrics) }
     }
-    TagsList(lines, lib.loaded, smart, vm)
+    TagsList(lines, lib.loaded, smart, library)
   }
 }
 
 @Composable
-private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>, vm: QuireViewModel) {
+private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>, library: LibraryState) {
   LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 32.dp + navBottomPadding()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     item(contentType = "smart") {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -188,7 +188,7 @@ private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>,
     items(lines.orEmpty(), key = { it.tags.first().first }, contentType = { "tagLine" }) { line ->
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         line.tags.forEach { (name, n) ->
-          Tag(name, { vm.setScope(Scope(ScopeKind.Tag, name)) }, size = 13f, count = n.toString(), hPad = 12.dp, vPad = 7.dp)
+          Tag(name, { library.setScope(Scope(ScopeKind.Tag, name)) }, size = 13f, count = n.toString(), hPad = 12.dp, vPad = 7.dp)
         }
       }
     }

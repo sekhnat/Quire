@@ -79,7 +79,7 @@ import com.quire.reader.ui.QTextField
 import com.quire.reader.ui.authorLine
 import com.quire.reader.ui.scanStatus
 import com.quire.reader.ui.synopsisPreview
-import com.quire.reader.ui.QuireViewModel
+import com.quire.reader.ui.LibraryUiState
 import com.quire.reader.ui.SearchScope
 import com.quire.reader.ui.Segmented
 import com.quire.reader.ui.SegOption
@@ -88,7 +88,7 @@ import com.quire.reader.ui.ShelfCover
 import com.quire.reader.ui.SortKey
 import com.quire.reader.ui.TabRow2
 import com.quire.reader.ui.Tag
-import com.quire.reader.ui.UiState
+
 import com.quire.reader.ui.bleed
 import com.quire.reader.ui.cardStatus
 import com.quire.reader.ui.cssGradient
@@ -123,10 +123,10 @@ private object KeepSidewaysScroll : NestedScrollConnection {
 }
 
 @Composable
-fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   var pickingFolder by remember { mutableStateOf(false) }
   val textMode = s.searchOpen && s.searchScope == SearchScope.Text
-  BackHandler(enabled = s.scope != null) { vm.setScope(null) }
+  BackHandler(enabled = s.scope != null) { library.setScope(null) }
   // The views sit side by side so a swipe moves between them. The pager follows the view model (tab taps, picking an
   // author…), and a swipe that lands tells it. `steering` keeps the in-between page of a scroll cut short by another
   // (two quick tab taps) from being reported as a swipe.
@@ -141,52 +141,52 @@ fun LibraryScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
   }
   LaunchedEffect(pager) {
     snapshotFlow { pager.settledPage }.collect { page ->
-      if (!steering && page != vm.state.value.view.ordinal) vm.setView(LibView.entries[page])
+      if (!steering && page != library.state.value.view.ordinal) library.setView(LibView.entries[page])
     }
   }
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
       Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        LibraryHeader(s, lib, vm)
-        ScanStatusCard(vm)
+        LibraryHeader(s, lib, library)
+        ScanStatusCard(library)
         AnimatedVisibility(s.searchOpen) {
           val focus = remember { FocusRequester() }
           LaunchedEffect(Unit) { focus.requestFocus() }
           Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (s.searchScope == SearchScope.Text) {
-              QTextField(s.textLibraryQuery, vm::setTextLibraryQuery, "Words or a “phrase” inside books", leadingIcon = Ic.Search, onClear = { vm.setTextLibraryQuery("") }, focusRequester = focus)
+              QTextField(s.textLibraryQuery, library::setTextLibraryQuery, "Words or a “phrase” inside books", leadingIcon = Ic.Search, onClear = { library.setTextLibraryQuery("") }, focusRequester = focus)
             } else {
-              QTextField(s.query, vm::setQuery, "Title, author, series, tag", leadingIcon = Ic.Search, focusRequester = focus)
+              QTextField(s.query, library::setQuery, "Title, author, series, tag", leadingIcon = Ic.Search, focusRequester = focus)
             }
             Segmented(
-              SearchScope.entries.map { SegOption(it.label, s.searchScope == it, { vm.setSearchScope(it) }) },
+              SearchScope.entries.map { SegOption(it.label, s.searchScope == it, { library.setSearchScope(it) }) },
               height = 32.dp, minWidth = 0.dp, size = 12f,
             )
           }
         }
-        TabRow2(LibView.entries.map { it.label }, pager.targetPage, { vm.setView(LibView.entries[it]) })
+        TabRow2(LibView.entries.map { it.label }, pager.targetPage, { library.setView(LibView.entries[it]) })
       }
       HorizontalPager(pager, Modifier.weight(1f)) { page ->
         when (LibView.entries[page]) {
           LibView.Books -> if (textMode) {
             // Only observed while the text search is on screen, so the library does no search work otherwise.
-            val search by vm.textSearch.collectAsStateWithLifecycle()
-            TextSearchResults(s, lib, search, vm)
-          } else BooksView(s, lib, vm)
-          LibView.Authors -> AuthorsView(lib, vm)
-          LibView.Series -> SeriesView(lib, vm)
-          LibView.Tags -> TagsView(lib, vm)
+            val search by library.textSearch.collectAsStateWithLifecycle()
+            TextSearchResults(s, lib, search, library)
+          } else BooksView(s, lib, library)
+          LibView.Authors -> AuthorsView(lib, library)
+          LibView.Series -> SeriesView(lib, library)
+          LibView.Tags -> TagsView(lib, library)
         }
       }
     }
-    ImportSheet(s, lib, vm, onAddFolder = { pickingFolder = true })
-    SortSheet(s, vm)
-    FolderPickerSheet(pickingFolder, { pickingFolder = false }, vm::addFolder)
+    ImportSheet(s, lib, library, onAddFolder = { pickingFolder = true })
+    SortSheet(s, library)
+    FolderPickerSheet(pickingFolder, { pickingFolder = false }, library::addFolder)
   }
 }
 
 @Composable
-private fun LibraryHeader(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+private fun LibraryHeader(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
     Column {
       QText("Library", 26f, weight = 500, ls = -0.01f)
@@ -194,14 +194,14 @@ private fun LibraryHeader(s: UiState, lib: LibraryData, vm: QuireViewModel) {
       QText("${fmt(lib.books.size)} ${if (lib.books.size == 1) "book" else "books"} · $folders watched ${if (folders == 1) "folder" else "folders"}", 11.5f, color = Nq.neutral500)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-      IconBtn(Ic.Search, vm::toggleSearch, tint = if (s.searchOpen) Nq.accent else Nq.neutral300)
-      IconBtn(if (s.sortAscending) Ic.SortAsc else Ic.SortDesc, { vm.openSort(true) }, tint = if (s.sort != SortKey.Opened) Nq.accent else Nq.neutral300)
+      IconBtn(Ic.Search, library::toggleSearch, tint = if (s.searchOpen) Nq.accent else Nq.neutral300)
+      IconBtn(if (s.sortAscending) Ic.SortAsc else Ic.SortDesc, { library.openSort(true) }, tint = if (s.sort != SortKey.Opened) Nq.accent else Nq.neutral300)
       IconBtn(
         when (s.layout) { LibLayout.Grid -> Ic.Grid; LibLayout.List -> Ic.ListDashes; LibLayout.Comfortable -> Ic.ListBullets; LibLayout.Shelves -> Ic.Rows },
-        vm::cycleLayout, tint = Nq.neutral300,
+        library::cycleLayout, tint = Nq.neutral300,
       )
-      IconBtn(Ic.Plus, { vm.openImport(true) }, tint = Nq.accent)
-      IconBtn(Ic.Gear, vm::openSettings, tint = Nq.neutral300)
+      IconBtn(Ic.Plus, { library.openImport(true) }, tint = Nq.accent)
+      IconBtn(Ic.Gear, library::openSettings, tint = Nq.neutral300)
     }
   }
 }
@@ -210,8 +210,8 @@ private fun LibraryHeader(s: UiState, lib: LibraryData, vm: QuireViewModel) {
 
 /** While a folder scan runs, what it is doing, so a library still filling up doesn't look finished. */
 @Composable
-private fun ScanStatusCard(vm: QuireViewModel) {
-  val scan by vm.scan.collectAsStateWithLifecycle()
+private fun ScanStatusCard(library: LibraryState) {
+  val scan by library.scan.collectAsStateWithLifecycle()
   val status = scanStatus(scan) ?: return
   val shape = RoundedCornerShape(10.dp)
   Column(Modifier.fillMaxWidth().clip(shape).background(Nq.surface).border(1.dp, Nq.neutral800, shape).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -221,7 +221,7 @@ private fun ScanStatusCard(vm: QuireViewModel) {
 }
 
 @Composable
-private fun BooksView(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   val list = visibleBooks(s, lib.books)
   val filtered = s.scope != null || s.query.isNotBlank() || s.filter != LibFilter.All
   val layout = if (s.layout == LibLayout.Shelves && filtered) LibLayout.Grid else s.layout
@@ -234,49 +234,49 @@ private fun BooksView(s: UiState, lib: LibraryData, vm: QuireViewModel) {
       contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom),
       horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-      item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, vm, list, layout) }
-      items(list, key = { it.id }) { b -> GridCard(b, s.sort) { vm.openBook(b.id) } }
+      item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, list, layout) }
+      items(list, key = { it.id }) { b -> GridCard(b, s.sort) { library.openBook(b.id) } }
     }
     LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
-      item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, vm, list, layout) } }
-      items(list, key = { it.id }) { b -> ListRow(b, s.sort) { vm.openBook(b.id) } }
+      item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, list, layout) } }
+      items(list, key = { it.id }) { b -> ListRow(b, s.sort) { library.openBook(b.id) } }
     }
     LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
-      item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, vm, list, layout) } }
+      item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, list, layout) } }
       items(list, key = { it.id }) { b ->
         Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
-        ComfortableRow(b, s.sort) { vm.openBook(b.id) }
+        ComfortableRow(b, s.sort) { library.openBook(b.id) }
       }
     }
     LibLayout.Shelves -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-      item { BooksHeader(s, lib, vm, list, layout) }
-      items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, vm) }
+      item { BooksHeader(s, lib, library, list, layout) }
+      items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, library) }
     }
   }
 }
 
 @Composable
-private fun BooksHeader(s: UiState, lib: LibraryData, vm: QuireViewModel, list: List<Book>, layout: LibLayout) {
+private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibraryState, list: List<Book>, layout: LibLayout) {
   val showHero = s.scope == null && s.filter == LibFilter.All && s.query.isBlank() && layout != LibLayout.Shelves
   val showSortRow = layout != LibLayout.Shelves
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     if (s.scope != null) {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Tag(s.scope.label, { vm.setScope(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp)
+        Tag(s.scope.label, { library.setScope(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp)
         QText(list.size.toString() + if (list.size == 1) " book" else " books", 11.5f, color = Nq.neutral500)
       }
     } else {
-      FilterChips(s, lib, vm)
+      FilterChips(s, lib, library)
     }
-    if (showSortRow) SortRow(s, vm)
+    if (showSortRow) SortRow(s, library)
     val resume = lib.resume
-    if (showHero && resume != null) Hero(resume, vm)
+    if (showHero && resume != null) Hero(resume, library)
     if (lib.loaded && list.isEmpty() && layout != LibLayout.Shelves) {
       Column(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Ph(Ic.Books, 28.dp, Nq.neutral500)
         if (lib.books.isEmpty()) {
           QText("No books yet. Add a folder that has EPUB files in it.", 13f, color = Nq.neutral500, align = androidx.compose.ui.text.style.TextAlign.Center)
-          QButton("Add books", { vm.openImport(true) }, kind = BtnKind.Primary, icon = Ic.Plus, size = 13f)
+          QButton("Add books", { library.openImport(true) }, kind = BtnKind.Primary, icon = Ic.Plus, size = 13f)
         } else QText("Nothing matches that filter.", 13f, color = Nq.neutral500)
       }
     }
@@ -284,13 +284,13 @@ private fun BooksHeader(s: UiState, lib: LibraryData, vm: QuireViewModel, list: 
 }
 
 @Composable
-internal fun FilterChips(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+internal fun FilterChips(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   LazyRow(Modifier.bleed(20.dp).nestedScroll(KeepSidewaysScroll), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
     items(LibFilter.entries) { f ->
       val on = s.filter == f
       val shape = RoundedCornerShape(999.dp)
       Row(
-        Modifier.clip(shape).background(if (on) Nq.accentA(0.12f) else Color.Transparent).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { vm.setFilter(f) }.padding(horizontal = 12.dp, vertical = 6.dp),
+        Modifier.clip(shape).background(if (on) Nq.accentA(0.12f) else Color.Transparent).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { library.setFilter(f) }.padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
       ) {
         QText(f.label, 12.5f, color = if (on) Nq.accent200 else Nq.neutral300, maxLines = 1)
@@ -301,14 +301,14 @@ internal fun FilterChips(s: UiState, lib: LibraryData, vm: QuireViewModel) {
 }
 
 @Composable
-private fun SortRow(s: UiState, vm: QuireViewModel) {
+private fun SortRow(s: LibraryUiState, library: LibraryState) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-    Row(Modifier.clickable { vm.openSort(true) }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.clickable { library.openSort(true) }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
       Ph(Ic.ArrowsDownUp, 14.dp, Nq.accent)
       QText(s.sort.label, 12f, color = Nq.neutral400)
       Ph(Ic.CaretDown, 11.dp, Nq.neutral400)
     }
-    Row(Modifier.clickable { vm.flipSort() }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.clickable { library.flipSort() }.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
       QText(if (s.sortAscending) s.sort.asc else s.sort.desc, 12f, color = Nq.neutral500)
       Ph(if (s.sortAscending) Ic.ArrowUp else Ic.ArrowDown, 13.dp, Nq.neutral500)
     }
@@ -316,10 +316,10 @@ private fun SortRow(s: UiState, vm: QuireViewModel) {
 }
 
 @Composable
-private fun Hero(book: Book, vm: QuireViewModel) {
+private fun Hero(book: Book, library: LibraryState) {
   val shape = RoundedCornerShape(14.dp)
   Row(
-    Modifier.fillMaxWidth().clip(shape).background(cssGradient(135f, Nq.surface, Nq.neutral900)).border(1.dp, Nq.neutral800, shape).clickable { vm.read(book.id) }.padding(12.dp),
+    Modifier.fillMaxWidth().clip(shape).background(cssGradient(135f, Nq.surface, Nq.neutral900)).border(1.dp, Nq.neutral800, shape).clickable { library.read(book.id) }.padding(12.dp),
     horizontalArrangement = Arrangement.spacedBy(14.dp),
   ) {
     HeroCover(book)
@@ -381,15 +381,15 @@ private fun ComfortableRow(b: Book, sort: SortKey, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ShelfRow(shelf: ShelfDef, sort: SortKey, vm: QuireViewModel) {
+private fun ShelfRow(shelf: ShelfDef, sort: SortKey, library: LibraryState) {
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
       QText(shelf.title, 15f, weight = 500)
-      QButton(shelf.sub, { vm.showShelf(shelf.filter, shelf.scope) }, kind = BtnKind.Ghost, size = 12f, height = 28.dp)
+      QButton(shelf.sub, { library.showShelf(shelf.filter, shelf.scope) }, kind = BtnKind.Ghost, size = 12f, height = 28.dp)
     }
     LazyRow(Modifier.bleed(20.dp).nestedScroll(KeepSidewaysScroll), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       items(shelf.books, key = { it.id }) { b ->
-        Column(Modifier.width(shelf.coverWidthDp.dp).clickable { vm.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.width(shelf.coverWidthDp.dp).clickable { library.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
           ShelfCover(b)
           QText(cardStatus(b, sort), 11f, color = Nq.neutral500, maxLines = 1)
         }
@@ -401,9 +401,9 @@ private fun ShelfRow(shelf: ShelfDef, sort: SortKey, vm: QuireViewModel) {
 // ── sheets ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel, onAddFolder: () -> Unit) {
-  val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris) }
-  SheetHost(s.importOpen, { vm.openImport(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 30.dp)) {
+private fun ImportSheet(s: LibraryUiState, lib: LibraryData, library: LibraryState, onAddFolder: () -> Unit) {
+  val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> library.importFiles(uris) }
+  SheetHost(s.importOpen, { library.openImport(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 30.dp)) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(top = 14.dp)) {
       QText("Add books", 17f, weight = 500)
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -417,12 +417,12 @@ private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel, onAddF
               QText(StoragePaths.displayName(f.path), 13.5f, maxLines = 1)
               QText("${fmt(count)} ${if (count == 1) "book" else "books"} · ${syncedLabel(f.lastScanAt)}", 11f, color = Nq.neutral500, maxLines = 1)
             }
-            IconBtn(Ic.X, { vm.removeFolder(f.id) }, tint = Nq.neutral500, size = 32.dp, iconSize = 16.dp)
+            IconBtn(Ic.X, { library.removeFolder(f.id) }, tint = Nq.neutral500, size = 32.dp, iconSize = 16.dp)
           }
         }
       }
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QButton("Rescan", vm::rescan, Modifier.weight(1f), icon = Ic.Refresh, size = 12.5f)
+        QButton("Rescan", library::rescan, Modifier.weight(1f), icon = Ic.Refresh, size = 12.5f)
         QButton("Add folder", onAddFolder, Modifier.weight(1f), icon = Ic.FolderPlus, size = 12.5f)
       }
       QButton("Import EPUB files", { filePicker.launch(arrayOf("application/epub+zip", "application/octet-stream")) }, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FileDown, size = 13f, height = 42.dp)
@@ -431,15 +431,15 @@ private fun ImportSheet(s: UiState, lib: LibraryData, vm: QuireViewModel, onAddF
 }
 
 @Composable
-private fun SortSheet(s: UiState, vm: QuireViewModel) {
-  SheetHost(s.sortOpen, { vm.openSort(false) }, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 30.dp)) {
+private fun SortSheet(s: LibraryUiState, library: LibraryState) {
+  SheetHost(s.sortOpen, { library.openSort(false) }, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 30.dp)) {
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         QText("Sort by", 17f, weight = 500)
         Segmented(
           listOf(
-            SegOption(s.sort.desc, !s.sortAscending, { vm.setSortAscending(false) }, Ic.ArrowDown),
-            SegOption(s.sort.asc, s.sortAscending, { vm.setSortAscending(true) }, Ic.ArrowUp),
+            SegOption(s.sort.desc, !s.sortAscending, { library.setSortAscending(false) }, Ic.ArrowDown),
+            SegOption(s.sort.asc, s.sortAscending, { library.setSortAscending(true) }, Ic.ArrowUp),
           ),
           height = 32.dp, minWidth = 0.dp, size = 12f,
         )
@@ -447,7 +447,7 @@ private fun SortSheet(s: UiState, vm: QuireViewModel) {
       SortKey.entries.forEach { k ->
         val on = s.sort == k
         Row(
-          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) Nq.accentA(0.10f) else Color.Transparent).clickable { vm.pickSort(k) }.padding(horizontal = 10.dp, vertical = 11.dp),
+          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) Nq.accentA(0.10f) else Color.Transparent).clickable { library.pickSort(k) }.padding(horizontal = 10.dp, vertical = 11.dp),
           horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically,
         ) {
           Ph(k.icon, 19.dp, if (on) Nq.accent else Nq.neutral400)

@@ -89,7 +89,7 @@ fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
 
 @Composable
 private fun Welcome(vm: QuireViewModel) {
-  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris, fromOnboarding = true) }
+  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris) }
   val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.inspectBackup(uri) }
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 28.dp, end = 28.dp, top = 22.dp, bottom = 40.dp), verticalArrangement = Arrangement.SpaceBetween) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
