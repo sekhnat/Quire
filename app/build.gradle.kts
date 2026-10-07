@@ -1,4 +1,4 @@
-import javax.inject.Inject
+import com.android.build.api.artifact.SingleArtifact
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -91,27 +91,23 @@ android {
 // it. Fail every build whose merged manifest does.
 
 abstract class VerifyNoInternetPermissionTask : DefaultTask() {
-    @get:Inject
-    abstract val layout: ProjectLayout
 
-    /** Variant name ("debug", "release"); the merged-manifest path is derived from it. */
-    @get:Input
-    abstract val variantName: Property<String>
+    /**
+     * Wired from AGP's artifact API rather than a hand-built path: the provider carries
+     * the producing task (process<Variant>Manifest) as a dependency, so the merged
+     * manifest is guaranteed to exist — and be current — whenever this task runs. A
+     * finalizedBy hook would only order against one task and races the rest of the
+     * manifest chain on a clean build directory (CI fails, stale files mask it locally).
+     */
+    @get:InputFile
+    abstract val mergedManifest: RegularFileProperty
 
     @TaskAction
     fun verify() {
-        val variantName = variantName.get()
-        val capitalized = variantName.replaceFirstChar { it.uppercase() }
-        val manifest = layout.buildDirectory
-            .file("intermediates/merged_manifests/$variantName/process${capitalized}Manifest/AndroidManifest.xml")
-            .get().asFile
-        if (!manifest.isFile) {
-            throw GradleException("Merged manifest not found at ${manifest.path} — run the manifest processing task first.")
-        }
-        val granted = manifest.readLines().any { "android.permission.INTERNET" in it }
+        val granted = mergedManifest.get().asFile.readLines().any { "android.permission.INTERNET" in it }
         if (granted) {
             throw GradleException(
-                "The merged $variantName manifest grants android.permission.INTERNET. " +
+                "The merged manifest grants android.permission.INTERNET. " +
                     "Quire must stay offline: the reader renders untrusted EPUB content and " +
                     "relies on having no network permission. Find the dependency adding it " +
                     "(./gradlew :app:dependencies) and remove or exclude it."
@@ -122,19 +118,16 @@ abstract class VerifyNoInternetPermissionTask : DefaultTask() {
 
 androidComponents {
     onVariants { variant ->
-        val variantName = variant.name
-        val capitalized = variantName.replaceFirstChar { it.uppercase() }
+        val capitalized = variant.name.replaceFirstChar { it.uppercase() }
         val verify = tasks.register("verifyNoInternetPermission$capitalized", VerifyNoInternetPermissionTask::class) {
             group = "verification"
-            description = "Asserts the merged $variantName manifest does not gain android.permission.INTERNET."
-            this.variantName.set(variantName)
+            description = "Asserts the merged ${variant.name} manifest does not gain android.permission.INTERNET."
+            mergedManifest.set(variant.artifacts.get(SingleArtifact.MERGED_MANIFEST))
         }
-        tasks.matching { it.name == "process${capitalized}MainManifest" }.configureEach {
-            finalizedBy(verify)
-        }
-        tasks.matching { it.name == "check" }.configureEach {
-            dependsOn(verify)
-        }
+        // The guard runs on every APK build of the variant and on every `check` run; the
+        // provider above pulls the manifest-producing task into those graphs.
+        tasks.matching { it.name == "assemble$capitalized" }.configureEach { dependsOn(verify) }
+        tasks.matching { it.name == "check" }.configureEach { dependsOn(verify) }
     }
 }
 
