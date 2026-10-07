@@ -517,6 +517,24 @@ public class EpubNavigatorFragment internal constructor(
     internal var continuousBook: ContinuousBookWebView? = null
 
     /**
+     * Memory pressure for the scroll window, kept across surface rebuilds: every surface starts at the
+     * current tier and hears each change. Sampled while the reader is started (see [onViewCreated]).
+     */
+    private val memoryPressure by lazy {
+        ScrollMemoryPressure(requireContext()) { tier -> continuousBook?.setPressureTier(tier.ordinal) }
+    }
+
+    /** Holds the scroll window at least at [tier] (null releases it), as real memory pressure would. For tests. */
+    internal fun simulateMemoryPressure(tier: PressureTiers.Tier?) = memoryPressure.force(tier)
+
+    /** The scroll window's current memory-pressure tier. For tests. */
+    internal val memoryPressureTier: PressureTiers.Tier get() = memoryPressure.tier
+
+    /** Scroll-window telemetry, kept across surface rebuilds. Benchmark builds only; null otherwise. */
+    internal val scrollTelemetry: ScrollTelemetry? =
+        if (com.quire.reader.BuildConfig.SCROLL_TELEMETRY) ScrollTelemetry() else null
+
+    /**
      * Forwards a raw key-event JSON from the continuous surface's frames into the
      * input pipeline, mirroring [com.quire.reader.navigator.R2BasicWebView]'s parsing.
      */
@@ -687,6 +705,7 @@ public class EpubNavigatorFragment internal constructor(
         // The shell handles the keyboard events itself; the surface is not focusable.
         book.isFocusable = false
         continuousBook = book
+        book.setPressureTier(memoryPressure.tier.ordinal)
         parent.addView(book)
         book.prepare(initialLocatorForSurface())
         notifyCurrentLocation()
@@ -768,6 +787,24 @@ public class EpubNavigatorFragment internal constructor(
             }
         }
 
+        // Memory pressure, while the reader is on screen: trim callbacks and a memory sample every few
+        // seconds in scroll mode. A stopped reader counts as hidden, which shrinks the window.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                memoryPressure.start()
+                memoryPressure.onVisible()
+                try {
+                    while (true) {
+                        if (continuousBook != null) memoryPressure.poll()
+                        delay(ScrollMemoryPressure.POLL_INTERVAL_MS)
+                    }
+                } finally {
+                    memoryPressure.onHidden()
+                    memoryPressure.stop()
+                }
+            }
+        }
+
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.withStarted {
                 // Restore the last locator before a configuration change (e.g. screen rotation), or the
@@ -844,6 +881,8 @@ public class EpubNavigatorFragment internal constructor(
             disposeContinuousBook()
             return
         }
+        // The rebuilt surface starts with a smaller window, and keeps it: a second loss fails the book.
+        memoryPressure.onRendererLost()
         publishReadiness(Readiness.Preparing)
         resetContainer(root)
         go(locator)
