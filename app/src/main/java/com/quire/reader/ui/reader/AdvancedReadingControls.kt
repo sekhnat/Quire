@@ -1,19 +1,17 @@
 package com.quire.reader.ui.reader
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,7 +23,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.DirectionPref
@@ -46,7 +43,6 @@ import com.quire.reader.ui.Kicker
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.Ph
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.Toggle
 
 /** Why a control is greyed out, as the row shows it. Presentation only, never decides enablement. */
@@ -62,12 +58,9 @@ internal fun Availability?.reasonText(): String? = when {
 /** One choosable value of a picker row. */
 private class Option(val label: String, val selected: Boolean, val enabled: Boolean, val choose: () -> Unit)
 
-/** A picker row opened into the chooser sheet. */
-private class Picker(val title: String, val options: List<Option>)
-
 /**
  * The advanced typography and page-layout controls, shared by the reader's Display sheet and
- * Settings. Full-width discrete picker rows — label plus semantic value, options in a chooser —
+ * Settings. Full-width discrete picker rows — label plus semantic value, options in a dropdown —
  * and a Simplify typography toggle. Disabled rows keep their values and show why; availability
  * is presentation-gated only, and values are never shown as mapped numbers.
  */
@@ -79,140 +72,115 @@ internal fun AdvancedReadingControls(
   onPreset: (ParagraphPreset) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  var picker by remember { mutableStateOf<Picker?>(null) }
-  val open: (Picker) -> Unit = { picker = it }
-
   Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
     Kicker("Typography")
-    PickerRow(
-      "Typography source", advanced.typographySource.label(), availability?.typographySource,
-    ) {
-      open(Picker("Typography source", TypographySource.entries.map { source ->
-        Option(source.label(), source == advanced.typographySource, enabled = true) { onAdvanced { it.copy(typographySource = source) } }
-      }))
-    }
+    PickerRow("Typography source", advanced.typographySource.label(), availability?.typographySource, TypographySource.entries.map { source ->
+      Option(source.label(), source == advanced.typographySource, enabled = true) { onAdvanced { it.copy(typographySource = source) } }
+    })
     ToggleRow("Simplify typography", "Even out fonts and sizes for easier reading", availability?.simplifyTypography, advanced.simplifyTypography) { on ->
       onAdvanced { it.copy(simplifyTypography = on) }
     }
 
     Kicker("Paragraphs")
-    PickerRow("Paragraphs", advanced.paragraphPreset.label(), availability?.paragraphPreset) {
-      open(Picker("Paragraphs", listOf(ParagraphPreset.Default, ParagraphPreset.Traditional, ParagraphPreset.Screen).map { preset ->
-        Option(preset.label(), preset == advanced.paragraphPreset, enabled = true) { onPreset(preset) }
-      }))
-    }
-    PickerRow("First-line indent", advanced.paragraphIndent.label(), availability?.paragraphIndent) {
-      open(Picker("First-line indent", SpacingLevel.entries.map { level ->
-        Option(level.label(), level == advanced.paragraphIndent, enabled = true) { onAdvanced { it.copy(paragraphIndent = level) } }
-      }))
-    }
-    PickerRow("Paragraph spacing", advanced.paragraphSpacing.label(), availability?.paragraphSpacing) {
-      open(Picker("Paragraph spacing", SpacingLevel.entries.map { level ->
-        Option(level.label(), level == advanced.paragraphSpacing, enabled = true) { onAdvanced { it.copy(paragraphSpacing = level) } }
-      }))
-    }
+    PickerRow("Paragraphs", advanced.paragraphPreset.label(), availability?.paragraphPreset, listOf(ParagraphPreset.Default, ParagraphPreset.Traditional, ParagraphPreset.Screen).map { preset ->
+      Option(preset.label(), preset == advanced.paragraphPreset, enabled = true) { onPreset(preset) }
+    })
+    PickerRow("First-line indent", advanced.paragraphIndent.label(), availability?.paragraphIndent, SpacingLevel.entries.map { level ->
+      Option(level.label(), level == advanced.paragraphIndent, enabled = true) { onAdvanced { it.copy(paragraphIndent = level) } }
+    })
+    PickerRow("Paragraph spacing", advanced.paragraphSpacing.label(), availability?.paragraphSpacing, SpacingLevel.entries.map { level ->
+      Option(level.label(), level == advanced.paragraphSpacing, enabled = true) { onAdvanced { it.copy(paragraphSpacing = level) } }
+    })
 
     Kicker("Text spacing")
-    PickerRow("Letter spacing", advanced.letterSpacing.label(), availability?.letterSpacing) {
-      open(Picker("Letter spacing", WidenLevel.entries.map { level ->
-        Option(level.label(), level == advanced.letterSpacing, enabled = true) { onAdvanced { it.copy(letterSpacing = level) } }
-      }))
-    }
-    PickerRow("Word spacing", advanced.wordSpacing.label(), availability?.wordSpacing) {
-      open(Picker("Word spacing", WidenLevel.entries.map { level ->
-        Option(level.label(), level == advanced.wordSpacing, enabled = true) { onAdvanced { it.copy(wordSpacing = level) } }
-      }))
-    }
-    PickerRow("Weight", advanced.fontWeight.label(), availability?.weight) {
-      open(Picker("Weight", WeightLevel.entries.map { level ->
-        Option(level.label(), level == advanced.fontWeight, enabled = true) { onAdvanced { it.copy(fontWeight = level) } }
-      }))
-    }
+    PickerRow("Letter spacing", advanced.letterSpacing.label(), availability?.letterSpacing, WidenLevel.entries.map { level ->
+      Option(level.label(), level == advanced.letterSpacing, enabled = true) { onAdvanced { it.copy(letterSpacing = level) } }
+    })
+    PickerRow("Word spacing", advanced.wordSpacing.label(), availability?.wordSpacing, WidenLevel.entries.map { level ->
+      Option(level.label(), level == advanced.wordSpacing, enabled = true) { onAdvanced { it.copy(wordSpacing = level) } }
+    })
+    PickerRow("Weight", advanced.fontWeight.label(), availability?.weight, WeightLevel.entries.map { level ->
+      Option(level.label(), level == advanced.fontWeight, enabled = true) { onAdvanced { it.copy(fontWeight = level) } }
+    })
 
     Kicker("Writing system")
-    PickerRow("Hyphenation", advanced.hyphens.label(), availability?.hyphens) {
-      open(Picker("Hyphenation", TriState.entries.map { state ->
-        Option(state.label(), state == advanced.hyphens, enabled = true) { onAdvanced { it.copy(hyphens = state) } }
-      }))
-    }
-    PickerRow("Ligatures", advanced.ligatures.label(), availability?.ligatures) {
-      open(Picker("Ligatures", TriState.entries.map { state ->
-        Option(state.label(), state == advanced.ligatures, enabled = true) { onAdvanced { it.copy(ligatures = state) } }
-      }))
-    }
-    PickerRow("Vertical text", advanced.verticalText.label(), availability?.verticalText) {
-      open(Picker("Vertical text", VerticalTextPref.entries.map { pref ->
-        Option(pref.label(), pref == advanced.verticalText, enabled = true) { onAdvanced { it.copy(verticalText = pref) } }
-      }))
-    }
-    PickerRow("Reading direction", advanced.readingDirection.label(), availability?.readingDirection) {
-      open(Picker("Reading direction", DirectionPref.entries.map { pref ->
-        Option(pref.label(), pref == advanced.readingDirection, enabled = true) { onAdvanced { it.copy(readingDirection = pref) } }
-      }))
-    }
+    PickerRow("Hyphenation", advanced.hyphens.label(), availability?.hyphens, TriState.entries.map { state ->
+      Option(state.label(), state == advanced.hyphens, enabled = true) { onAdvanced { it.copy(hyphens = state) } }
+    })
+    PickerRow("Ligatures", advanced.ligatures.label(), availability?.ligatures, TriState.entries.map { state ->
+      Option(state.label(), state == advanced.ligatures, enabled = true) { onAdvanced { it.copy(ligatures = state) } }
+    })
+    PickerRow("Vertical text", advanced.verticalText.label(), availability?.verticalText, VerticalTextPref.entries.map { pref ->
+      Option(pref.label(), pref == advanced.verticalText, enabled = true) { onAdvanced { it.copy(verticalText = pref) } }
+    })
+    PickerRow("Reading direction", advanced.readingDirection.label(), availability?.readingDirection, DirectionPref.entries.map { pref ->
+      Option(pref.label(), pref == advanced.readingDirection, enabled = true) { onAdvanced { it.copy(readingDirection = pref) } }
+    })
 
     Kicker("Page")
-    PickerRow("Images", advanced.imageFilter.label(), availability?.images) {
-      open(Picker("Images", ImageFilterPref.entries.map { pref ->
-        Option(pref.label(), pref == advanced.imageFilter, enabled = true) { onAdvanced { it.copy(imageFilter = pref) } }
-      }))
-    }
-    PickerRow("Page layout", advanced.pageLayout.label(), availability?.pageLayout) {
-      open(Picker("Page layout", PageLayoutPref.entries.map { pref ->
-        Option(pref.label(), pref == advanced.pageLayout, enabled = true) { onAdvanced { it.copy(pageLayout = pref) } }
-      }))
-    }
-  }
-
-  picker?.let { p ->
-    SheetHost(visible = true, onDismiss = { picker = null }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
-      Column(Modifier.padding(top = 14.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        QText(p.title, 15f, weight = 500)
-        p.options.forEach { option ->
-          Row(
-            Modifier
-              .fillMaxWidth()
-              .heightIn(min = 48.dp)
-              .clip(RoundedCornerShape(8.dp))
-              .alpha(if (option.enabled) 1f else 0.45f)
-              .clickable(enabled = option.enabled) { option.choose(); picker = null }
-              .padding(horizontal = 8.dp)
-              .semantics { stateDescription = if (option.selected) "Selected" else if (!option.enabled) "Unavailable" else option.label },
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            QText(option.label, 14f, color = if (option.selected) Nq.accent200 else Nq.text)
-            if (option.selected) Ph(Ic.CheckCircle, 16.dp, Nq.accent)
-          }
-        }
-      }
-    }
+    PickerRow("Images", advanced.imageFilter.label(), availability?.images, ImageFilterPref.entries.map { pref ->
+      Option(pref.label(), pref == advanced.imageFilter, enabled = true) { onAdvanced { it.copy(imageFilter = pref) } }
+    })
+    PickerRow("Page layout", advanced.pageLayout.label(), availability?.pageLayout, PageLayoutPref.entries.map { pref ->
+      Option(pref.label(), pref == advanced.pageLayout, enabled = true) { onAdvanced { it.copy(pageLayout = pref) } }
+    })
   }
 }
 
-/** A full-width picker row: the label (and why not) on the left, the semantic value on the right. */
+/**
+ * A full-width picker row: the label (and why not) on the left, the semantic value on the right.
+ * Tapping it opens the options in a dropdown anchored to the row, drawn above the sheet.
+ */
 @Composable
-private fun PickerRow(label: String, value: String, availability: Availability?, open: () -> Unit) {
+private fun PickerRow(label: String, value: String, availability: Availability?, options: List<Option>) {
   val reason = availability.reasonText()
   val enabled = availability?.available != false
-  Row(
-    Modifier
-      .fillMaxWidth()
-      .heightIn(min = 48.dp)
-      .clip(RoundedCornerShape(8.dp))
-      .alpha(if (enabled) 1f else 0.6f)
-      .clickable(enabled = enabled, onClick = open)
-      .padding(vertical = 10.dp, horizontal = 4.dp)
-      .semantics { stateDescription = if (!enabled) "Unavailable" else value },
-    horizontalArrangement = Arrangement.spacedBy(8.dp),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-      QText(label, 13.5f, color = if (enabled) Nq.text else Nq.neutral500)
-      if (reason != null) QText(reason, 11f, color = Nq.neutral500)
+  var expanded by remember { mutableStateOf(false) }
+  Box(Modifier.fillMaxWidth()) {
+    Row(
+      Modifier
+        .fillMaxWidth()
+        .heightIn(min = 48.dp)
+        .clip(RoundedCornerShape(8.dp))
+        .alpha(if (enabled) 1f else 0.6f)
+        .clickable(enabled = enabled) { expanded = true }
+        .padding(vertical = 10.dp, horizontal = 4.dp)
+        .semantics { stateDescription = if (!enabled) "Unavailable" else value },
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        QText(label, 13.5f, color = if (enabled) Nq.text else Nq.neutral500)
+        if (reason != null) QText(reason, 11f, color = Nq.neutral500)
+      }
+      QText(value, 13f, color = if (enabled) Nq.neutral300 else Nq.neutral500, maxLines = 1)
+      if (enabled) Ph(Ic.CaretDown, 14.dp, Nq.neutral500)
     }
-    QText(value, 13f, color = if (enabled) Nq.neutral300 else Nq.neutral500, maxLines = 1)
-    if (enabled) Ph(Ic.CaretDown, 14.dp, Nq.neutral500)
+    DropdownMenu(
+      expanded = expanded && enabled,
+      onDismissRequest = { expanded = false },
+      Modifier.widthIn(min = 180.dp),
+      shape = RoundedCornerShape(8.dp),
+      containerColor = Nq.surface,
+      border = BorderStroke(1.dp, Nq.neutral800),
+    ) {
+      options.forEach { option ->
+        Row(
+          Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .alpha(if (option.enabled) 1f else 0.45f)
+            .clickable(enabled = option.enabled) { option.choose(); expanded = false }
+            .padding(horizontal = 14.dp)
+            .semantics { stateDescription = if (option.selected) "Selected" else if (!option.enabled) "Unavailable" else option.label },
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          QText(option.label, 14f, Modifier.weight(1f), color = if (option.selected) Nq.accent200 else Nq.text)
+          if (option.selected) Ph(Ic.CheckCircle, 16.dp, Nq.accent)
+        }
+      }
+    }
   }
 }
 
