@@ -58,6 +58,13 @@ import org.readium.r2.shared.util.use
 import timber.log.Timber
 
 @OptIn(ExperimentalReadiumApi::class)
+/**
+ * The paged navigator's WebView. It is injected whole as the `Android` JavaScript bridge
+ * (upstream Readium contract), so its `@JavascriptInterface` methods are reachable from
+ * untrusted EPUB content: every one of them must validate its inputs — JSON payloads parsed
+ * defensively, URLs resolved against the publication only — and the set of annotated methods
+ * must stay minimal. See the injection sites in R2EpubPageFragment/R2FXLPageFragment.
+ */
 internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebView(context, attrs) {
 
     interface Listener {

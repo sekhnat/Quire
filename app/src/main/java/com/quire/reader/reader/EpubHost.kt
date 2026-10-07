@@ -24,6 +24,7 @@ import org.readium.r2.navigator.DecorableNavigator
 import com.quire.reader.navigator.epub.EpubNavigatorFactory
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
 import com.quire.reader.navigator.epub.EpubPreferences
+import com.quire.reader.navigator.epub.ReaderLinkPolicy
 import com.quire.reader.navigator.epub.css.FontStyle
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import org.readium.r2.navigator.input.InputListener
@@ -32,6 +33,8 @@ import org.readium.r2.navigator.preferences.FontFamily
 import org.readium.r2.navigator.util.BaseActionModeCallback
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.AbsoluteUrl
+
+import timber.log.Timber
 
 /** What the user picked from the text-selection menu. */
 enum class SelectionAction(val label: String) { Highlight("Highlight"), Note("Note"), Copy("Copy") }
@@ -94,6 +97,12 @@ fun EpubHost(
             initialPreferences = preferences,
             listener = object : EpubNavigatorFragment.Listener {
               override fun onExternalLinkActivated(url: AbsoluteUrl) {
+                // Only web links may leave the reader. The navigator's policy already
+                // filters; this re-check is defense in depth before the ACTION_VIEW launch.
+                if (!ReaderLinkPolicy.isSupportedScheme(url.scheme.value)) {
+                  Timber.w("Rejected external link with unsupported scheme: $url")
+                  return
+                }
                 runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, url.toString().toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
               }
             },

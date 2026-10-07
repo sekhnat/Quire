@@ -1,3 +1,4 @@
+import javax.inject.Inject
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.compose.compiler)
@@ -80,6 +81,60 @@ android {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
+    }
+}
+
+
+// Trust boundary: Quire reads books from shared storage with no network access, so the
+// reader WebViews cannot exfiltrate anything. That backstop holds only as long as the app
+// never gains the INTERNET permission — e.g. through a new dependency whose manifest carries
+// it. Fail every build whose merged manifest does.
+
+abstract class VerifyNoInternetPermissionTask : DefaultTask() {
+    @get:Inject
+    abstract val layout: ProjectLayout
+
+    /** Variant name ("debug", "release"); the merged-manifest path is derived from it. */
+    @get:Input
+    abstract val variantName: Property<String>
+
+    @TaskAction
+    fun verify() {
+        val variantName = variantName.get()
+        val capitalized = variantName.replaceFirstChar { it.uppercase() }
+        val manifest = layout.buildDirectory
+            .file("intermediates/merged_manifests/$variantName/process${capitalized}Manifest/AndroidManifest.xml")
+            .get().asFile
+        if (!manifest.isFile) {
+            throw GradleException("Merged manifest not found at ${manifest.path} — run the manifest processing task first.")
+        }
+        val granted = manifest.readLines().any { "android.permission.INTERNET" in it }
+        if (granted) {
+            throw GradleException(
+                "The merged $variantName manifest grants android.permission.INTERNET. " +
+                    "Quire must stay offline: the reader renders untrusted EPUB content and " +
+                    "relies on having no network permission. Find the dependency adding it " +
+                    "(./gradlew :app:dependencies) and remove or exclude it."
+            )
+        }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val variantName = variant.name
+        val capitalized = variantName.replaceFirstChar { it.uppercase() }
+        val verify = tasks.register("verifyNoInternetPermission$capitalized", VerifyNoInternetPermissionTask::class) {
+            group = "verification"
+            description = "Asserts the merged $variantName manifest does not gain android.permission.INTERNET."
+            this.variantName.set(variantName)
+        }
+        tasks.matching { it.name == "process${capitalized}MainManifest" }.configureEach {
+            finalizedBy(verify)
+        }
+        tasks.matching { it.name == "check" }.configureEach {
+            dependsOn(verify)
+        }
     }
 }
 

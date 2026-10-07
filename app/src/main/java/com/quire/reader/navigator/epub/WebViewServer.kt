@@ -145,6 +145,17 @@ internal class WebViewServer(
         val hostname = request.url.host ?: return null
         val requestUrl = request.url.toAbsoluteUrl() ?: return null
         val range = HttpHeaders(request.requestHeaders).range
+        // Origin allowlist: only Quire/Readium-controlled origins are served — the
+        // reserved publication origin (package resources and the scroll shell) and the
+        // assets origin (reader runtime, CSS, fonts), plus the publication's own base-URL
+        // host when one is set (never for Quire's local EPUBs). Anything else — an
+        // external http(s) URL, a file:// or content:// path — is refused with 404 before
+        // any publication lookup, so a hostile URL can never resolve to a resource.
+        val allowedHosts = setOf(PACKAGE_HOSTNAME, ASSETS_HOSTNAME, publication.baseUrl?.host)
+        if (requestUrl.scheme.value.lowercase() != "https" || hostname.lowercase() !in allowedHosts) {
+            Log.d(TAG, "refused (not a reader origin): $requestUrl")
+            return notFoundResponse(requestUrl)
+        }
 
         return when {
             hostname == PACKAGE_HOSTNAME && path == SHELL_PATH -> serveShell(

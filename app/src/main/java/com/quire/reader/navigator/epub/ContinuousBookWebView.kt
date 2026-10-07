@@ -74,6 +74,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+import com.quire.reader.navigator.hardenForReaderContent
 import com.quire.reader.navigator.extensions.htmlId
 import com.quire.reader.navigator.extensions.optRectF
 import org.readium.r2.navigator.DecorationId
@@ -287,7 +288,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
     private fun setupShell() {
         val host = navigator.bookHost
         shell.settings.javaScriptEnabled = true
-        shell.settings.domStorageEnabled = true
+        shell.settings.hardenForReaderContent()
         // Frames must re-serve their documents per session: the publication is a live
         // file the user can replace, and the HTTP cache would bypass the serving
         // pipeline (and any interception) on later opens.
@@ -304,6 +305,11 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
             scrollYSync = scrollY / context.resources.displayMetrics.density.toDouble()
             notifyProgressionThrottled()
         }
+        // addJavascriptInterface exposes these objects to EVERY frame of this WebView —
+        // the shell document and every chapter iframe, which are untrusted publisher
+        // content on the same origin. Every bridge method must therefore treat its
+        // arguments as attacker-controlled and validate them (hrefs against the reading
+        // order, JSON payloads parsed defensively); nothing may trust the caller's frame.
         shell.addJavascriptInterface(ShellBridge(), "QuireShell")
         shell.addJavascriptInterface(QuireBookBridge(), "QuireBookBridge")
         shell.webViewClient = object : WebViewClient() {
@@ -872,7 +878,17 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
     // ── shell events ────────────────────────────────────────────────────────────
 
-    /** Bridge bound as `QuireShell` in the shell document. */
+    /**
+     * Bridge bound as `QuireShell` in the shell document.
+     *
+     * Reachable from every frame (the shell and all chapter iframes), so [event] payloads
+     * are untrusted input: hrefs and heights are validated against the reading order and
+     * the generation before they touch any state. Residual, accepted risk: a malicious
+     * frame can forge events with *valid* book hrefs (fake geometry, premature `ready`, a
+     * spurious `error`) — a layout-corruption/book-load denial of service at worst, never
+     * an escape from the reader; frame identity cannot be verified through
+     * `addJavascriptInterface`.
+     */
     inner class ShellBridge {
 
         @JavascriptInterface
@@ -923,6 +939,13 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
      * Bridge bound as `QuireBook` on the shell document; the frame adapters reach it
      * through `window.parent`. Every call carries the originating resource's href so
      * events address the right document, and stale/unregistered targets are rejected.
+     *
+     * Trust model: reachable from every frame, including untrusted publisher content on
+     * the same origin — every method opens with [QuireBookBridge.canonical], which pins
+     * the claimed href to the current reading order and generation, and parses its JSON
+     * payloads defensively. The surface is the reader's own input pipeline (taps, drags,
+     * keys, selection, decoration activation); a forged call can act as the reader's own
+     * input, but never reaches files, other books, or the network.
      */
     inner class QuireBookBridge {
 
