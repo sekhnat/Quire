@@ -112,7 +112,7 @@ class ReaderTargetTest {
       awaitRenderedDecorationBoxes(hrefOf(snippet.target)) > 0,
     )
     shoot("target-open")
-    assertNull(vm.state.value.toast)
+    assertNull(vm.toastText.value)
   }
 
   @Test fun `opening a snippet target in continuous scroll mode underlines the exact passage`() {
@@ -137,7 +137,7 @@ class ReaderTargetTest {
     val here = session().current.value!!.locations.totalProgression!!
     assertTrue("at $here, target ${snippet.target.progression}", kotlin.math.abs(here - snippet.target.progression) < 0.01)
     shoot("target-open-scroll")
-    assertNull(vm.state.value.toast)
+    assertNull(vm.toastText.value)
   }
 
   @Test fun `the newest jump and decoration win while the book is still preparing`() {
@@ -249,7 +249,7 @@ class ReaderTargetTest {
       assertTrue("whole-book readiness despite the broken image", ready)
       val state = runBlocking { session().navigator?.readiness?.value }
       assertFalse("a broken optional image must not fail the book: $state", state is EpubNavigatorFragment.Readiness.Failed)
-      assertNull("a broken optional image must not warn", vm.state.value.toast)
+      assertNull("a broken optional image must not warn", vm.toastText.value)
     } finally {
       com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = null
       // The folder stays registered for the rest of this class's run; @Before removes
@@ -319,7 +319,7 @@ class ReaderTargetTest {
 
       val underlined = awaitUnderlined(timeoutMs = 30_000, href = hrefOf(snippet.target)) { it.isNotEmpty() }
       assertEquals(normalize(snippet.target.highlight), normalize(underlined.first()))
-      assertNull("a slow book must not fall back because of its loading time", vm.state.value.toast)
+      assertNull("a slow book must not fall back because of its loading time", vm.toastText.value)
       shoot("target-slow-scroll")
     } finally {
       com.quire.reader.navigator.epub.WebViewServer.onInterceptResource = null
@@ -376,7 +376,7 @@ class ReaderTargetTest {
     val stale = firstSnippet(phrase()).target.copy(indexedMtime = 1L)
     scenario.onActivity { vm.openTextHit(stale) }
     awaitToast(STALE_TARGET_MESSAGE)
-    assertEquals(Screen.Library, vm.state.value.screen)
+    assertEquals(Destination.Library, vm.destination.value)
     assertTrue(vm.reader.value is ReaderLoad.Idle)
   }
 
@@ -567,7 +567,7 @@ class ReaderTargetTest {
     throw AssertionError("no search underline measured in ${href.removeFragment()}")
   }
 
-  private fun awaitToast(part: String) = awaitCondition("toast containing '$part'", 6_000) { vm.state.value.toast?.contains(part) == true }
+  private fun awaitToast(part: String) = awaitCondition("toast containing '$part'", 6_000) { vm.toastText.value?.contains(part) == true }
 
   private fun awaitCondition(what: String, timeoutMs: Long = 15_000, check: () -> Boolean) {
     val deadline = System.currentTimeMillis() + timeoutMs

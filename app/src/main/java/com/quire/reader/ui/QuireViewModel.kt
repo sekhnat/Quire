@@ -13,8 +13,6 @@ import com.quire.reader.data.backup.BackupContents
 import com.quire.reader.data.backup.BackupException
 import com.quire.reader.data.backup.BackupInterval
 import com.quire.reader.data.backup.BackupWorker
-import com.quire.reader.data.backup.ImportResult
-import com.quire.reader.data.backup.MergeOutcome
 import com.quire.reader.data.backup.NotesExporter
 import com.quire.reader.data.backup.SnapshotCodec
 import com.quire.reader.data.backup.SnapshotImporter
@@ -55,7 +53,6 @@ import org.readium.r2.shared.util.getOrElse
 import com.quire.reader.data.scan.DiscoveryProgress
 import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.data.scan.FolderDiscovery
-import com.quire.reader.data.scan.ScanResult
 import com.quire.reader.data.scan.StoragePaths
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -81,6 +78,15 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   private val _state = MutableStateFlow(UiState())
   val state: StateFlow<UiState> = _state
+
+  private val _destination = MutableStateFlow<Destination>(Destination.Splash)
+  val destination: StateFlow<Destination> = _destination
+
+  private val toaster = Toaster(viewModelScope)
+  /** The message showing at the bottom of the screen, if any. */
+  val toastText: StateFlow<String?> = toaster.text
+
+  private fun navigate(next: Destination) { _destination.value = next }
 
   val library: StateFlow<LibraryData> = combine(repo.books, repo.folders) { books, folders -> LibraryData(books, folders) }
     .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryData.Empty)
@@ -131,7 +137,6 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   val advancedReadingEnabled: StateFlow<Boolean> = repo.advancedReadingEnabled
     .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-  private var toastJob: Job? = null
   private var scanJob: Job? = null
   private var discoverJob: Job? = null
 
@@ -147,9 +152,9 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       val access = StoragePaths.hasAllFilesAccess()
       // A library of folder books is unreadable without all-files access, which no restore can carry over: ask for it first.
       val needsAccess = done && !access && repo.hasWatchedFolders()
+      navigate(if (done && !needsAccess) Destination.Library else Destination.Onboard)
       edit {
         copy(
-          screen = if (done && !needsAccess) Screen.Library else Screen.Onboard,
           onboardStep = if (needsAccess) OnboardStep.Access else onboardStep,
           accessForLibrary = needsAccess,
           hasAccess = access, useCalibre = useCalibre,
@@ -167,11 +172,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
   }
 
-  fun toast(text: String) {
-    toastJob?.cancel()
-    edit { copy(toast = text) }
-    toastJob = viewModelScope.launch { delay(2200); edit { copy(toast = null) } }
-  }
+  fun toast(text: String) = toaster.show(text)
 
   // ── onboarding ───────────────────────────────────────────────────────────
 
@@ -179,7 +180,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     val granted = StoragePaths.hasAllFilesAccess()
     edit { copy(hasAccess = granted) }
     // Coming back from the Settings screen with access granted moves on by itself.
-    if (granted && _state.value.screen == Screen.Onboard && _state.value.onboardStep == OnboardStep.Access) {
+    if (granted && _destination.value == Destination.Onboard && _state.value.onboardStep == OnboardStep.Access) {
       if (_state.value.accessForLibrary) returnToLibrary() else goToFolders()
     }
     if (granted) app.indexer.request()
@@ -193,10 +194,11 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   /** Access is back for a library that already exists: open it and scan its folders, which could not be read until now. */
   private fun returnToLibrary() {
-    edit { copy(screen = Screen.Library, accessForLibrary = false) }
+    edit { copy(accessForLibrary = false) }
+    navigate(Destination.Library)
     viewModelScope.launch {
       val r = repo.rescan()
-      if (r.added > 0 || r.removed > 0 || r.moved > 0) toast(describe(r))
+      if (r.noticeable()) toast(describe(r))
     }
   }
 
@@ -242,14 +244,17 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
   }
 
-  fun openLibrary() = edit { copy(screen = Screen.Library) }
+  fun openLibrary() = navigate(Destination.Library)
 
   // ── library ──────────────────────────────────────────────────────────────
 
   fun setView(v: LibView) = edit { copy(view = v) }
   fun setFilter(f: LibFilter) = edit { copy(filter = f) }
-  fun setScope(scope: Scope?, view: LibView = LibView.Books, screen: Screen? = null) =
-    edit { copy(scope = scope, view = view, query = if (scope != null) "" else query, screen = screen ?: this.screen) }
+  fun setScope(scope: Scope?, view: LibView = LibView.Books) =
+    edit { copy(scope = scope, view = view, query = if (scope != null) "" else query) }
+
+  /** The library narrowed to [scope], from a link on a book's page. */
+  fun openLibraryScope(scope: Scope) { setScope(scope); navigate(Destination.Library) }
   fun showFilter(f: LibFilter) = edit { copy(view = LibView.Books, filter = f, scope = null) }
   fun showShelf(filter: LibFilter? = null, scope: Scope? = null) = edit { copy(filter = filter ?: LibFilter.All, scope = scope, layout = LibLayout.Grid) }
   fun toggleSearch() = edit { copy(searchOpen = !searchOpen, query = "", textLibraryQuery = "") }
@@ -301,16 +306,6 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
   }
 
-  private fun describe(r: ScanResult): String = when {
-    r.added == 0 && r.removed == 0 && r.updated == 0 && r.moved == 0 -> "Library is up to date"
-    else -> listOfNotNull(
-      if (r.added > 0) "${r.added} new ${if (r.added == 1) "book" else "books"}" else null,
-      if (r.updated > 0) "${r.updated} updated" else null,
-      if (r.moved > 0) "${r.moved} moved" else null,
-      if (r.removed > 0) "${r.removed} removed" else null,
-    ).joinToString(" · ")
-  }
-
   private var lastForegroundScan = 0L
 
   /**
@@ -338,7 +333,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     viewModelScope.launch {
       if (!settings.onboardingDone.first() || !StoragePaths.hasAllFilesAccess() || !settings.watchNewBooks.first()) return@launch
       val r = repo.rescan()
-      if (r.added > 0 || r.removed > 0 || r.moved > 0) toast(describe(r))
+      if (r.noticeable()) toast(describe(r))
     }
   }
 
@@ -362,22 +357,20 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   fun forgetMissing(id: Long) = viewModelScope.launch { repo.forgetMissing(listOf(id)); toast("Reading history deleted") }
   fun forgetAllMissing() = viewModelScope.launch { repo.forgetAllMissing(); toast("Reading history of missing books deleted") }
 
-  private fun books(n: Int) = "$n ${if (n == 1) "book" else "books"}"
-
   fun importFiles(uris: List<android.net.Uri>, fromOnboarding: Boolean = false) {
     if (uris.isEmpty()) return
     edit { copy(importOpen = false) }
     viewModelScope.launch {
       val n = repo.importFiles(uris)
-      if (n > 0 && fromOnboarding) { settings.setOnboardingDone(true); edit { copy(screen = Screen.Library) } }
+      if (n > 0 && fromOnboarding) { settings.setOnboardingDone(true); navigate(Destination.Library) }
       toast(if (n > 0) "Imported $n ${if (n == 1) "book" else "books"}" else "Nothing could be imported")
     }
   }
 
   // ── detail ───────────────────────────────────────────────────────────────
 
-  fun openBook(id: Long) = edit { copy(screen = Screen.Detail, bookId = id, editOpen = false) }
-  fun goLibrary() = edit { copy(screen = Screen.Library, chrome = false) }
+  fun openBook(id: Long) { edit { copy(editOpen = false) }; navigate(Destination.Detail(id)) }
+  fun goLibrary() { edit { copy(chrome = false) }; navigate(Destination.Library) }
   fun openEdit(open: Boolean) = edit { copy(editOpen = open) }
   fun setFinished(id: Long, finished: Boolean) = viewModelScope.launch { repo.setFinished(id, finished); toast(if (finished) "Marked as finished" else "Marked as unread") }
   fun setRating(id: Long, rating: Int?) = viewModelScope.launch { repo.setUserRating(id, rating) }
@@ -546,27 +539,12 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
   }
 
-  private fun mergeSummary(o: MergeOutcome): String {
-    val books = if (o.booksAdded > 0) "${books(o.booksAdded)} added" else null
-    return if (books == null) importSummary(o.result) else if (!o.result.changed) books else "$books · ${importSummary(o.result)}"
-  }
-
   /** Starts the app again in a new process; the staged restore is swapped in before anything opens it. */
   private fun restartApp() {
     app.startActivity(Intent.makeRestartActivityTask(ComponentName(app, MainActivity::class.java)))
     Runtime.getRuntime().exit(0)
   }
 
-  private fun importSummary(r: ImportResult): String = when {
-    !r.changed -> "Nothing to import"
-    else -> listOfNotNull(
-      if (r.matched > 0) "${r.matched} book${if (r.matched == 1) "" else "s"} updated" else null,
-      if (r.tombstoned > 0) "${r.tombstoned} kept under Missing books" else null,
-      if (r.highlightsAdded > 0) "${r.highlightsAdded} highlight${if (r.highlightsAdded == 1) "" else "s"}" else null,
-      if (r.bookmarksAdded > 0) "${r.bookmarksAdded} bookmark${if (r.bookmarksAdded == 1) "" else "s"}" else null,
-      if (r.tagsAdded > 0) "${r.tagsAdded} tag${if (r.tagsAdded == 1) "" else "s"}" else null,
-    ).joinToString(" · ")
-  }
 
   // ── reader ───────────────────────────────────────────────────────────────
 
@@ -622,7 +600,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     app.indexer.setReaderBusy(true)
     closeReaderSession(release = false)
     openBookId.value = id
-    edit { copy(screen = Screen.Reader, bookId = id, chrome = false, sheet = null, textSearchOpen = false, textQuery = "", bookSearch = null, activeHighlight = null, noteFor = null, showZones = false) }
+    navigate(Destination.Reader)
+    edit { copy(chrome = false, sheet = null, textSearchOpen = false, textQuery = "", bookSearch = null, activeHighlight = null, noteFor = null, showZones = false) }
     _reader.value = ReaderLoad.Loading
     viewModelScope.launch {
       val book = repo.book(id)
@@ -683,7 +662,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   /** Leaves the reader, saving where it was. */
   fun closeReader() {
     closeReaderSession()
-    edit { copy(screen = Screen.Library, chrome = false, sheet = null, textSearchOpen = false, bookSearch = null, activeHighlight = null, noteFor = null) }
+    edit { copy(chrome = false, sheet = null, textSearchOpen = false, bookSearch = null, activeHighlight = null, noteFor = null) }
+    navigate(Destination.Library)
   }
 
   /** Lets background indexing resume now that no reader is opening or open. */
@@ -763,8 +743,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   // settings screen
 
-  fun openSettings() { edit { copy(screen = Screen.Settings) }; refreshDatabaseBytes(); refreshBackupSizes() }
-  fun closeSettings() = edit { copy(screen = Screen.Library) }
+  fun openSettings() { navigate(Destination.Settings); refreshDatabaseBytes(); refreshBackupSizes() }
+  fun closeSettings() = navigate(Destination.Library)
   fun updateDefaults(change: (ReaderPrefs) -> ReaderPrefs) {
     val next = change(defaults.value)
     viewModelScope.launch { repo.setReaderDefaults(next) }

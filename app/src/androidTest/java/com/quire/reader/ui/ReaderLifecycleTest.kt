@@ -89,8 +89,8 @@ class ReaderLifecycleTest {
 
     // The fresh start behaves like the relaunch after a kill: it decides on the library, not
     // the reader, and the FragmentManager holds nothing restored.
-    awaitCondition("fresh start off the splash screen") { vm.state.value.screen != Screen.Splash }
-    assertEquals(Screen.Library, vm.state.value.screen)
+    awaitCondition("fresh start off the splash screen") { vm.destination.value != Destination.Splash }
+    assertEquals(Destination.Library, vm.destination.value)
     awaitCondition("no restored navigator left") { navigatorCount() == 0 }
 
     // Reopening the book returns to the persisted position.
@@ -143,7 +143,7 @@ class ReaderLifecycleTest {
     awaitPersisted(left)
 
     vm.closeReader()
-    awaitCondition("back on the library") { vm.state.value.screen == Screen.Library }
+    awaitCondition("back on the library") { vm.destination.value == Destination.Library }
 
     open { vm.read(book.id) }
     assertAt(left)

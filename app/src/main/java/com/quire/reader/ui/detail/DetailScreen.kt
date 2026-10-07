@@ -57,7 +57,6 @@ import com.quire.reader.ui.QTextField
 import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.Scope
 import com.quire.reader.ui.ScopeKind
-import com.quire.reader.ui.Screen
 import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.Tag
 import com.quire.reader.ui.UiState
@@ -67,9 +66,9 @@ import com.quire.reader.ui.statusLabel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DetailScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
+fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel) {
   BackHandler { vm.goLibrary() }
-  val book = lib.byId[s.bookId]
+  val book = lib.byId[bookId]
   if (book == null) { Box(Modifier.fillMaxSize().background(Nq.bg)); return }
   val siblings = lib.siblings(book)
   val more = lib.moreBy(book)
@@ -92,11 +91,11 @@ fun DetailScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
             if (book.series != null) {
               QText(
                 book.series + (book.seriesNoLabel?.let { " · Book $it" } ?: ""), 10f,
-                Modifier.clickable { vm.setScope(Scope(ScopeKind.Series, book.series), screen = Screen.Library) }, color = Nq.accent, ls = 0.1f, upper = true,
+                Modifier.clickable { vm.openLibraryScope(Scope(ScopeKind.Series, book.series)) }, color = Nq.accent, ls = 0.1f, upper = true,
               )
             }
             QText(book.title, 22f, weight = 500, ls = -0.01f, lh = 1.15f, balance = true)
-            QText(book.author, 13.5f, Modifier.clickable { vm.setScope(Scope(ScopeKind.Author, book.primaryAuthor), screen = Screen.Library) }, color = Nq.accent300)
+            QText(book.author, 13.5f, Modifier.clickable { vm.openLibraryScope(Scope(ScopeKind.Author, book.primaryAuthor)) }, color = Nq.accent300)
             Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
               if (book.rating > 0) (1..5).forEach { i -> Ph(if (i <= book.rating) Ic.StarFill else Ic.Star, 13.dp, if (i <= book.rating) Nq.accent else Nq.neutral700) }
               QText(listOfNotNull(book.year?.toString(), "${book.pages} pages").joinToString(" · "), 11.5f, Modifier.padding(start = if (book.rating > 0) 6.dp else 0.dp), color = Nq.neutral500)
@@ -123,7 +122,7 @@ fun DetailScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
         if (!book.desc.isNullOrBlank()) QText(book.desc, 14f, color = Nq.neutral300, lh = 1.6f)
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          book.tags.take(12).forEach { t -> Tag(t, { vm.setScope(Scope(ScopeKind.Tag, t), screen = Screen.Library) }, size = 12f, vPad = 3.dp) }
+          book.tags.take(12).forEach { t -> Tag(t, { vm.openLibraryScope(Scope(ScopeKind.Tag, t)) }, size = 12f, vPad = 3.dp) }
           Tag("Tag", { vm.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
         }
 
