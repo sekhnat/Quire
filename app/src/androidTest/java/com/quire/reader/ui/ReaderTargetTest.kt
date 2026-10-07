@@ -104,7 +104,7 @@ class ReaderTargetTest {
 
   @Test fun `opening a snippet target underlines the exact passage`() {
     val snippet = firstSnippet(phrase())
-    open { vm.openTextHit(snippet.target) }
+    open { vm.library.openTextHit(snippet.target) }
     val underlined = awaitUnderlined(href = hrefOf(snippet.target)) { it.isNotEmpty() }
     assertEquals(normalize(snippet.target.highlight), normalize(underlined.first()))
     assertTrue(
@@ -118,7 +118,7 @@ class ReaderTargetTest {
   @Test fun `opening a snippet target in continuous scroll mode underlines the exact passage`() {
     val snippet = firstSnippet(phrase())
     runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = ReadMode.Scroll)) }
-    open { vm.openTextHit(snippet.target) }
+    open { vm.library.openTextHit(snippet.target) }
     val underlined = awaitUnderlined(href = hrefOf(snippet.target)) { it.isNotEmpty() }
     assertEquals(normalize(snippet.target.highlight), normalize(underlined.first()))
     // A frame must have run the per-resource Readium initialization, or the decoration
@@ -262,7 +262,7 @@ class ReaderTargetTest {
     val locator = JSONObject(real.locatorJson)
     locator.put("text", JSONObject().put("highlight", "zxqv wjkl nonexistent passage").put("before", "no such ").put("after", " anywhere"))
     runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = ReadMode.Scroll)) }
-    open { vm.openTextHit(real.copy(locatorJson = locator.toString(), highlight = "zxqv wjkl nonexistent passage")) }
+    open { vm.library.openTextHit(real.copy(locatorJson = locator.toString(), highlight = "zxqv wjkl nonexistent passage")) }
     awaitToast("Exact passage unavailable")
     assertTrue(awaitUnderlined(timeoutMs = 1_000, href = hrefOf(real), ok = { true }).isEmpty())
     shoot("target-unresolved-scroll")
@@ -309,7 +309,7 @@ class ReaderTargetTest {
       } else stream
     }
     try {
-      open { vm.openTextHit(snippet.target) }
+      open { vm.library.openTextHit(snippet.target) }
       // Hold the gate until the reader is attached (the reader must be *preparing*, not failed).
       scenario.onActivity { }
       Thread.sleep(5_500) // the old navigator deadline, and then some
@@ -329,7 +329,7 @@ class ReaderTargetTest {
   @Test fun `an explicit target replaces the saved position for that opening only`() {
     val snippet = firstSnippet(phrase())
     runBlocking { app.library.savePosition(book.id, savedStart(), 0.01f) }
-    open { vm.openTextHit(snippet.target) }
+    open { vm.library.openTextHit(snippet.target) }
     assertTrue(awaitUnderlined(href = hrefOf(snippet.target)) { it.isNotEmpty() }.isNotEmpty())
     val here = session().current.value!!.locations.totalProgression!!
     assertTrue("opened at $here, not at the saved position", kotlin.math.abs(here - snippet.target.progression) < 0.15)
@@ -362,7 +362,7 @@ class ReaderTargetTest {
     val locator = JSONObject(real.locatorJson)
     locator.put("text", JSONObject().put("highlight", "zxqv wjkl nonexistent passage").put("before", "no such ").put("after", " anywhere"))
     val lost = real.copy(locatorJson = locator.toString(), highlight = "zxqv wjkl nonexistent passage")
-    open { vm.openTextHit(lost) }
+    open { vm.library.openTextHit(lost) }
     awaitToast("Exact passage unavailable")
     shoot("target-unresolved")
     assertTrue(awaitUnderlined(timeoutMs = 1_000, ok = { true }).isEmpty())
@@ -374,14 +374,14 @@ class ReaderTargetTest {
 
   @Test fun `a stale target is not opened and says the book changed`() {
     val stale = firstSnippet(phrase()).target.copy(indexedMtime = 1L)
-    scenario.onActivity { vm.openTextHit(stale) }
+    scenario.onActivity { vm.library.openTextHit(stale) }
     awaitToast(STALE_TARGET_MESSAGE)
     assertEquals(Destination.Library, vm.destination.value)
     assertTrue(vm.reader.value is ReaderLoad.Idle)
   }
 
   @Test fun `library search mode pages one book and each tap underlines its own match`() {
-    open { vm.openBookSearch(book.id, "the") }
+    open { vm.library.openBookSearch(book.id, "the") }
     awaitCondition("first page") { vm.bookSearchUi.value.status == BookSearchStatus.Results }
     assertEquals(book.id, vm.state.value.bookSearch?.bookId)
     assertTrue(vm.state.value.textSearchOpen)

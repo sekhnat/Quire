@@ -132,7 +132,7 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
             Column {
               siblings.forEach { b ->
                 Row(
-                  Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (b.id == book.id) Nq.surface else Color.Transparent).clickable { vm.openBook(b.id) }.padding(8.dp),
+                  Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (b.id == book.id) Nq.surface else Color.Transparent).clickable { vm.openDetail(b.id) }.padding(8.dp),
                   horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
                   QText(b.seriesNoLabel ?: "–", 12f, Modifier.width(16.dp), color = Nq.neutral500, tabular = true)
@@ -169,7 +169,7 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
             Kicker("More by ${book.authorLast}")
             LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
               items(more, key = { it.id }) { b ->
-                Column(Modifier.width(84.dp).clickable { vm.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.width(84.dp).clickable { vm.openDetail(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                   MoreCover(b)
                   QText(statusLabel(b), 11f, color = Nq.neutral500)
                 }

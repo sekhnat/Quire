@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.quire.reader.QuireApplication
+import com.quire.reader.ui.library.LibraryState
 import android.content.ComponentName
 import android.content.Intent
 import androidx.work.WorkInfo
@@ -72,9 +73,10 @@ import java.io.File
 private const val FOREGROUND_SCAN_GAP_MS = 2 * 60 * 1000L
 
 /** Holds UI state and runs the library, onboarding and detail actions. */
-class QuireViewModel(private val app: QuireApplication) : ViewModel() {
+class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNavigator {
   private val repo = app.library
   private val settings = app.settings
+  private val features = Features(app)
 
   private val _state = MutableStateFlow(UiState())
   val state: StateFlow<UiState> = _state
@@ -86,10 +88,10 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   /** The message showing at the bottom of the screen, if any. */
   val toastText: StateFlow<String?> = toaster.text
 
-  private fun navigate(next: Destination) { _destination.value = next }
+  /** The library screen's state; it outlives visits to other screens, so filters and scope are still there on return. */
+  val library: LibraryState = features.library(this, toaster, viewModelScope.childScope())
 
-  val library: StateFlow<LibraryData> = combine(repo.books, repo.folders) { books, folders -> LibraryData(books, folders) }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, LibraryData.Empty)
+  private fun navigate(next: Destination) { _destination.value = next }
 
   val scan = repo.scanner.progress
 
@@ -108,17 +110,6 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   private val _storageBytes = MutableStateFlow<IndexStorageBytes?>(null)
   /** Disk the library and the search index each take, or null until first measured. */
   val storageBytes: StateFlow<IndexStorageBytes?> = _storageBytes
-
-  /**
-   * The library's "Inside books" search: the status for the typed text and the active filters, with the index
-   * coverage and indexer activity that explain partial or missing results. Only runs while something observes it.
-   */
-  val textSearch: StateFlow<LibraryTextSearch> = combine(
-    textSearchStatus(_state.map(::textSearchInput), search = repo::searchText),
-    repo.indexCoverage,
-    app.indexer.activity,
-  ) { status, coverage, activity -> LibraryTextSearch(status, coverage, activity) }
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryTextSearch())
 
   private val openBookId = MutableStateFlow(0L)
   /** Whether the open book has its own reading settings instead of the defaults. */
@@ -160,15 +151,6 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
           hasAccess = access, useCalibre = useCalibre,
         )
       }
-    }
-    viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
-    // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
-    viewModelScope.launch { settings.libraryLayout.first().let { saved -> edit { copy(layout = libLayoutOf(saved)) } } }
-    viewModelScope.launch {
-      val sort = sortKeyOf(settings.librarySort.first())
-      val ascending = settings.librarySortAscending.first() ?: false
-      // A sort picked while the saved one was loading is newer, and stays.
-      if (!sortChosen) edit { copy(sort = sort, sortAscending = ascending) }
     }
   }
 
@@ -244,68 +226,12 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
   }
 
-  fun openLibrary() = navigate(Destination.Library)
+  override fun openLibrary() = navigate(Destination.Library)
 
-  // ── library ──────────────────────────────────────────────────────────────
-
-  fun setView(v: LibView) = edit { copy(view = v) }
-  fun setFilter(f: LibFilter) = edit { copy(filter = f) }
-  fun setScope(scope: Scope?, view: LibView = LibView.Books) =
-    edit { copy(scope = scope, view = view, query = if (scope != null) "" else query) }
+  // ── navigation and app lifecycle ─────────────────────────────────────────
 
   /** The library narrowed to [scope], from a link on a book's page. */
-  fun openLibraryScope(scope: Scope) { setScope(scope); navigate(Destination.Library) }
-  fun showFilter(f: LibFilter) = edit { copy(view = LibView.Books, filter = f, scope = null) }
-  fun showShelf(filter: LibFilter? = null, scope: Scope? = null) = edit { copy(filter = filter ?: LibFilter.All, scope = scope, layout = LibLayout.Grid) }
-  fun toggleSearch() = edit { copy(searchOpen = !searchOpen, query = "", textLibraryQuery = "") }
-  fun setQuery(q: String) = edit { copy(query = q, view = LibView.Books) }
-  fun setSearchScope(scope: SearchScope) = edit { copy(searchScope = scope) }
-  fun setTextLibraryQuery(q: String) = edit { copy(textLibraryQuery = q, view = LibView.Books) }
-  fun setTextSearchOrder(order: SearchOrder) {
-    edit { copy(textSearchOrder = order) }
-    viewModelScope.launch { settings.setTextSearchOrder(order) }
-  }
-  fun openImport(open: Boolean) = edit { copy(importOpen = open) }
-  fun openSort(open: Boolean) = edit { copy(sortOpen = open) }
-  fun setSortAscending(asc: Boolean) { edit { copy(sortAscending = asc) }; saveSort() }
-  fun flipSort() { edit { copy(sortAscending = !sortAscending) }; saveSort() }
-  fun pickSort(k: SortKey) {
-    edit { copy(sort = k, sortOpen = false, view = LibView.Books, layout = if (layout == LibLayout.Shelves) LibLayout.Grid else layout) }
-    saveSort()
-  }
-
-  /** Set once a sort is picked here; the saved sort, loaded at start, never replaces it. Main thread only. */
-  private var sortChosen = false
-
-  /** Remembers the sort and its direction, so the library opens the same way next time. */
-  private fun saveSort() {
-    val s = _state.value
-    sortChosen = true
-    viewModelScope.launch { settings.setLibrarySort(s.sort.name, s.sortAscending) }
-  }
-
-  fun cycleLayout() {
-    val next = when (_state.value.layout) {
-      LibLayout.Grid -> LibLayout.List
-      LibLayout.List -> LibLayout.Comfortable
-      LibLayout.Comfortable -> LibLayout.Shelves
-      LibLayout.Shelves -> LibLayout.Grid
-    }
-    edit { copy(layout = next, view = LibView.Books) }
-    viewModelScope.launch { settings.setLibraryLayout(next.name) }
-    toast(when (next) { LibLayout.Grid -> "Grid"; LibLayout.List -> "Dense list"; LibLayout.Comfortable -> "Comfortable list"; LibLayout.Shelves -> "Shelves" } + " layout")
-  }
-
-  /** Rescans every watched folder and reports what changed. */
-  fun rescan() {
-    edit { copy(importOpen = false) }
-    viewModelScope.launch {
-      if (!StoragePaths.hasAllFilesAccess()) { toast("Allow access to your files first"); return@launch }
-      toast("Scanning…")
-      toast(describe(repo.rescan()))
-    }
-  }
-
+  override fun openLibraryScope(scope: Scope) { library.setScope(scope); navigate(Destination.Library) }
   private var lastForegroundScan = 0L
 
   /**
@@ -337,39 +263,25 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     }
   }
 
-  fun addFolder(path: String?) {
-    viewModelScope.launch {
-      if (path == null || !repo.addFolder(path)) { toast("Quire can't add that folder"); return@launch }
-      edit { copy(importOpen = false) }
-      toast("Scanning…")
-      toast(describe(repo.rescan()))
-    }
-  }
-
-  fun removeFolder(id: Long) = viewModelScope.launch {
-    val kept = repo.removeFolder(id)
-    toast(if (kept == 0) "Folder removed from the library" else "Folder removed · ${books(kept)} with reading history kept under Missing books")
-  }
-
   /** Books whose file is gone but whose reading history is kept; Settings lists them. */
   val missingBooks: StateFlow<List<MissingBookRow>> = repo.missingBooks.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
   fun forgetMissing(id: Long) = viewModelScope.launch { repo.forgetMissing(listOf(id)); toast("Reading history deleted") }
   fun forgetAllMissing() = viewModelScope.launch { repo.forgetAllMissing(); toast("Reading history of missing books deleted") }
 
-  fun importFiles(uris: List<android.net.Uri>, fromOnboarding: Boolean = false) {
+  /** Onboarding's "Import EPUB files": books that come in finish onboarding and open the library. */
+  fun importFiles(uris: List<android.net.Uri>) {
     if (uris.isEmpty()) return
-    edit { copy(importOpen = false) }
     viewModelScope.launch {
       val n = repo.importFiles(uris)
-      if (n > 0 && fromOnboarding) { settings.setOnboardingDone(true); navigate(Destination.Library) }
-      toast(if (n > 0) "Imported $n ${if (n == 1) "book" else "books"}" else "Nothing could be imported")
+      if (n > 0) { settings.setOnboardingDone(true); navigate(Destination.Library) }
+      toast(if (n > 0) "Imported ${books(n)}" else "Nothing could be imported")
     }
   }
 
   // ── detail ───────────────────────────────────────────────────────────────
 
-  fun openBook(id: Long) { edit { copy(editOpen = false) }; navigate(Destination.Detail(id)) }
+  override fun openDetail(bookId: Long) { edit { copy(editOpen = false) }; navigate(Destination.Detail(bookId)) }
   fun goLibrary() { edit { copy(chrome = false) }; navigate(Destination.Library) }
   fun openEdit(open: Boolean) = edit { copy(editOpen = open) }
   fun setFinished(id: Long, finished: Boolean) = viewModelScope.launch { repo.setFinished(id, finished); toast(if (finished) "Marked as finished" else "Marked as unread") }
@@ -575,20 +487,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
   /** Opens a book in the reader. [restart] ignores the saved position (the "Read again" button). */
   fun read(id: Long, restart: Boolean = false) = startReading(id, restart, target = null, libraryQuery = null)
 
-  /**
-   * Opens a library text-search result: the book at the matched passage, underlined, in place of its saved position
-   * for this opening only. A result for a file that has changed since it was indexed is not opened; the book's index
-   * is refreshed instead.
-   */
-  fun openTextHit(target: IndexTarget) {
-    viewModelScope.launch {
-      if (!repo.isCurrent(target)) { staleTarget(); return@launch }
-      startReading(target.bookId, restart = false, target = target, libraryQuery = null)
-    }
-  }
-
-  /** "Show all in this book": opens the book at its saved position with the search overlay in library-search mode for [query]. */
-  fun openBookSearch(bookId: Long, query: String) = startReading(bookId, restart = false, target = null, libraryQuery = query)
+  override fun openReader(request: ReaderRequest) = startReading(request.bookId, request.restart, request.target, request.libraryQuery)
 
   private fun staleTarget() {
     toast(STALE_TARGET_MESSAGE)
@@ -622,7 +521,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       }
       repo.markOpened(id)
       repo.updatePageCount(id, positions.size)
-      val libraryBook = library.value.byId[id]
+      val libraryBook = library.data.value.byId[id]
       if (libraryBook == null) { publication.close(); _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
       val session = ReaderSession(libraryBook, publication, positions, initial)
       _reader.value = ReaderLoad.Ready(session)
@@ -743,7 +642,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   // settings screen
 
-  fun openSettings() { navigate(Destination.Settings); refreshDatabaseBytes(); refreshBackupSizes() }
+  override fun openSettings() { navigate(Destination.Settings); refreshDatabaseBytes(); refreshBackupSizes() }
   fun closeSettings() = navigate(Destination.Library)
   fun updateDefaults(change: (ReaderPrefs) -> ReaderPrefs) {
     val next = change(defaults.value)

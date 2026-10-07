@@ -39,7 +39,8 @@ fun QuireApp(
   androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_START) { vm.onForeground() }
   androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { vm.onAppStop() }
   val s by vm.state.collectAsStateWithLifecycle()
-  val lib by vm.library.collectAsStateWithLifecycle()
+  val libState by vm.library.state.collectAsStateWithLifecycle()
+  val lib by vm.library.data.collectAsStateWithLifecycle()
   val destination by vm.destination.collectAsStateWithLifecycle()
   val toast by vm.toastText.collectAsStateWithLifecycle()
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
@@ -48,7 +49,7 @@ fun QuireApp(
       when (d) {
         Destination.Splash -> Box(Modifier.fillMaxSize().background(Nq.bg))
         Destination.Onboard -> OnboardingScreen(s, vm)
-        Destination.Library -> LibraryScreen(s, lib, vm)
+        Destination.Library -> LibraryScreen(libState, lib, vm.library)
         is Destination.Detail -> DetailScreen(d.bookId, s, lib, vm)
         Destination.Reader -> ReaderScreen(s, lib, vm)
         Destination.Settings -> SettingsScreen(vm)

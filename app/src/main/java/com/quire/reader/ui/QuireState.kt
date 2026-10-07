@@ -41,23 +41,8 @@ enum class SortKey(val label: String, val desc: String, val asc: String, val ico
   }
 }
 
-data class UiState(
-  // onboarding
-  val onboardStep: OnboardStep = OnboardStep.Welcome,
-  val hasAccess: Boolean = false,
-  /**
-   * The Access step is guarding an existing library (a full restore brings back "onboarding done" but never the
-   * permission): granting access returns to the library instead of moving on to choosing folders.
-   */
-  val accessForLibrary: Boolean = false,
-  val candidates: List<FolderCandidate> = emptyList(),
-  /** Progress of the automatic folder discovery on the Folders step; null when it isn't running. */
-  val discovery: DiscoveryProgress? = null,
-  val pickedFolders: Set<String> = emptySet(),
-  val useCalibre: Boolean = true,
-  val watchFolders: Boolean = true,
-
-  // library
+/** The library screen's view choices and searches. */
+data class LibraryUiState(
   val view: LibView = LibView.Books,
   val filter: LibFilter = LibFilter.All,
   val sort: SortKey = SortKey.Opened,
@@ -73,6 +58,23 @@ data class UiState(
   val textSearchOrder: SearchOrder = SearchOrder.Relevance,
   val layout: LibLayout = LibLayout.Grid,
   val importOpen: Boolean = false,
+)
+
+data class UiState(
+  // onboarding
+  val onboardStep: OnboardStep = OnboardStep.Welcome,
+  val hasAccess: Boolean = false,
+  /**
+   * The Access step is guarding an existing library (a full restore brings back "onboarding done" but never the
+   * permission): granting access returns to the library instead of moving on to choosing folders.
+   */
+  val accessForLibrary: Boolean = false,
+  val candidates: List<FolderCandidate> = emptyList(),
+  /** Progress of the automatic folder discovery on the Folders step; null when it isn't running. */
+  val discovery: DiscoveryProgress? = null,
+  val pickedFolders: Set<String> = emptySet(),
+  val useCalibre: Boolean = true,
+  val watchFolders: Boolean = true,
 
   // detail
   val editOpen: Boolean = false,
@@ -131,7 +133,7 @@ fun cardStatus(b: Book, sort: SortKey): String = when (sort) {
 }
 
 /** Books for the library list after sort, scope, filter and search have been applied. */
-fun visibleBooks(s: UiState, all: List<Book>): List<Book> {
+fun visibleBooks(s: LibraryUiState, all: List<Book>): List<Book> {
   val order = compareBy<Book> { s.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
   var list = all.sortedWith(if (s.sortAscending) order else order.reversed())
   s.scope?.let { sc ->
@@ -166,7 +168,7 @@ fun visibleBooks(s: UiState, all: List<Book>): List<Book> {
  * The library filters that narrow a text search: the same scope and status filter [visibleBooks] applies, without its
  * metadata query. Like there, an active scope replaces the status filter.
  */
-fun textFilters(s: UiState): TextSearchFilters = when (val scope = s.scope) {
+fun textFilters(s: LibraryUiState): TextSearchFilters = when (val scope = s.scope) {
   null -> TextSearchFilters(
     status = when (s.filter) {
       LibFilter.All -> null

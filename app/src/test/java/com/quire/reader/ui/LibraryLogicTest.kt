@@ -15,44 +15,44 @@ class LibraryLogicTest {
   )
 
   @Test fun `recently opened puts the latest book first and falls back to date added`() {
-    val ids = visibleBooks(UiState(), books).map { it.id }
+    val ids = visibleBooks(LibraryUiState(), books).map { it.id }
     assertEquals(listOf(2L, 1L), ids.take(2))        // opened books, most recent first
     assertEquals(listOf(5L, 4L, 3L), ids.drop(2))    // never opened: newest added first
   }
 
   @Test fun `ascending reverses the order`() {
-    assertEquals(books.size.toLong(), visibleBooks(UiState(sortAscending = true), books).size.toLong())
-    assertEquals(2L, visibleBooks(UiState(sortAscending = true), books).last().id)
+    assertEquals(books.size.toLong(), visibleBooks(LibraryUiState(sortAscending = true), books).size.toLong())
+    assertEquals(2L, visibleBooks(LibraryUiState(sortAscending = true), books).last().id)
   }
 
   @Test fun `each sort key orders by its own field, biggest first`() {
-    assertEquals(3L, visibleBooks(UiState(sort = SortKey.Year), books).first().id)
-    assertEquals(1L, visibleBooks(UiState(sort = SortKey.Size), books).first().id)
-    assertEquals(1L, visibleBooks(UiState(sort = SortKey.Pages), books).first().id)
-    assertEquals(5L, visibleBooks(UiState(sort = SortKey.Added), books).first().id)
+    assertEquals(3L, visibleBooks(LibraryUiState(sort = SortKey.Year), books).first().id)
+    assertEquals(1L, visibleBooks(LibraryUiState(sort = SortKey.Size), books).first().id)
+    assertEquals(1L, visibleBooks(LibraryUiState(sort = SortKey.Pages), books).first().id)
+    assertEquals(5L, visibleBooks(LibraryUiState(sort = SortKey.Added), books).first().id)
   }
 
   @Test fun `a series scope lists books in reading order`() {
-    val list = visibleBooks(UiState(scope = Scope(ScopeKind.Series, "Holmes")), books)
+    val list = visibleBooks(LibraryUiState(scope = Scope(ScopeKind.Series, "Holmes")), books)
     assertEquals(listOf(4L, 3L), list.map { it.id })
   }
 
   @Test fun `status filters and the recent filter`() {
-    assertEquals(setOf(1L, 2L), visibleBooks(UiState(filter = LibFilter.Reading), books).map { it.id }.toSet())
-    assertEquals(setOf(4L), visibleBooks(UiState(filter = LibFilter.Finished), books).map { it.id }.toSet())
-    assertEquals(setOf(3L), visibleBooks(UiState(filter = LibFilter.Recent), books).map { it.id }.toSet())
-    assertEquals(setOf(3L, 5L), visibleBooks(UiState(filter = LibFilter.Unread), books).map { it.id }.toSet())
+    assertEquals(setOf(1L, 2L), visibleBooks(LibraryUiState(filter = LibFilter.Reading), books).map { it.id }.toSet())
+    assertEquals(setOf(4L), visibleBooks(LibraryUiState(filter = LibFilter.Finished), books).map { it.id }.toSet())
+    assertEquals(setOf(3L), visibleBooks(LibraryUiState(filter = LibFilter.Recent), books).map { it.id }.toSet())
+    assertEquals(setOf(3L, 5L), visibleBooks(LibraryUiState(filter = LibFilter.Unread), books).map { it.id }.toSet())
   }
 
   @Test fun `a scope overrides the status filter`() {
-    val list = visibleBooks(UiState(filter = LibFilter.Finished, scope = Scope(ScopeKind.Author, "Jane Austen")), books)
+    val list = visibleBooks(LibraryUiState(filter = LibFilter.Finished, scope = Scope(ScopeKind.Author, "Jane Austen")), books)
     assertEquals(2, list.size)
   }
 
   @Test fun `search matches title author series and tags`() {
-    assertEquals(setOf(3L, 4L), visibleBooks(UiState(query = "holmes"), books).map { it.id }.toSet())
-    assertEquals(setOf(5L), visibleBooks(UiState(query = "GOTHIC"), books).map { it.id }.toSet())
-    assertEquals(setOf(1L, 2L), visibleBooks(UiState(query = "austen"), books).map { it.id }.toSet())
+    assertEquals(setOf(3L, 4L), visibleBooks(LibraryUiState(query = "holmes"), books).map { it.id }.toSet())
+    assertEquals(setOf(5L), visibleBooks(LibraryUiState(query = "GOTHIC"), books).map { it.id }.toSet())
+    assertEquals(setOf(1L, 2L), visibleBooks(LibraryUiState(query = "austen"), books).map { it.id }.toSet())
   }
 
   @Test fun `card caption follows the active sort`() {
