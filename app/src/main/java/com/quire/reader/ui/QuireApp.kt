@@ -1,6 +1,8 @@
 package com.quire.reader.ui
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.updateTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -25,6 +27,7 @@ import com.quire.reader.ui.onboarding.OnboardingScreen
 import com.quire.reader.ui.reader.ReaderScreen
 import com.quire.reader.ui.settings.SettingsScreen
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun QuireApp(
   vm: QuireViewModel = viewModel(
@@ -37,17 +40,20 @@ fun QuireApp(
   androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) { vm.onAppStop() }
   val s by vm.state.collectAsStateWithLifecycle()
   val lib by vm.library.collectAsStateWithLifecycle()
+  val destination by vm.destination.collectAsStateWithLifecycle()
+  val toast by vm.toastText.collectAsStateWithLifecycle()
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
-    Crossfade(s.screen, Modifier.fillMaxSize(), animationSpec = tween(180), label = "screen") { screen ->
-      when (screen) {
-        Screen.Splash -> Box(Modifier.fillMaxSize().background(Nq.bg))
-        Screen.Onboard -> OnboardingScreen(s, vm)
-        Screen.Library -> LibraryScreen(s, lib, vm)
-        Screen.Detail -> DetailScreen(s, lib, vm)
-        Screen.Reader -> ReaderScreen(s, lib, vm)
-        Screen.Settings -> SettingsScreen(vm)
+    // Keyed by kind, so moving between two books' pages swaps the content without a fade.
+    updateTransition(destination, label = "screen").Crossfade(Modifier.fillMaxSize(), animationSpec = tween(180), contentKey = { it::class }) { d ->
+      when (d) {
+        Destination.Splash -> Box(Modifier.fillMaxSize().background(Nq.bg))
+        Destination.Onboard -> OnboardingScreen(s, vm)
+        Destination.Library -> LibraryScreen(s, lib, vm)
+        is Destination.Detail -> DetailScreen(d.bookId, s, lib, vm)
+        Destination.Reader -> ReaderScreen(s, lib, vm)
+        Destination.Settings -> SettingsScreen(vm)
       }
     }
-    Toast(s.toast, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 120.dp))
+    Toast(toast, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 120.dp))
   }
 }

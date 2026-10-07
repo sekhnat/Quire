@@ -171,13 +171,13 @@ class AdvancedControlsUiTest {
     // (The cancel path simply does not call the reducer; the state below must be untouched.)
     val beforeCancelGlobals = vm.defaults.value
     val beforeCancelBook = vm.prefs.value
-    assertNull(vm.state.value.toast)
+    assertNull(vm.toastText.value)
     // ...the confirmed path:
     onActivity { vm.restoreBookAdvanced() }
     awaitCondition("book advanced restored") {
       vm.prefs.value.advanced == vm.defaults.value.advanced && !runBlocking { app.library.hasBookAdvancedOverride(bookPaged.id).first() }
     }
-    assertEquals("This book's advanced settings follow your defaults", vm.state.value.toast)
+    assertEquals("This book's advanced settings follow your defaults", vm.toastText.value)
     // Exactly the advanced group: the book's basic settings stay.
     assertEquals(basics.theme, vm.prefs.value.theme)
     assertEquals(basics.fontSize, vm.prefs.value.fontSize)
@@ -188,7 +188,7 @@ class AdvancedControlsUiTest {
     // The global restore replaces the advanced group alone.
     onActivity { vm.restoreGlobalAdvanced() }
     awaitCondition("globals restored") { vm.defaults.value.advanced.letterSpacing == WidenLevel.Default }
-    assertEquals("Advanced reading settings restored", vm.state.value.toast)
+    assertEquals("Advanced reading settings restored", vm.toastText.value)
     // The book override was already gone; the book now follows the restored globals.
     awaitCondition("book follows globals") { vm.prefs.value.advanced.letterSpacing == WidenLevel.Default }
 

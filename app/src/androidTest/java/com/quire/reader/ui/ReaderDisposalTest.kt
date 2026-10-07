@@ -104,7 +104,7 @@ class ReaderDisposalTest {
 
     // The reader still closes cleanly: the navigator's own disposal is a no-op now.
     vm.closeReader()
-    awaitCondition("back on the library") { vm.state.value.screen == Screen.Library }
+    awaitCondition("back on the library") { vm.destination.value == Destination.Library }
     awaitCondition("navigator removed") { navigatorCount() == 0 }
   }
 
@@ -159,7 +159,7 @@ class ReaderDisposalTest {
     var surface: ContinuousBookWebView? = null
     scenario.onActivity { surface = nav.continuousBook }
     vm.closeReader()
-    awaitCondition("back on the library") { vm.state.value.screen == Screen.Library }
+    awaitCondition("back on the library") { vm.destination.value == Destination.Library }
     awaitCondition("navigator removed") { navigatorCount() == 0 }
     assertEquals(ContinuousBookState.Disposed, surface!!.state.value)
     scenario.onActivity { assertNull("the surface left the container", surface!!.parent) }
@@ -208,7 +208,7 @@ class ReaderDisposalTest {
       open()
       cycleAndRecord(cycle, refs)
       vm.closeReader()
-      awaitCondition("back on the library") { vm.state.value.screen == Screen.Library }
+      awaitCondition("back on the library") { vm.destination.value == Destination.Library }
       awaitCondition("navigator removed") { navigatorCount() == 0 }
       // Collectibility after each close: 20 fixed collection rounds (about five seconds).
       // A real leak never clears; the window exists because collections are scheduled.

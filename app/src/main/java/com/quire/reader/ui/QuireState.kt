@@ -10,7 +10,6 @@ import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.theme.ReaderTheme
 import java.time.LocalDate
 
-enum class Screen { Splash, Onboard, Library, Detail, Reader, Settings }
 enum class OnboardStep { Welcome, Access, Folders, Scan }
 enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Series("Series"), Tags("Tags") }
 enum class LibLayout { Grid, List, Comfortable, Shelves }
@@ -43,8 +42,6 @@ enum class SortKey(val label: String, val desc: String, val asc: String, val ico
 }
 
 data class UiState(
-  val screen: Screen = Screen.Splash,
-
   // onboarding
   val onboardStep: OnboardStep = OnboardStep.Welcome,
   val hasAccess: Boolean = false,
@@ -78,7 +75,6 @@ data class UiState(
   val importOpen: Boolean = false,
 
   // detail
-  val bookId: Long = 0,
   val editOpen: Boolean = false,
 
   // reader overlays (the reading settings themselves live in ReaderPrefs)
@@ -97,8 +93,6 @@ data class UiState(
   val activeHighlight: Long? = null,
   /** Highlight being given a note. */
   val noteFor: Long? = null,
-
-  val toast: String? = null,
 ) {
   val discovering get() = discovery != null
   val readerOverlayOpen get() = sheet != null || textSearchOpen || showZones || chrome || activeHighlight != null || noteFor != null
