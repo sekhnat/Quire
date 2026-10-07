@@ -93,7 +93,20 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   private val notes: NotesExport = MarkdownNotesExport(app, toaster, viewModelScope)
 
-  private fun navigate(next: Destination) { _destination.value = next }
+  private fun navigate(next: Destination) = navigate { next }
+
+  /**
+   * Leaves the current destination, closing the state it owns, and only then builds the next one. The order matters:
+   * a reader being left lets background indexing resume before a new reader takes it again. Main thread only.
+   */
+  private fun navigate(build: () -> Destination) {
+    closeHolder(_destination.value)
+    _destination.value = build()
+  }
+
+  private fun closeHolder(d: Destination) {
+    if (d is Destination.Reader) d.state.close()
+  }
 
   val scan = repo.scanner.progress
 
@@ -113,20 +126,11 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
   /** Disk the library and the search index each take, or null until first measured. */
   val storageBytes: StateFlow<IndexStorageBytes?> = _storageBytes
 
-  private val openBookId = MutableStateFlow(0L)
-  /** Whether the open book has its own reading settings instead of the defaults. */
-  val hasBookOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookOverride(id) }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-  /** Whether the open book carries an advanced object of its own (the book restore action). */
-  val hasBookAdvancedOverride: StateFlow<Boolean> = openBookId.flatMapLatest { id -> if (id == 0L) flowOf(false) else repo.hasBookAdvancedOverride(id) }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
   /** Whether the global defaults carry non-factory advanced values (the global restore action). */
   val advancedDefaultsCustomized: StateFlow<Boolean> = repo.advancedDefaultsCustomized
     .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-  /** Whether the advanced reading controls are shown at all; independent of their values. */
+  /** Whether the advanced reading controls are shown at all, for Settings; independent of their values. */
   val advancedReadingEnabled: StateFlow<Boolean> = repo.advancedReadingEnabled
     .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -242,9 +246,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
    */
   fun onAppStop() {
     app.appScope.launch {
-      (_reader.value as? ReaderLoad.Ready)?.session?.let { session ->
-        session.current.value?.let { locator -> runCatching { savePosition(session, locator) } }
-      }
+      (_destination.value as? Destination.Reader)?.state?.saveNow()
       if (!app.snapshotWriter.flush()) Log.w("QuireViewModel", "snapshot flush on stop failed or is held back")
     }
   }
@@ -283,7 +285,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   // ── detail ───────────────────────────────────────────────────────────────
 
-  override fun openDetail(bookId: Long) = navigate(Destination.Detail(features.detail(bookId, notes, this, toaster, viewModelScope)))
+  override fun openDetail(bookId: Long) = navigate { Destination.Detail(features.detail(bookId, notes, this, toaster, viewModelScope)) }
 
   // ── export and import ────────────────────────────────────────────────────
 
@@ -442,185 +444,10 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   // ── reader ───────────────────────────────────────────────────────────────
 
-  private val _reader = MutableStateFlow<ReaderLoad>(ReaderLoad.Idle)
-  val reader: StateFlow<ReaderLoad> = _reader
+  override fun openReader(request: ReaderRequest) =
+    navigate { Destination.Reader(features.reader(request, library.data, this, toaster, viewModelScope.childScope(), viewModelScope)) }
 
-  private val _prefs = MutableStateFlow(ReaderPrefs())
-  /** The open book's reading settings (its own, or the defaults). */
-  val prefs: StateFlow<ReaderPrefs> = _prefs
-
-  private val _bookmarks = MutableStateFlow<List<BookmarkEntity>>(emptyList())
-  val bookmarks: StateFlow<List<BookmarkEntity>> = _bookmarks
-  private val _highlights = MutableStateFlow<List<HighlightEntity>>(emptyList())
-  val highlights: StateFlow<List<HighlightEntity>> = _highlights
-
-  private val _search = MutableStateFlow(SearchUi())
-  val search: StateFlow<SearchUi> = _search
-
-  /** The reader overlay's library-search results while [UiState.bookSearch] is set. */
-  private val _bookSearch = MutableStateFlow(BookSearchUi())
-  val bookSearchUi: StateFlow<BookSearchUi> = _bookSearch
-
-  private var readerJobs: Job? = null
-  private var searchJob: Job? = null
-  private var bookSearchJob: Job? = null
-  private var targetJob: Job? = null
-
-  /** Opens a book in the reader. [restart] ignores the saved position (the "Read again" button). */
-  fun read(id: Long, restart: Boolean = false) = startReading(id, restart, target = null, libraryQuery = null)
-
-  override fun openReader(request: ReaderRequest) = startReading(request.bookId, request.restart, request.target, request.libraryQuery)
-
-  private fun staleTarget() {
-    toast(STALE_TARGET_MESSAGE)
-    app.indexer.request()
-  }
-
-  private fun startReading(id: Long, restart: Boolean, target: IndexTarget?, libraryQuery: String?) {
-    // Before anything is loaded, so background indexing steps aside while the book opens.
-    app.indexer.setReaderBusy(true)
-    closeReaderSession(release = false)
-    openBookId.value = id
-    navigate(Destination.Reader)
-    edit { copy(chrome = false, sheet = null, textSearchOpen = false, textQuery = "", bookSearch = null, activeHighlight = null, noteFor = null, showZones = false) }
-    _reader.value = ReaderLoad.Loading
-    viewModelScope.launch {
-      val book = repo.book(id)
-      if (book == null) { _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
-      val opened = app.publicationLoader.open(File(book.path))
-      val publication = opened.getOrElse {
-        repo.markUnreadable(id)
-        _reader.value = ReaderLoad.Failed("This book can’t be opened. The file may be damaged or protected.")
-        releaseIndexer()
-        return@launch
-      }
-      val positions = withContext(Dispatchers.IO) { runCatching { publication.positions() }.getOrDefault(emptyList()) }
-      val saved = repo.readingState(id)
-      val initial = when (openingPosition(restart, hasTarget = target != null)) {
-        OpeningPosition.Target -> target?.let { ReaderSession.targetLocator(it, positions) }
-        OpeningPosition.Saved -> ReaderSession.parseLocator(saved?.locatorJson)
-        OpeningPosition.Start -> null
-      }
-      repo.markOpened(id)
-      repo.updatePageCount(id, positions.size)
-      val libraryBook = library.data.value.byId[id]
-      if (libraryBook == null) { publication.close(); _reader.value = ReaderLoad.Failed("This book is no longer in the library."); releaseIndexer(); return@launch }
-      val session = ReaderSession(libraryBook, publication, positions, initial)
-      _reader.value = ReaderLoad.Ready(session)
-      edit { copy(brightness = 100, advancedOpen = false) }
-      startReaderJobs(session)
-      if (target != null) targetJob = launch { reportOutcome(session.goToTarget(target)) }
-      if (libraryQuery != null) enterBookSearch(id, libraryQuery)
-    }
-  }
-
-  private fun reportOutcome(outcome: TargetOutcome) { outcome.message()?.let(::toast) }
-
-  @OptIn(FlowPreview::class)
-  private fun startReaderJobs(session: ReaderSession) {
-    val id = session.book.id
-    readerJobs = viewModelScope.launch {
-      launch { repo.readerPrefs(id).collect { _prefs.value = it } }
-      launch { repo.bookmarks(id).collect { _bookmarks.value = it } }
-      launch { repo.highlights(id).collect { _highlights.value = it } }
-      launch { repo.brightness.collect { b -> edit { copy(brightness = b) } } }
-      // Save the position a moment after the reader stops moving.
-      launch {
-        session.current.filterNotNull().drop(1).debounce(800).collect { savePosition(session, it) }
-      }
-      launch { runCatching { session.resolveChapterAnchors() } }
-      // Keep highlight decorations in step with the database and with the navigator coming and going.
-      launch {
-        _highlights.collect { list -> runCatching { session.applyHighlights(list) } }
-      }
-    }
-  }
-
-  private suspend fun savePosition(session: ReaderSession, locator: Locator) {
-    repo.savePosition(session.book.id, locator.toJSON().toString(), (locator.locations.totalProgression ?: 0.0).toFloat())
-  }
-
-  /** Leaves the reader, saving where it was. */
-  fun closeReader() {
-    closeReaderSession()
-    edit { copy(chrome = false, sheet = null, textSearchOpen = false, bookSearch = null, activeHighlight = null, noteFor = null) }
-    navigate(Destination.Library)
-  }
-
-  /** Lets background indexing resume now that no reader is opening or open. */
-  private fun releaseIndexer() {
-    app.indexer.setReaderBusy(false)
-    app.indexer.request()
-  }
-
-  private fun closeReaderSession(release: Boolean = true) {
-    readerJobs?.cancel(); searchJob?.cancel(); bookSearchJob?.cancel(); targetJob?.cancel()
-    (_reader.value as? ReaderLoad.Ready)?.session?.let { session ->
-      val locator = session.current.value
-      // Written outside viewModelScope's cancellation so the last page turn is never lost.
-      if (locator != null) app.appScope.launch { savePosition(session, locator) }
-      session.close()
-    }
-    _reader.value = ReaderLoad.Idle
-    _search.value = SearchUi()
-    _bookSearch.value = BookSearchUi()
-    _highlights.value = emptyList(); _bookmarks.value = emptyList()
-    if (release) releaseIndexer()
-  }
-
-  override fun onCleared() { closeReaderSession(); super.onCleared() }
-
-  private fun session(): ReaderSession? = (_reader.value as? ReaderLoad.Ready)?.session
-
-  fun setChrome(show: Boolean) = edit { copy(chrome = show) }
-  fun openSheet(sheet: Sheet?, tab: TocTab? = null) = edit { copy(sheet = sheet, tocTab = tab ?: tocTab) }
-  fun setTocTab(tab: TocTab) = edit { copy(tocTab = tab) }
-  fun setAdvancedOpen(open: Boolean) = edit { copy(advancedOpen = open) }
-  fun showZones(show: Boolean) = edit { copy(showZones = show, sheet = if (show) null else sheet, chrome = if (show) false else chrome) }
-  fun closeReaderOverlays() = edit { copy(sheet = null, chrome = false, textSearchOpen = false, showZones = false, activeHighlight = null, noteFor = null) }
-
-  // reading settings
-
-  /**
-   * Applies a change to the open book's basic settings: the accepted state is published
-   * once, and a persistence echo equal to it is just an acknowledgment (the state flow
-   * drops it); an echo that differs is the stored truth and wins.
-   */
-  fun updatePrefs(change: (ReaderPrefs) -> ReaderPrefs) {
-    val id = session()?.book?.id ?: return
-    val next = change(_prefs.value)
-    _prefs.value = next
-    viewModelScope.launch { repo.setBookPrefs(id, next) }
-  }
-
-  /** Applies a change to the open book's advanced controls; its basic group is untouched. */
-  fun updateBookAdvanced(change: (AdvancedReaderPrefs) -> AdvancedReaderPrefs) {
-    val id = session()?.book?.id ?: return
-    val next = change(_prefs.value.advanced)
-    _prefs.value = _prefs.value.copy(advanced = next)
-    viewModelScope.launch { repo.setBookAdvancedPrefs(id, next) }
-  }
-
-  /** Chooses a paragraph preset, setting indent and spacing in one reduction. */
-  fun chooseParagraphPreset(preset: ParagraphPreset) {
-    val levels = AdvancedReaderPrefs.levelsFor(preset) ?: return
-    updateBookAdvanced { it.copy(paragraphIndent = levels.first, paragraphSpacing = levels.second) }
-  }
-
-  fun resetBookPrefs() {
-    val id = session()?.book?.id ?: return
-    viewModelScope.launch { repo.clearBookPrefs(id); toast("Using your default settings") }
-  }
-
-  /** Restores this book's advanced controls to the globals; its basic override stays. */
-  fun restoreBookAdvanced() {
-    val id = session()?.book?.id ?: return
-    _prefs.value = _prefs.value.copy(advanced = defaults.value.advanced)
-    viewModelScope.launch {
-      repo.clearBookAdvancedPrefs(id)
-      toast("This book's advanced settings follow your defaults")
-    }
-  }
+  override fun onCleared() { closeHolder(_destination.value); super.onCleared() }
 
   // settings screen
 
@@ -666,174 +493,5 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
     toast("Search index deleted")
   }
 
-  fun useForAllBooks() {
-    val id = session()?.book?.id ?: return
-    viewModelScope.launch { repo.useForAllBooks(id, _prefs.value); toast("These settings are now the default for every book") }
-  }
-
-  fun setBrightness(v: Int) { edit { copy(brightness = v) }; viewModelScope.launch { repo.setBrightness(v) } }
-
-  // bookmarks
-
-  /** Whether the page showing now is bookmarked: a bookmark within half a position of the reader's place. */
-  fun isBookmarked(session: ReaderSession, marks: List<BookmarkEntity>): Boolean {
-    val here = session.totalProgress
-    val tolerance = 0.5f / session.positions.size.coerceAtLeast(1)
-    return marks.any { kotlin.math.abs(it.progress - here) <= tolerance }
-  }
-
-  fun toggleBookmark() {
-    val session = session() ?: return
-    val locator = session.current.value ?: return
-    val existing = _bookmarks.value.filter { kotlin.math.abs(it.progress - session.totalProgress) <= 0.5f / session.positions.size.coerceAtLeast(1) }
-    viewModelScope.launch {
-      if (existing.isNotEmpty()) existing.forEach { repo.deleteBookmark(it.id) }
-      else repo.addBookmark(BookmarkEntity(bookId = session.book.id, locatorJson = locator.toJSON().toString(), label = session.chapterTitle().ifEmpty { "Bookmark" }, progress = session.totalProgress, createdAt = System.currentTimeMillis()))
-    }
-  }
-
-  fun deleteBookmark(id: Long) = viewModelScope.launch { repo.deleteBookmark(id) }
-
-  // highlights and notes
-
-  fun onSelectionAction(action: SelectionAction) {
-    val session = session() ?: return
-    viewModelScope.launch {
-      val locator = session.currentSelection() ?: return@launch
-      when (action) {
-        SelectionAction.Copy -> {
-          val text = locator.text.highlight.orEmpty()
-          val cm = app.getSystemService(android.content.ClipboardManager::class.java)
-          cm.setPrimaryClip(android.content.ClipData.newPlainText("Quire", text))
-          session.clearSelection(); toast("Copied")
-        }
-        SelectionAction.Highlight, SelectionAction.Note -> {
-          // The chapter goes into the locator's display title: note exports can label this highlight
-          // forever, even once the book is gone. Canonical keys ignore the title, so merging is unaffected.
-          val stamped = locator.copy(title = session.chapterTitle(locator).ifEmpty { locator.title })
-          val id = repo.addHighlight(
-            HighlightEntity(
-              bookId = session.book.id, locatorJson = stamped.toJSON().toString(), text = locator.text.highlight.orEmpty(),
-              progress = (locator.locations.totalProgression ?: 0.0).toFloat(), createdAt = System.currentTimeMillis(),
-            ),
-          )
-          session.clearSelection()
-          if (action == SelectionAction.Note) edit { copy(noteFor = id) } else toast("Highlighted. Find it under Contents → Highlights")
-        }
-      }
-    }
-  }
-
-  fun setActiveHighlight(id: Long?) = edit { copy(activeHighlight = id, chrome = if (id != null) false else chrome) }
-  fun editNote(id: Long?) = edit { copy(noteFor = id, activeHighlight = null) }
-  fun saveNote(id: Long, note: String) { viewModelScope.launch { repo.setHighlightNote(id, note) }; edit { copy(noteFor = null) } }
-  fun deleteHighlight(id: Long) { viewModelScope.launch { repo.deleteHighlight(id) }; edit { copy(activeHighlight = null, noteFor = null) } }
-
-  fun copyHighlight(id: Long) {
-    val text = _highlights.value.firstOrNull { it.id == id }?.text ?: return
-    app.getSystemService(android.content.ClipboardManager::class.java).setPrimaryClip(android.content.ClipData.newPlainText("Quire", text))
-    edit { copy(activeHighlight = null) }; toast("Copied")
-  }
-
-  // search inside the book
-
-  fun setTextSearch(open: Boolean) {
-    edit { copy(textSearchOpen = open, chrome = false, bookSearch = if (open) bookSearch else null) }
-    if (!open) { searchJob?.cancel(); bookSearchJob?.cancel(); _search.value = SearchUi(); _bookSearch.value = BookSearchUi(); viewModelScope.launch { session()?.applySearchHits(emptyList()) } }
-  }
-
-  fun setTextQuery(q: String) {
-    edit { copy(textQuery = q) }
-    searchJob?.cancel()
-    val session = session() ?: return
-    if (q.trim().length < 2) { _search.value = SearchUi(); return }
-    searchJob = viewModelScope.launch {
-      delay(250) // wait for the user to pause typing
-      _search.value = SearchUi(query = q.trim(), running = true)
-      runCatching { session.search(q.trim()) { hits -> _search.value = SearchUi(q.trim(), hits, running = true) } }
-      _search.value = _search.value.copy(running = false)
-    }
-  }
-
-  /** Jumps to a search result and underlines the matches. */
-  fun openSearchHit(hit: SearchHit) {
-    val session = session() ?: return
-    edit { copy(textSearchOpen = false, chrome = false) }
-    session.go(hit.locator)
-    viewModelScope.launch { session.applySearchHits(_search.value.hits) }
-  }
-
-  // search inside the book, library-search mode
-
-  private fun enterBookSearch(bookId: Long, query: String) {
-    edit { copy(textSearchOpen = true, chrome = false, bookSearch = BookSearchMode(bookId, query)) }
-    runBookSearch(bookId, query)
-  }
-
-  /** Leaves library-search mode; the overlay stays open as the ordinary in-book search. */
-  fun closeBookSearch() {
-    bookSearchJob?.cancel()
-    _bookSearch.value = BookSearchUi()
-    edit { copy(bookSearch = null) }
-    viewModelScope.launch { session()?.applySearchHits(emptyList()) }
-  }
-
-  /** Edits the library-search query. It keeps library semantics, and only this book, until the mode is closed. */
-  fun setBookSearchQuery(q: String) {
-    val mode = _state.value.bookSearch ?: return
-    edit { copy(bookSearch = mode.copy(query = q)) }
-    runBookSearch(mode.bookId, q)
-  }
-
-  private fun runBookSearch(bookId: Long, text: String) {
-    bookSearchJob?.cancel()
-    val plan = planBookSearch(text)
-    _bookSearch.value = plan.ui
-    val query = plan.query ?: return
-    bookSearchJob = viewModelScope.launch {
-      delay(250) // wait for the user to pause typing
-      val page = try { repo.searchBookPage(bookId, query) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-      if (page == null) { _bookSearch.value = BookSearchUi(); toast("Couldn’t search this book"); return@launch }
-      _bookSearch.value = bookSearchFirstPage(page)
-    }
-  }
-
-  /** Loads the next page of library-search matches; called as the list scrolls near its end. */
-  fun loadMoreBookSearch() {
-    val mode = _state.value.bookSearch ?: return
-    val current = _bookSearch.value
-    val after = current.nextAfterSeq ?: return
-    if (current.loadingMore || current.status != BookSearchStatus.Results) return
-    val query = (FtsQuery.parse(mode.query) as? FtsQuery.Result.Query) ?: return
-    _bookSearch.value = current.copy(loadingMore = true)
-    // The same job as the first page, so a newer query cancels a page that is still loading.
-    bookSearchJob = viewModelScope.launch {
-      val page = try { repo.searchBookPage(mode.bookId, query, after) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-      _bookSearch.update { if (page == null) it.copy(loadingMore = false) else it.withPage(after, page) }
-    }
-  }
-
-  /** Jumps to a library-search match: its own passage is underlined, and the overlay steps aside. */
-  fun openBookSearchHit(target: IndexTarget) {
-    val session = session() ?: return
-    if (target.bookId != session.book.id) return
-    targetJob?.cancel()
-    targetJob = viewModelScope.launch {
-      if (!repo.isCurrent(target)) { staleTarget(); return@launch }
-      edit { copy(textSearchOpen = false, chrome = false) }
-      reportOutcome(session.goToTarget(target))
-    }
-  }
-
-  fun goTo(entry: TocEntry) { session()?.go(entry.link); closeReaderOverlays() }
-  fun goTo(locator: Locator) { session()?.go(locator); closeReaderOverlays() }
 }
 
-sealed interface ReaderLoad {
-  data object Idle : ReaderLoad
-  data object Loading : ReaderLoad
-  data class Failed(val message: String) : ReaderLoad
-  data class Ready(val session: ReaderSession) : ReaderLoad
-}
-
-data class SearchUi(val query: String = "", val hits: List<SearchHit> = emptyList(), val running: Boolean = false)

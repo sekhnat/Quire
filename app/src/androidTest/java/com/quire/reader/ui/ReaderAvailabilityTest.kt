@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import androidx.lifecycle.ViewModelProvider
+import com.quire.reader.ui.reader.ReaderLoad
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.quire.reader.MainActivity
@@ -66,7 +67,7 @@ class ReaderAvailabilityTest {
       assertTrue("expected available under Quire typography, was ${row.reason}", row.available)
     }
 
-    vm.updateBookAdvanced { it.copy(typographySource = TypographySource.Book) }
+    vm.reader.updateBookAdvanced { it.copy(typographySource = TypographySource.Book) }
     awaitCondition("book typography applied") { session().preferenceContext?.let { !it.paragraphIndent.available } == true }
     val bookRules = session().preferenceContext!!
     for (row in listOf(bookRules.paragraphIndent, bookRules.paragraphSpacing, bookRules.weight, bookRules.hyphens, bookRules.lineHeight, bookRules.textAlign)) {
@@ -79,7 +80,7 @@ class ReaderAvailabilityTest {
     // The submitted preferences are exactly the mapped semantic ones — no probe ever went out.
     awaitSubmittedMatches()
 
-    vm.updateBookAdvanced { it.copy(typographySource = TypographySource.Quire) }
+    vm.reader.updateBookAdvanced { it.copy(typographySource = TypographySource.Quire) }
     awaitCondition("Quire typography restored") { session().preferenceContext?.let { it.paragraphIndent.available } == true }
     awaitSubmittedMatches()
   }
@@ -91,7 +92,7 @@ class ReaderAvailabilityTest {
     assertFalse(scrolling.pageLayout.available)
     assertEquals(com.quire.reader.reader.UnavailableReason.Mode, scrolling.pageLayout.reason)
 
-    vm.updatePrefs { it.copy(mode = ReadMode.Paged) }
+    vm.reader.updatePrefs { it.copy(mode = ReadMode.Paged) }
     awaitCondition("page layout restored in pages mode") { session().preferenceContext?.let { it.pageLayout.available } == true }
     awaitSubmittedMatches()
   }
@@ -101,25 +102,25 @@ class ReaderAvailabilityTest {
     awaitCondition("availability context") { session().preferenceContext != null }
     assertTrue(session().preferenceContext!!.images.available)
 
-    vm.updatePrefs { it.copy(theme = ReaderTheme.Sepia) }
+    vm.reader.updatePrefs { it.copy(theme = ReaderTheme.Sepia) }
     awaitCondition("sepia applied") { session().preferenceContext?.let { !it.images.available } == true }
     assertEquals(com.quire.reader.reader.UnavailableReason.Theme, session().preferenceContext!!.images.reason)
 
-    vm.updatePrefs { it.copy(theme = ReaderTheme.Paper) }
+    vm.reader.updatePrefs { it.copy(theme = ReaderTheme.Paper) }
     awaitCondition("paper applied") { session().preferenceContext?.let { !it.images.available } == true }
 
-    vm.updatePrefs { it.copy(theme = ReaderTheme.Night) }
+    vm.reader.updatePrefs { it.copy(theme = ReaderTheme.Night) }
     awaitCondition("night applied") { session().preferenceContext?.let { it.images.available } == true }
   }
 
   private fun open(mode: ReadMode) {
     runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = mode)) }
     scenario.onActivity { vm.read(book.id) }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     awaitCondition("book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
-  private fun session() = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session() = (vm.readerLoad as ReaderLoad.Ready).session
 
   /**
    * The navigator resolves exactly the settings the semantic mapping implies — a probe
@@ -128,7 +129,7 @@ class ReaderAvailabilityTest {
   private fun awaitSubmittedMatches() {
     awaitCondition("submitted preferences match the mapping") {
       val session = session()
-      val mapped = session.layout.let { vm.prefs.value.toEpubPreferences(it) }
+      val mapped = session.layout.let { vm.reader.prefs.value.toEpubPreferences(it) }
       val expected = EpubSettingsResolver(session.publication.metadata, EpubDefaults()).settings(mapped)
       session.navigator?.settings?.value == expected
     }

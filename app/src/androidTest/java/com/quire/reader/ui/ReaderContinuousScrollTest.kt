@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import androidx.lifecycle.ViewModelProvider
+import com.quire.reader.ui.reader.ReaderLoad
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.quire.reader.MainActivity
@@ -229,12 +230,12 @@ class ReaderContinuousScrollTest {
 
   private fun open(start: () -> Unit) {
     scenario.onActivity { start() }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     // Whole-book readiness: the scroll surface is only asked for content once every chapter is prepared.
     awaitCondition("whole-book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   private fun chapterHeadings(session: ReaderSession): List<String> = runBlocking {
     (0..5).map { c ->

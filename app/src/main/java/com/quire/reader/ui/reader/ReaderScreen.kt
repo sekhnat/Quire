@@ -57,16 +57,12 @@ import com.quire.reader.theme.ReaderTheme
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.IconBtn
-import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.Ph
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QSlider
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.QuireViewModel
-import com.quire.reader.ui.ReaderLoad
 import com.quire.reader.ui.Sheet
 import com.quire.reader.ui.TocTab
-import com.quire.reader.ui.UiState
 import com.quire.reader.ui.dashedBorder
 import kotlin.math.roundToInt
 
@@ -75,33 +71,34 @@ private const val ZONE_BACK = 1f / 3.3f
 private const val ZONE_NEXT = 2.3f / 3.3f
 
 @Composable
-fun ReaderScreen(s: UiState, lib: LibraryData, vm: QuireViewModel) {
-  val load by vm.reader.collectAsStateWithLifecycle()
+fun ReaderScreen(reader: ReaderState) {
+  val load by reader.load.collectAsStateWithLifecycle()
+  val s by reader.ui.collectAsStateWithLifecycle()
   when (val l = load) {
-    is ReaderLoad.Ready -> ReaderContent(l.session, s, vm)
-    is ReaderLoad.Failed -> Message(l.message, vm)
-    else -> Message(null, vm)
+    is ReaderLoad.Ready -> ReaderContent(l.session, s, reader)
+    is ReaderLoad.Failed -> Message(l.message, reader)
+    else -> Message(null, reader)
   }
 }
 
 @Composable
-private fun Message(error: String?, vm: QuireViewModel) {
-  BackHandler { vm.closeReader() }
+private fun Message(error: String?, reader: ReaderState) {
+  BackHandler { reader.leave() }
   Column(Modifier.fillMaxSize().background(Nq.bg).statusBarsPadding().padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
     QText(error ?: "Opening book…", 14f, color = Nq.neutral400, align = TextAlign.Center)
-    if (error != null) QButton("Back to library", vm::closeReader, Modifier.padding(top = 20.dp), BtnKind.Primary, icon = Ic.ArrowLeft)
+    if (error != null) QButton("Back to library", reader::leave, Modifier.padding(top = 20.dp), BtnKind.Primary, icon = Ic.ArrowLeft)
   }
 }
 
 @Composable
-private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel) {
-  val prefs by vm.prefs.collectAsStateWithLifecycle()
-  val bookmarks by vm.bookmarks.collectAsStateWithLifecycle()
-  val highlights by vm.highlights.collectAsStateWithLifecycle()
-  val search by vm.search.collectAsStateWithLifecycle()
-  val bookSearch by vm.bookSearchUi.collectAsStateWithLifecycle()
-  val hasOverride by vm.hasBookOverride.collectAsStateWithLifecycle()
-  val hasAdvancedOverride by vm.hasBookAdvancedOverride.collectAsStateWithLifecycle()
+private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: ReaderState) {
+  val prefs by reader.prefs.collectAsStateWithLifecycle()
+  val bookmarks by reader.bookmarks.collectAsStateWithLifecycle()
+  val highlights by reader.highlights.collectAsStateWithLifecycle()
+  val search by reader.search.collectAsStateWithLifecycle()
+  val bookSearch by reader.bookSearchUi.collectAsStateWithLifecycle()
+  val hasOverride by reader.hasBookOverride.collectAsStateWithLifecycle()
+  val hasAdvancedOverride by reader.hasBookAdvancedOverride.collectAsStateWithLifecycle()
   val locator by session.current.collectAsStateWithLifecycle()
   val theme = prefs.theme
   val book = session.book
@@ -114,24 +111,24 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
   // The single submission path: mapped preferences go to the session, which deduplicates
   // by equality and applies them through the navigator in one serialized pass.
   LaunchedEffect(session, epubPrefs) { session.submit(epubPrefs) }
-  val bookmarked = vm.isBookmarked(session, bookmarks)
+  val bookmarked = reader.isBookmarked(session, bookmarks)
 
   BackHandler {
     when {
-      s.noteFor != null -> vm.editNote(null)
-      s.textSearchOpen -> vm.setTextSearch(false)
-      s.sheet != null || s.showZones || s.activeHighlight != null || s.chrome -> vm.closeReaderOverlays()
-      else -> vm.closeReader()
+      s.noteFor != null -> reader.editNote(null)
+      s.textSearchOpen -> reader.setTextSearch(false)
+      s.sheet != null || s.showZones || s.activeHighlight != null || s.chrome -> reader.closeReaderOverlays()
+      else -> reader.leave()
     }
   }
 
   val onTap: (Float) -> Unit = { x ->
     when {
-      s.activeHighlight != null -> vm.setActiveHighlight(null)
-      s.chrome -> vm.setChrome(false)
-      x < ZONE_BACK -> if (!session.goBackward()) vm.toast("Start of book")
-      x > ZONE_NEXT -> if (!session.goForward()) vm.toast("End of book")
-      else -> vm.setChrome(true)
+      s.activeHighlight != null -> reader.setActiveHighlight(null)
+      s.chrome -> reader.setChrome(false)
+      x < ZONE_BACK -> if (!session.goBackward()) reader.toast("Start of book")
+      x > ZONE_NEXT -> if (!session.goForward()) reader.toast("End of book")
+      else -> reader.setChrome(true)
     }
   }
 
@@ -141,7 +138,7 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
     Box(Modifier.fillMaxSize().padding(top = statusTop + 32.dp, bottom = navBottom + 46.dp)) {
       EpubHost(
         session = session, preferences = epubPrefs, onTap = onTap,
-        onSelectionAction = vm::onSelectionAction, onHighlightTapped = { vm.setActiveHighlight(it) },
+        onSelectionAction = reader::onSelectionAction, onHighlightTapped = { reader.setActiveHighlight(it) },
         modifier = Modifier.fillMaxSize(),
       )
       if (bookmarked) Ph(Ic.BookmarkFill, 26.dp, Nq.accent, Modifier.align(Alignment.TopEnd).padding(end = 22.dp).offset(y = (-6).dp))
@@ -157,14 +154,14 @@ private fun ReaderContent(session: ReaderSession, s: UiState, vm: QuireViewModel
     // in-app brightness dimmer (never intercepts touches)
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = (1 - s.brightness / 100f) * 0.8f)))
 
-    if (s.showZones) TapZones { vm.showZones(false) }
+    if (s.showZones) TapZones { reader.showZones(false) }
 
-    ReaderChrome(s, session, vm, bookmarked, locator?.locations?.totalProgression?.toFloat() ?: 0f)
-    HighlightActions(s, vm, navBottom)
-    DisplaySheet(s, session, prefs, hasOverride, hasAdvancedOverride, vm)
-    ContentsSheet(s, session, bookmarks, highlights, vm)
-    SearchOverlay(s, search, bookSearch, vm)
-    NoteSheet(s, highlights, vm)
+    ReaderChrome(s, session, reader, bookmarked, locator?.locations?.totalProgression?.toFloat() ?: 0f)
+    HighlightActions(s, reader, navBottom)
+    DisplaySheet(s, session, prefs, hasOverride, hasAdvancedOverride, reader)
+    ContentsSheet(s, session, bookmarks, highlights, reader)
+    SearchOverlay(s, search, bookSearch, reader)
+    NoteSheet(s, highlights, reader)
   }
 }
 
@@ -194,7 +191,7 @@ private fun LightBarsEffect(theme: ReaderTheme, overlay: Boolean) {
 }
 
 @Composable
-private fun ReaderChrome(s: UiState, session: ReaderSession, vm: QuireViewModel, marked: Boolean, progress: Float) {
+private fun ReaderChrome(s: ReaderUiState, session: ReaderSession, reader: ReaderState, marked: Boolean, progress: Float) {
   val book = session.book
   var dragging by remember { mutableStateOf<Float?>(null) }
   Box(Modifier.fillMaxSize()) {
@@ -203,13 +200,13 @@ private fun ReaderChrome(s: UiState, session: ReaderSession, vm: QuireViewModel,
         Modifier.fillMaxWidth().background(Nq.surface).statusBarsPadding().padding(start = 8.dp, end = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp),
       ) {
-        IconBtn(Ic.ArrowLeft, vm::closeReader)
+        IconBtn(Ic.ArrowLeft, reader::leave)
         Column(Modifier.weight(1f)) {
           QText(book.title, 14f, weight = 500, maxLines = 1)
           QText(book.author, 11f, color = Nq.neutral500, maxLines = 1)
         }
-        IconBtn(Ic.Search, { vm.setTextSearch(true) })
-        IconBtn(if (marked) Ic.BookmarkFill else Ic.Bookmark, vm::toggleBookmark, tint = if (marked) Nq.accent else Nq.text)
+        IconBtn(Ic.Search, { reader.setTextSearch(true) })
+        IconBtn(if (marked) Ic.BookmarkFill else Ic.Bookmark, reader::toggleBookmark, tint = if (marked) Nq.accent else Nq.text)
       }
     }
     AnimatedVisibility(s.chrome, Modifier.align(Alignment.BottomCenter), enter = slideInVertically(tween(250)) { it }, exit = slideOutVertically(tween(250)) { it }) {
@@ -232,10 +229,10 @@ private fun ReaderChrome(s: UiState, session: ReaderSession, vm: QuireViewModel,
         }
         Row(Modifier.fillMaxWidth()) {
           listOf(
-            Triple(Ic.ListBullets, "Contents") { vm.openSheet(Sheet.Contents, TocTab.Contents) },
-            Triple(Ic.TextAa, "Display") { vm.openSheet(Sheet.Display) },
-            Triple(Ic.Highlighter, "Highlights") { vm.openSheet(Sheet.Contents, TocTab.Highlights) },
-            Triple(Ic.Search, "Search") { vm.setTextSearch(true) },
+            Triple(Ic.ListBullets, "Contents") { reader.openSheet(Sheet.Contents, TocTab.Contents) },
+            Triple(Ic.TextAa, "Display") { reader.openSheet(Sheet.Display) },
+            Triple(Ic.Highlighter, "Highlights") { reader.openSheet(Sheet.Contents, TocTab.Highlights) },
+            Triple(Ic.Search, "Search") { reader.setTextSearch(true) },
           ).forEach { (icon, label, act) ->
             Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = act).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
               Ph(icon, 22.dp, Nq.text)
@@ -250,16 +247,16 @@ private fun ReaderChrome(s: UiState, session: ReaderSession, vm: QuireViewModel,
 
 /** Actions for a highlight the reader just tapped. */
 @Composable
-private fun HighlightActions(s: UiState, vm: QuireViewModel, navBottom: Dp) {
+private fun HighlightActions(s: ReaderUiState, reader: ReaderState, navBottom: Dp) {
   val id = s.activeHighlight
   Box(Modifier.fillMaxSize()) {
     AnimatedVisibility(id != null, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = navBottom + 56.dp), enter = fadeIn(tween(150)), exit = fadeOut(tween(150))) {
       val shape = RoundedCornerShape(14.dp)
       Row(Modifier.fillMaxWidth().shadow(16.dp, shape).background(Nq.surface, shape).padding(6.dp)) {
         listOf(
-          Triple(Ic.NotePencil, "Note", Nq.text) to { id?.let { vm.editNote(it) } },
-          Triple(Ic.Copy, "Copy", Nq.text) to { id?.let { vm.copyHighlight(it) } },
-          Triple(Ic.X, "Remove", Nq.accent) to { id?.let { vm.deleteHighlight(it) } },
+          Triple(Ic.NotePencil, "Note", Nq.text) to { id?.let { reader.editNote(it) } },
+          Triple(Ic.Copy, "Copy", Nq.text) to { id?.let { reader.copyHighlight(it) } },
+          Triple(Ic.X, "Remove", Nq.accent) to { id?.let { reader.deleteHighlight(it) } },
         ).forEach { (spec, act) ->
           val (icon, label, color) = spec
           Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = { act() }).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {

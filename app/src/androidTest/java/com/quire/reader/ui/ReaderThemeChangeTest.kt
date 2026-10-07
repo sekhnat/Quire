@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import androidx.lifecycle.ViewModelProvider
+import com.quire.reader.ui.reader.ReaderLoad
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.quire.reader.MainActivity
@@ -57,13 +58,13 @@ class ReaderThemeChangeTest {
   private fun themesSurvive(mode: ReadMode) {
     runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = mode, theme = ReaderTheme.Night)) }
     scenario.onActivity { vm.read(book.id) }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     Thread.sleep(2_000)
     for (theme in listOf(ReaderTheme.Paper, ReaderTheme.Sepia, ReaderTheme.Black, ReaderTheme.Dusk, ReaderTheme.Night)) {
-      scenario.onActivity { vm.updatePrefs { it.copy(theme = theme) } }
+      scenario.onActivity { vm.reader.updatePrefs { it.copy(theme = theme) } }
       Thread.sleep(1_500)
-      assertEquals(theme, vm.prefs.value.theme)
-      assertTrue("the reader is still open after switching to $theme", vm.reader.value is ReaderLoad.Ready)
+      assertEquals(theme, vm.reader.prefs.value.theme)
+      assertTrue("the reader is still open after switching to $theme", vm.readerLoad is ReaderLoad.Ready)
     }
   }
 

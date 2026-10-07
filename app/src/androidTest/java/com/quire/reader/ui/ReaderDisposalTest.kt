@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import androidx.lifecycle.ViewModelProvider
+import com.quire.reader.ui.reader.ReaderLoad
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.quire.reader.MainActivity
@@ -171,7 +172,7 @@ class ReaderDisposalTest {
     val nav = session().navigator!!
     var surface: ContinuousBookWebView? = null
     scenario.onActivity { surface = nav.continuousBook }
-    vm.updatePrefs { it.copy(mode = ReadMode.Paged) }
+    vm.reader.updatePrefs { it.copy(mode = ReadMode.Paged) }
     awaitCondition("the scroll surface is gone") { nav.continuousBook == null }
     assertEquals(ContinuousBookState.Disposed, surface!!.state.value)
     awaitCondition("the pager is live") { runCatching { nav.resourcePager }.isSuccess }
@@ -194,9 +195,9 @@ class ReaderDisposalTest {
     assertEquals(ContinuousBookState.Disposed, second.state.value)
 
     // Recovery: switching modes rebuilds a working reader around the failed one.
-    vm.updatePrefs { it.copy(mode = ReadMode.Paged) }
+    vm.reader.updatePrefs { it.copy(mode = ReadMode.Paged) }
     awaitCondition("the pager is live") { runCatching { nav.resourcePager }.isSuccess }
-    vm.updatePrefs { it.copy(mode = ReadMode.Scroll) }
+    vm.reader.updatePrefs { it.copy(mode = ReadMode.Scroll) }
     awaitCondition("a fresh scroll surface") { nav.continuousBook != null }
     awaitCondition("ready again after recovery", 60_000) { runBlocking { nav.awaitWholeBookReadiness() } }
   }
@@ -241,11 +242,11 @@ class ReaderDisposalTest {
 
   private fun open() {
     scenario.onActivity { vm.read(book.id) }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     awaitCondition("whole-book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   private fun navigatorCount(): Int {
     var count = -1

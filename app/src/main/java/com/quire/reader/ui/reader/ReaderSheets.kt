@@ -77,8 +77,6 @@ import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QSlider
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
-import com.quire.reader.ui.QuireViewModel
-import com.quire.reader.ui.SearchUi
 import com.quire.reader.ui.SegOption
 import com.quire.reader.ui.Segmented
 import com.quire.reader.ui.Sheet
@@ -88,7 +86,6 @@ import com.quire.reader.ui.sheetNote
 import com.quire.reader.ui.snippetText
 import com.quire.reader.ui.TabRow2
 import com.quire.reader.ui.TocTab
-import com.quire.reader.ui.UiState
 import com.quire.reader.ui.bleed
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.lazy.LazyRow
@@ -97,24 +94,24 @@ import androidx.compose.foundation.lazy.itemsIndexed as rowItemsIndexed
 // ── display settings ────────────────────────────────────────────────────────
 
 @Composable
-internal fun DisplaySheet(s: UiState, session: ReaderSession, prefs: ReaderPrefs, hasOverride: Boolean, hasAdvancedOverride: Boolean, vm: QuireViewModel) {
+internal fun DisplaySheet(s: ReaderUiState, session: ReaderSession, prefs: ReaderPrefs, hasOverride: Boolean, hasAdvancedOverride: Boolean, reader: ReaderState) {
   val maxH = (LocalConfiguration.current.screenHeightDp * 0.88f).dp
-  SheetHost(s.sheet == Sheet.Display, { vm.openSheet(null) }, Modifier.heightIn(max = maxH), backdrop = 0.5f) {
+  SheetHost(s.sheet == Sheet.Display, { reader.openSheet(null) }, Modifier.heightIn(max = maxH), backdrop = 0.5f) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Ph(Ic.SunDim, 18.dp, Nq.neutral400)
-        QSlider(s.brightness.toFloat(), { vm.setBrightness(it.toInt()) }, 30f..100f, Modifier.weight(1f))
+        QSlider(s.brightness.toFloat(), { reader.setBrightness(it.toInt()) }, 30f..100f, Modifier.weight(1f))
         Ph(Ic.Sun, 20.dp, Nq.neutral200)
       }
 
-      ReadingControls(prefs, session.preferenceContext) { change -> vm.updatePrefs(change) }
+      ReadingControls(prefs, session.preferenceContext) { change -> reader.updatePrefs(change) }
 
       // The advanced controls, only when they are switched on in Settings. The section's
       // collapse state lives in session memory and resets for a new book.
-      val advancedEnabled by vm.advancedReadingEnabled.collectAsStateWithLifecycle()
+      val advancedEnabled by reader.advancedReadingEnabled.collectAsStateWithLifecycle()
       if (advancedEnabled) {
         Row(
-          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { vm.setAdvancedOpen(!s.advancedOpen) }.padding(vertical = 10.dp),
+          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { reader.setAdvancedOpen(!s.advancedOpen) }.padding(vertical = 10.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -124,9 +121,9 @@ internal fun DisplaySheet(s: UiState, session: ReaderSession, prefs: ReaderPrefs
         AnimatedVisibility(s.advancedOpen) {
           Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             AdvancedReadingControls(
-              prefs.advanced, session.preferenceContext, vm::updateBookAdvanced, vm::chooseParagraphPreset,
+              prefs.advanced, session.preferenceContext, reader::updateBookAdvanced, reader::chooseParagraphPreset,
               lineHeight = prefs.lineHeight,
-              onLineHeight = { v -> vm.updatePrefs { it.copy(lineHeight = v) } },
+              onLineHeight = { v -> reader.updatePrefs { it.copy(lineHeight = v) } },
             )
             var confirmRestore by remember { mutableStateOf(false) }
             QButton("Restore advanced defaults", { confirmRestore = true }, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = hasAdvancedOverride)
@@ -139,7 +136,7 @@ internal fun DisplaySheet(s: UiState, session: ReaderSession, prefs: ReaderPrefs
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                   QButton("Cancel", { confirmRestore = false }, Modifier.weight(1f), size = 13f, height = 42.dp)
-                  QButton("Restore", { confirmRestore = false; vm.restoreBookAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
+                  QButton("Restore", { confirmRestore = false; reader.restoreBookAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
                 }
               }
             }
@@ -149,10 +146,10 @@ internal fun DisplaySheet(s: UiState, session: ReaderSession, prefs: ReaderPrefs
       }
 
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QButton("Tap zones", { vm.showZones(true) }, Modifier.weight(1f), icon = Ic.HandTap, size = 12.5f)
-        QButton("Make default", vm::useForAllBooks, Modifier.weight(1f), BtnKind.Primary, icon = Ic.CheckCircle, size = 12.5f)
+        QButton("Tap zones", { reader.showZones(true) }, Modifier.weight(1f), icon = Ic.HandTap, size = 12.5f)
+        QButton("Make default", reader::useForAllBooks, Modifier.weight(1f), BtnKind.Primary, icon = Ic.CheckCircle, size = 12.5f)
       }
-      if (hasOverride) QButton("Back to my defaults", vm::resetBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
+      if (hasOverride) QButton("Back to my defaults", reader::resetBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
       QText(if (hasOverride) "This book has its own settings" else "Changes here apply to this book only. Set your defaults in Settings.", 11f, Modifier.fillMaxWidth(), color = Nq.neutral500, align = TextAlign.Center)
     }
   }
@@ -239,22 +236,22 @@ internal fun SettingRow(label: String, reason: String? = null, control: @Composa
 private class Row2(val title: String, val sub: String, val right: String, val current: Boolean, val indent: Int, val serif: Boolean, val marked: Boolean, val onDelete: (() -> Unit)?, val onClick: () -> Unit)
 
 @Composable
-internal fun ContentsSheet(s: UiState, session: ReaderSession, bookmarks: List<BookmarkEntity>, highlights: List<HighlightEntity>, vm: QuireViewModel) {
+internal fun ContentsSheet(s: ReaderUiState, session: ReaderSession, bookmarks: List<BookmarkEntity>, highlights: List<HighlightEntity>, reader: ReaderState) {
   val locator by session.current.collectAsStateWithLifecycle()
   val toc by session.tocFlow.collectAsStateWithLifecycle()
-  SheetHost(s.sheet == Sheet.Contents, { vm.openSheet(null) }, Modifier.fillMaxHeight(0.78f)) {
+  SheetHost(s.sheet == Sheet.Contents, { reader.openSheet(null) }, Modifier.fillMaxHeight(0.78f)) {
     Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      TabRow2(TocTab.entries.map { it.label }, s.tocTab.ordinal, { vm.setTocTab(TocTab.entries[it]) }, Modifier.padding(horizontal = 20.dp), fill = true, horizontalPadding = 0.dp)
+      TabRow2(TocTab.entries.map { it.label }, s.tocTab.ordinal, { reader.setTocTab(TocTab.entries[it]) }, Modifier.padding(horizontal = 20.dp), fill = true, horizontalPadding = 0.dp)
       val currentChapter = session.chapterIndex(locator)
       val rows: List<Row2> = when (s.tocTab) {
         TocTab.Contents -> toc.mapIndexed { i, e ->
-          Row2(e.title, "", if (e.position > 0) e.position.toString() else "", i == currentChapter, e.depth, false, false, null) { vm.goTo(e) }
+          Row2(e.title, "", if (e.position > 0) e.position.toString() else "", i == currentChapter, e.depth, false, false, null) { reader.goTo(e) }
         }
         TocTab.Bookmarks -> bookmarks.map { b ->
-          Row2(b.label, "${(b.progress * 100).toInt()}% through the book", "", false, 0, false, true, { vm.deleteBookmark(b.id) }) { ReaderSession.parseLocator(b.locatorJson)?.let(vm::goTo) }
+          Row2(b.label, "${(b.progress * 100).toInt()}% through the book", "", false, 0, false, true, { reader.deleteBookmark(b.id) }) { ReaderSession.parseLocator(b.locatorJson)?.let(reader::goTo) }
         }
         TocTab.Highlights -> highlights.map { h ->
-          Row2(h.text.ifBlank { "Highlight" }, h.note ?: "${(h.progress * 100).toInt()}% through the book · highlighted", "", false, 0, true, true, { vm.deleteHighlight(h.id) }) { ReaderSession.parseLocator(h.locatorJson)?.let(vm::goTo) }
+          Row2(h.text.ifBlank { "Highlight" }, h.note ?: "${(h.progress * 100).toInt()}% through the book · highlighted", "", false, 0, true, true, { reader.deleteHighlight(h.id) }) { ReaderSession.parseLocator(h.locatorJson)?.let(reader::goTo) }
         }
       }
       val list = rememberLazyListState()
@@ -292,7 +289,7 @@ private fun TocItem(r: Row2) {
 // ── in-book search ──────────────────────────────────────────────────────────
 
 @Composable
-internal fun SearchOverlay(s: UiState, search: SearchUi, bookSearch: BookSearchUi, vm: QuireViewModel) {
+internal fun SearchOverlay(s: ReaderUiState, search: SearchUi, bookSearch: BookSearchUi, reader: ReaderState) {
   val focus = remember { FocusRequester() }
   LaunchedEffect(s.textSearchOpen) { if (s.textSearchOpen) { delay(300); runCatching { focus.requestFocus() } } }
   val library = s.bookSearch
@@ -300,12 +297,12 @@ internal fun SearchOverlay(s: UiState, search: SearchUi, bookSearch: BookSearchU
     AnimatedVisibility(s.textSearchOpen, enter = slideInVertically(tween(280)) { -it }, exit = slideOutVertically(tween(280)) { -it }) {
       Column(Modifier.fillMaxSize().background(Nq.bg).statusBarsPadding()) {
         Row(Modifier.padding(start = 8.dp, end = 12.dp, top = 6.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-          IconBtn(Ic.ArrowLeft, { vm.setTextSearch(false) })
-          if (library != null) QTextField(library.query, vm::setBookSearchQuery, "Search all matches in this book", Modifier.weight(1f), onClear = { vm.setBookSearchQuery("") }, focusRequester = focus)
-          else QTextField(s.textQuery, vm::setTextQuery, "Search in this book", Modifier.weight(1f), onClear = { vm.setTextQuery("") }, focusRequester = focus)
+          IconBtn(Ic.ArrowLeft, { reader.setTextSearch(false) })
+          if (library != null) QTextField(library.query, reader::setBookSearchQuery, "Search all matches in this book", Modifier.weight(1f), onClear = { reader.setBookSearchQuery("") }, focusRequester = focus)
+          else QTextField(s.textQuery, reader::setTextQuery, "Search in this book", Modifier.weight(1f), onClear = { reader.setTextQuery("") }, focusRequester = focus)
         }
         if (library != null) {
-          LibrarySearchResults(bookSearch, vm)
+          LibrarySearchResults(bookSearch, reader)
           return@Column
         }
         val idle = s.textQuery.trim().length < 2
@@ -321,7 +318,7 @@ internal fun SearchOverlay(s: UiState, search: SearchUi, bookSearch: BookSearchU
         )
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp)) {
           itemsIndexed(search.hits) { _, r ->
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { vm.openSearchHit(r) }.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { reader.openSearchHit(r) }.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
               QText(r.chapter.ifEmpty { "—" }, 11f, color = Nq.neutral500, maxLines = 1)
               Text(
                 buildAnnotatedString {
@@ -341,10 +338,10 @@ internal fun SearchOverlay(s: UiState, search: SearchUi, bookSearch: BookSearchU
 
 /** The overlay's body in library-search mode: a labelled header, the loaded matches, and a note when the index is partial. */
 @Composable
-private fun ColumnScope.LibrarySearchResults(ui: BookSearchUi, vm: QuireViewModel) {
+private fun ColumnScope.LibrarySearchResults(ui: BookSearchUi, reader: ReaderState) {
   Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
     Kicker("Library search · this book", Modifier.weight(1f), color = Nq.accent200)
-    QText("Use book search", 11.5f, Modifier.clip(RoundedCornerShape(6.dp)).clickable { vm.closeBookSearch() }.padding(horizontal = 6.dp, vertical = 4.dp), color = Nq.neutral400)
+    QText("Use book search", 11.5f, Modifier.clip(RoundedCornerShape(6.dp)).clickable { reader.closeBookSearch() }.padding(horizontal = 6.dp, vertical = 4.dp), color = Nq.neutral400)
   }
   val n = ui.snippets.size
   QText(
@@ -366,11 +363,11 @@ private fun ColumnScope.LibrarySearchResults(ui: BookSearchUi, vm: QuireViewMode
   // Ask for the next page as the end of the list comes into view.
   LaunchedEffect(listState, ui.snippets.size, ui.nextAfterSeq) {
     snapshotFlow { listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1 }
-      .collect { last -> if (last >= ui.snippets.size - LOAD_MORE_AHEAD) vm.loadMoreBookSearch() }
+      .collect { last -> if (last >= ui.snippets.size - LOAD_MORE_AHEAD) reader.loadMoreBookSearch() }
   }
   LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp)) {
     items(ui.snippets, key = { it.seq }) { snippet ->
-      Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { vm.openBookSearchHit(snippet.target) }.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { reader.openBookSearchHit(snippet.target) }.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         QText(snippet.chapter.ifEmpty { "—" }, 11f, color = Nq.neutral500, maxLines = 1)
         Text(
           snippetText(snippet.spans),
@@ -388,20 +385,20 @@ private const val LOAD_MORE_AHEAD = 4
 // ── notes ───────────────────────────────────────────────────────────────────
 
 @Composable
-internal fun NoteSheet(s: UiState, highlights: List<HighlightEntity>, vm: QuireViewModel) {
+internal fun NoteSheet(s: ReaderUiState, highlights: List<HighlightEntity>, reader: ReaderState) {
   val id = s.noteFor
   val h = highlights.firstOrNull { it.id == id }
   var text by remember(id) { mutableStateOf(h?.note.orEmpty()) }
   val focus = remember { FocusRequester() }
   LaunchedEffect(id) { if (id != null) { delay(350); runCatching { focus.requestFocus() } } }
-  SheetHost(id != null, { vm.editNote(null) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+  SheetHost(id != null, { reader.editNote(null) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
     Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
       QText("Note", 17f, weight = 500)
       if (h != null) QText(h.text, 13f, color = Nq.neutral400, family = QuireFonts.Literata, lh = 1.5f, maxLines = 3)
       QTextField(text, { text = it }, "Add a note to this passage", singleLine = false, minLines = 3, focusRequester = focus)
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        QButton("Remove highlight", { id?.let(vm::deleteHighlight) }, Modifier.weight(1f), icon = Ic.X, size = 12.5f)
-        QButton("Save", { id?.let { vm.saveNote(it, text) } }, Modifier.weight(1f), BtnKind.Primary, icon = Ic.CheckBold, size = 12.5f)
+        QButton("Remove highlight", { id?.let(reader::deleteHighlight) }, Modifier.weight(1f), icon = Ic.X, size = 12.5f)
+        QButton("Save", { id?.let { reader.saveNote(it, text) } }, Modifier.weight(1f), BtnKind.Primary, icon = Ic.CheckBold, size = 12.5f)
       }
     }
   }

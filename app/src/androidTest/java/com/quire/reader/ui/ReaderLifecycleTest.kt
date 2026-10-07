@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import android.content.pm.ActivityInfo
+import com.quire.reader.ui.reader.ReaderLoad
 import android.content.res.Configuration
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
@@ -108,7 +109,7 @@ class ReaderLifecycleTest {
 
     // The ViewModel and its session survive the recreation; the reader screen composes again
     // with the same session and a freshly added navigator.
-    awaitCondition("reader ready again") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready again") { vm.readerLoad is ReaderLoad.Ready }
     awaitReaderRebuilt()
     assertSame("the open session survives recreation", sessionBefore, session())
     assertEquals("exactly one live navigator after recreation", 1, navigatorCount())
@@ -156,7 +157,7 @@ class ReaderLifecycleTest {
 
     scenario.recreate()
 
-    awaitCondition("reader ready again") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready again") { vm.readerLoad is ReaderLoad.Ready }
     awaitReaderRebuilt()
     // The restored navigator dummy and its restored page fragments are gone; the live pager
     // keeps its page fragments inside the navigator's own child manager.
@@ -258,13 +259,13 @@ class ReaderLifecycleTest {
 
   private fun open(start: () -> Unit) {
     scenario.onActivity { start() }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     // Whole-book readiness: the scroll surface is only asked for content once every chapter is
     // prepared.
     awaitCondition("whole-book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   private fun awaitCondition(what: String, timeoutMs: Long = 30_000, check: () -> Boolean) {
     val deadline = System.currentTimeMillis() + timeoutMs

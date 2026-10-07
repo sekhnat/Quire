@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import androidx.lifecycle.ViewModelProvider
+import com.quire.reader.ui.reader.ReaderLoad
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.quire.reader.MainActivity
@@ -107,7 +108,7 @@ class ReaderBoundedScrollTest {
     awaitTargetInView(session, EpubFixtures.LONG_TARGET_CHAPTER, "far-target")
     Thread.sleep(1_500)
 
-    scenario.onActivity { vm.updatePrefs { it.copy(fontSize = 25) } }
+    scenario.onActivity { vm.reader.updatePrefs { it.copy(fontSize = 25) } }
     Thread.sleep(2_000)
 
     // The text is larger now, so the same paragraph is taller, but it must still be what the reader sees:
@@ -194,11 +195,11 @@ class ReaderBoundedScrollTest {
   private fun open() {
     runBlocking { app.library.setBookPrefs(book.id, ReaderPrefs(mode = ReadMode.Scroll)) }
     scenario.onActivity { vm.read(book.id) }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     awaitCondition("book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   /** Where the element with [id] in chapter [chapter] sits in the outer viewport (negative: scrolled above it), or null. */
   private fun visibleTop(session: ReaderSession, chapter: Int, id: String): Double? {
