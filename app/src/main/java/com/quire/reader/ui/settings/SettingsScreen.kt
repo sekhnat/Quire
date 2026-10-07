@@ -140,6 +140,8 @@ fun SettingsScreen(vm: QuireViewModel) {
               neutralAvailability,
               onAdvanced = { change -> vm.updateDefaults { it.copy(advanced = change(it.advanced)) } },
               onPreset = { preset -> vm.updateDefaults { it.copy(advanced = it.advanced.withPreset(preset) ?: it.advanced) } },
+              lineHeight = defaults.lineHeight,
+              onLineHeight = { v -> vm.updateDefaults { it.copy(lineHeight = v) } },
             )
             QText("The preview above shows the basic settings; the advanced options apply when reading, and each book can still hold a control back.", 11.5f, color = Nq.neutral500)
             QButton("Restore advanced defaults", { confirmingAdvancedRestore = true }, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = advancedCustomized)
