@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import android.app.Instrumentation
+import com.quire.reader.ui.reader.ReaderLoad
 import android.content.Intent
 import android.content.IntentFilter
 import androidx.lifecycle.Lifecycle
@@ -234,11 +235,11 @@ class ReaderLinkPolicyTest {
 
   private fun open(start: () -> Unit) {
     scenario.onActivity { start() }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     awaitCondition("whole-book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   private fun jumpByToc(session: ReaderSession, title: String) {
     val entry = session.toc.firstOrNull { it.title == title } ?: error("no TOC entry titled $title")

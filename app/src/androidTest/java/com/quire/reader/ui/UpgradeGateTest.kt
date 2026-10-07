@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import android.graphics.Bitmap
+import com.quire.reader.ui.reader.ReaderLoad
 import android.view.PixelCopy
 import android.os.Handler
 import android.os.Looper
@@ -149,7 +150,7 @@ class UpgradeGateTest {
 
   private fun open(book: Book) {
     scenario.onActivity { vm.read(book.id) }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
     awaitCondition("book readiness", 60_000) { runBlocking { session().navigator?.awaitWholeBookReadiness() == true } }
   }
 
@@ -162,7 +163,7 @@ class UpgradeGateTest {
 
   private fun closeReader() {
     scenario.onActivity { vm.closeReader() }
-    awaitCondition("reader closed") { vm.reader.value !is ReaderLoad.Ready }
+    awaitCondition("reader closed") { vm.readerLoad !is ReaderLoad.Ready }
     Thread.sleep(500)
   }
 
@@ -240,7 +241,7 @@ class UpgradeGateTest {
 
   private fun round4(value: Double?): Double = if (value == null) -1.0 else Math.round(value * 10_000.0) / 10_000.0
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   private fun awaitViewModel(): QuireViewModel {
     var found: QuireViewModel? = null

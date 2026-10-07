@@ -75,26 +75,8 @@ data class UiState(
   val pickedFolders: Set<String> = emptySet(),
   val useCalibre: Boolean = true,
   val watchFolders: Boolean = true,
-
-  // reader overlays (the reading settings themselves live in ReaderPrefs)
-  val chrome: Boolean = false,
-  val sheet: Sheet? = null,
-  val tocTab: TocTab = TocTab.Contents,
-  /** Whether the reader's Display sheet shows the advanced controls expanded. Session memory; resets per book. */
-  val advancedOpen: Boolean = false,
-  val showZones: Boolean = false,
-  val textSearchOpen: Boolean = false,
-  val textQuery: String = "",
-  /** Set while the search overlay is in library-search mode ("Show all in this book"); [textQuery] is then not used. */
-  val bookSearch: BookSearchMode? = null,
-  val brightness: Int = 100,
-  /** Highlight whose actions (note, remove, copy) are showing after tapping it. */
-  val activeHighlight: Long? = null,
-  /** Highlight being given a note. */
-  val noteFor: Long? = null,
 ) {
   val discovering get() = discovery != null
-  val readerOverlayOpen get() = sheet != null || textSearchOpen || showZones || chrome || activeHighlight != null || noteFor != null
 }
 
 fun statusLabel(b: Book) = when {

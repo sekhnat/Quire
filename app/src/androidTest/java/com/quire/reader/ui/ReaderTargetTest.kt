@@ -1,6 +1,7 @@
 package com.quire.reader.ui
 
 import android.graphics.Bitmap
+import com.quire.reader.ui.reader.ReaderLoad
 import android.os.Environment
 import android.util.Log
 import androidx.lifecycle.Lifecycle
@@ -350,7 +351,7 @@ class ReaderTargetTest {
     val first = session()
     scenario.moveToState(Lifecycle.State.CREATED)
     scenario.onActivity { vm.closeReader(); vm.read(book.id) }
-    awaitCondition("the second reader") { (vm.reader.value as? ReaderLoad.Ready)?.session?.let { it !== first } == true }
+    awaitCondition("the second reader") { (vm.readerLoad as? ReaderLoad.Ready)?.session?.let { it !== first } == true }
     scenario.moveToState(Lifecycle.State.RESUMED)
     awaitCondition("the second reader's pages") { session().navigator != null }
     assertTrue(awaitUnderlined(timeoutMs = 1_000, ok = { true }).isEmpty())
@@ -377,49 +378,49 @@ class ReaderTargetTest {
     scenario.onActivity { vm.library.openTextHit(stale) }
     awaitToast(STALE_TARGET_MESSAGE)
     assertEquals(Destination.Library, vm.destination.value)
-    assertTrue(vm.reader.value is ReaderLoad.Idle)
+    assertTrue(vm.readerLoad is ReaderLoad.Idle)
   }
 
   @Test fun `library search mode pages one book and each tap underlines its own match`() {
     open { vm.library.openBookSearch(book.id, "the") }
-    awaitCondition("first page") { vm.bookSearchUi.value.status == BookSearchStatus.Results }
-    assertEquals(book.id, vm.state.value.bookSearch?.bookId)
-    assertTrue(vm.state.value.textSearchOpen)
-    val first = vm.bookSearchUi.value
+    awaitCondition("first page") { vm.reader.bookSearchUi.value.status == BookSearchStatus.Results }
+    assertEquals(book.id, vm.reader.ui.value.bookSearch?.bookId)
+    assertTrue(vm.reader.ui.value.textSearchOpen)
+    val first = vm.reader.bookSearchUi.value
     assertEquals(20, first.snippets.size)
     assertTrue(first.hasMore)
     shoot("library-mode-first-page")
 
-    scenario.onActivity { vm.loadMoreBookSearch() }
-    awaitCondition("second page") { vm.bookSearchUi.value.snippets.size == 40 }
-    val seqs = vm.bookSearchUi.value.snippets.map { it.seq }
+    scenario.onActivity { vm.reader.loadMoreBookSearch() }
+    awaitCondition("second page") { vm.reader.bookSearchUi.value.snippets.size == 40 }
+    val seqs = vm.reader.bookSearchUi.value.snippets.map { it.seq }
     assertEquals(seqs.sorted(), seqs)
     assertEquals(seqs.distinct(), seqs)
-    scenario.onActivity { vm.loadMoreBookSearch(); vm.loadMoreBookSearch() }
+    scenario.onActivity { vm.reader.loadMoreBookSearch(); vm.reader.loadMoreBookSearch() }
     Thread.sleep(500)
-    assertFalse("a repeated request must not duplicate a page", vm.bookSearchUi.value.snippets.map { it.seq }.let { it != it.distinct() })
+    assertFalse("a repeated request must not duplicate a page", vm.reader.bookSearchUi.value.snippets.map { it.seq }.let { it != it.distinct() })
 
     // Editing keeps library semantics and the chosen book until the mode is closed.
     val query = phrase()
-    scenario.onActivity { vm.setBookSearchQuery(query) }
-    awaitCondition("edited query") { vm.bookSearchUi.value.let { it.status == BookSearchStatus.Results && it.snippets.size < 40 } }
-    assertEquals(book.id, vm.state.value.bookSearch?.bookId)
-    assertEquals(query, vm.state.value.bookSearch?.query)
-    assertTrue(vm.state.value.textQuery.isEmpty())
+    scenario.onActivity { vm.reader.setBookSearchQuery(query) }
+    awaitCondition("edited query") { vm.reader.bookSearchUi.value.let { it.status == BookSearchStatus.Results && it.snippets.size < 40 } }
+    assertEquals(book.id, vm.reader.ui.value.bookSearch?.bookId)
+    assertEquals(query, vm.reader.ui.value.bookSearch?.query)
+    assertTrue(vm.reader.ui.value.textQuery.isEmpty())
 
     // Tapping a match navigates and underlines that match, and only that one.
-    val tapped = vm.bookSearchUi.value.snippets.first()
-    scenario.onActivity { vm.openBookSearchHit(tapped.target) }
+    val tapped = vm.reader.bookSearchUi.value.snippets.first()
+    scenario.onActivity { vm.reader.openBookSearchHit(tapped.target) }
     val underlined = awaitUnderlined(href = hrefOf(tapped.target)) { it.isNotEmpty() }
     assertEquals(1, underlined.size)
     assertEquals(normalize(tapped.target.highlight), normalize(underlined.first()))
-    assertFalse(vm.state.value.textSearchOpen)
+    assertFalse(vm.reader.ui.value.textSearchOpen)
     shoot("library-mode-after-tap")
 
     // Closing the mode returns to ordinary state.
-    scenario.onActivity { vm.setTextSearch(true); vm.setTextSearch(false) }
-    assertNull(vm.state.value.bookSearch)
-    assertEquals(BookSearchUi(), vm.bookSearchUi.value)
+    scenario.onActivity { vm.reader.setTextSearch(true); vm.reader.setTextSearch(false) }
+    assertNull(vm.reader.ui.value.bookSearch)
+    assertEquals(BookSearchUi(), vm.reader.bookSearchUi.value)
   }
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -507,10 +508,10 @@ class ReaderTargetTest {
 
   private fun open(start: () -> Unit) {
     scenario.onActivity { start() }
-    awaitCondition("reader ready") { vm.reader.value is ReaderLoad.Ready }
+    awaitCondition("reader ready") { vm.readerLoad is ReaderLoad.Ready }
   }
 
-  private fun session(): ReaderSession = (vm.reader.value as ReaderLoad.Ready).session
+  private fun session(): ReaderSession = (vm.readerLoad as ReaderLoad.Ready).session
 
   /** Texts under the search underline in the page now showing, polled until [ok] accepts them. */
   private fun awaitUnderlined(timeoutMs: Long = 12_000, href: Url? = null, ok: (List<String>) -> Boolean): List<String> {

@@ -51,7 +51,7 @@ fun QuireApp(
         Destination.Onboard -> OnboardingScreen(s, vm)
         Destination.Library -> LibraryScreen(libState, lib, vm.library)
         is Destination.Detail -> DetailScreen(d.state, lib)
-        Destination.Reader -> ReaderScreen(s, lib, vm)
+        is Destination.Reader -> ReaderScreen(d.state)
         Destination.Settings -> SettingsScreen(vm)
       }
     }
