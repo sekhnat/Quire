@@ -69,14 +69,15 @@ private fun fmt(n: Int) = NumberFormat.getIntegerInstance(Locale.US).format(n)
 @Composable
 fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
   var pickingFolder by remember { mutableStateOf(false) }
-  BackHandler(enabled = s.onboardStep == OnboardStep.Access || s.onboardStep == OnboardStep.Folders) {
-    vm.setStep(if (s.onboardStep == OnboardStep.Folders) OnboardStep.Welcome else OnboardStep.Welcome)
+  // Guarding an existing library, the Access step has nothing to go back to.
+  BackHandler(enabled = (s.onboardStep == OnboardStep.Access && !s.accessForLibrary) || s.onboardStep == OnboardStep.Folders) {
+    vm.setStep(OnboardStep.Welcome)
   }
   LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.refreshAccess() }
   Box(Modifier.fillMaxSize().background(Nq.bg).cornerGlow(500.dp, 360.dp, Nq.section)) {
     when (s.onboardStep) {
       OnboardStep.Welcome -> Welcome(vm)
-      OnboardStep.Access -> Access(vm)
+      OnboardStep.Access -> Access(vm, forLibrary = s.accessForLibrary)
       OnboardStep.Folders -> PickFolders(s, vm, onAddFolder = { pickingFolder = true })
       OnboardStep.Scan -> Scanning(s, vm)
     }
@@ -111,15 +112,16 @@ private fun Welcome(vm: QuireViewModel) {
 }
 
 @Composable
-private fun Access(vm: QuireViewModel) {
+private fun Access(vm: QuireViewModel, forLibrary: Boolean) {
   val context = LocalContext.current
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-    IconBtn(Ic.ArrowLeft, { vm.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
+    if (forLibrary) Spacer(Modifier.height(40.dp)) else IconBtn(Ic.ArrowLeft, { vm.setStep(OnboardStep.Welcome) }, Modifier.offset(x = (-8).dp))
     Column(Modifier.padding(horizontal = 8.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(14.dp)) {
       Box(Modifier.size(44.dp).border(1.dp, Nq.accent, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) { Ph(Ic.FolderOpen, 22.dp, Nq.accent) }
       QText("Allow access to your files", 24f, Modifier.padding(top = 10.dp), weight = 500, ls = -0.01f)
       QText(
-        "Quire opens books straight from your folders — your Calibre library, Books, Downloads — so it can keep up as files are added or removed.",
+        if (forLibrary) "Your library is back, but its books live in your folders and Android doesn't carry file access over. Allow it again so Quire can open them."
+        else "Quire opens books straight from your folders — your Calibre library, Books, Downloads — so it can keep up as files are added or removed.",
         14f, color = Nq.neutral400, lh = 1.6f,
       )
       QText("Android calls this “All files access”. It’s a single switch in Settings, and everything stays on your phone: Quire never uploads anything.", 14f, color = Nq.neutral400, lh = 1.6f)

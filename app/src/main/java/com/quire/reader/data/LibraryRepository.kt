@@ -83,6 +83,9 @@ class LibraryRepository(
 
   suspend fun rescan(): ScanResult = scanner.scan().also { indexer.sweep(); indexer.request() }
 
+  /** Whether any watched folder holds books, which only all-files access can open. */
+  suspend fun hasWatchedFolders(): Boolean = withContext(Dispatchers.IO) { db.folders().watched().isNotEmpty() }
+
   /** Adds a folder to watch. Returns false if it can't be read or is already in the library. */
   suspend fun addFolder(path: String): Boolean = withContext(Dispatchers.IO) {
     val dir = File(path)

@@ -144,7 +144,17 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
       app.restore.prepare()
       val done = settings.onboardingDone.first()
       val useCalibre = settings.useCalibre.first()
-      edit { copy(screen = if (done) Screen.Library else Screen.Onboard, hasAccess = StoragePaths.hasAllFilesAccess(), useCalibre = useCalibre) }
+      val access = StoragePaths.hasAllFilesAccess()
+      // A library of folder books is unreadable without all-files access, which no restore can carry over: ask for it first.
+      val needsAccess = done && !access && repo.hasWatchedFolders()
+      edit {
+        copy(
+          screen = if (done && !needsAccess) Screen.Library else Screen.Onboard,
+          onboardStep = if (needsAccess) OnboardStep.Access else onboardStep,
+          accessForLibrary = needsAccess,
+          hasAccess = access, useCalibre = useCalibre,
+        )
+      }
     }
     viewModelScope.launch { settings.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
     // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
@@ -169,7 +179,9 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
     val granted = StoragePaths.hasAllFilesAccess()
     edit { copy(hasAccess = granted) }
     // Coming back from the Settings screen with access granted moves on by itself.
-    if (granted && _state.value.onboardStep == OnboardStep.Access) goToFolders()
+    if (granted && _state.value.screen == Screen.Onboard && _state.value.onboardStep == OnboardStep.Access) {
+      if (_state.value.accessForLibrary) returnToLibrary() else goToFolders()
+    }
     if (granted) app.indexer.request()
   }
 
@@ -177,6 +189,15 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel() {
 
   fun chooseFolders() {
     if (StoragePaths.hasAllFilesAccess()) goToFolders() else edit { copy(onboardStep = OnboardStep.Access, hasAccess = false) }
+  }
+
+  /** Access is back for a library that already exists: open it and scan its folders, which could not be read until now. */
+  private fun returnToLibrary() {
+    edit { copy(screen = Screen.Library, accessForLibrary = false) }
+    viewModelScope.launch {
+      val r = repo.rescan()
+      if (r.added > 0 || r.removed > 0 || r.moved > 0) toast(describe(r))
+    }
   }
 
   private fun goToFolders() {
