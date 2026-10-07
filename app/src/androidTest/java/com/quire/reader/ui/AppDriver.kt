@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.ui.reader.ReaderLoad
 import com.quire.reader.ui.reader.ReaderState
+import com.quire.reader.ui.settings.SettingsState
 
 /** The open reader's state holder; fails when the reader isn't showing. */
 val QuireViewModel.reader: ReaderState
@@ -16,3 +17,10 @@ fun QuireViewModel.read(bookId: Long, restart: Boolean = false) = openReader(Rea
 
 /** Leaves the reader for the library, as its back button does. */
 fun QuireViewModel.closeReader() = openLibrary()
+
+/** The open Settings screen's state holder; fails when Settings isn't showing. */
+val QuireViewModel.settings: SettingsState
+  get() = (destination.value as? Destination.Settings)?.state ?: error("Settings is not open")
+
+/** Leaves Settings for the library, as its back button does. */
+fun QuireViewModel.closeSettings() = openLibrary()

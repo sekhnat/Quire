@@ -83,14 +83,14 @@ fun OnboardingScreen(s: UiState, vm: QuireViewModel) {
     }
     FolderPickerSheet(pickingFolder && s.onboardStep == OnboardStep.Folders, { pickingFolder = false }, vm::addPickedFolder)
     // A new install can start from a full backup instead: there is no library yet, so only "replace" makes sense.
-    RestoreSheet(vm, allowMerge = false)
+    RestoreSheet(vm.restore, allowMerge = false)
   }
 }
 
 @Composable
 private fun Welcome(vm: QuireViewModel) {
   val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> vm.importFiles(uris) }
-  val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.inspectBackup(uri) }
+  val backupOpen = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) vm.restore.inspect(uri) }
   Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(start = 28.dp, end = 28.dp, top = 22.dp, bottom = 40.dp), verticalArrangement = Arrangement.SpaceBetween) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {

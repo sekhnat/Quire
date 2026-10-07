@@ -36,7 +36,6 @@ import com.quire.reader.ui.Kicker
 import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
-import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.RestoreUi
 import com.quire.reader.ui.SegOption
 import com.quire.reader.ui.Segmented
@@ -54,8 +53,8 @@ val BACKUP_PICK_TYPES = arrayOf(BackupFiles.MIME, "application/x-zip-compressed"
  * over the whole screen; this is only the section in the scrolling list.
  */
 @Composable
-internal fun BackupSection(vm: QuireViewModel, onBackUp: () -> Unit, onRestore: () -> Unit, onPickFolder: () -> Unit) {
-  val backup by vm.backup.collectAsStateWithLifecycle()
+internal fun BackupSection(settings: SettingsState, onBackUp: () -> Unit, onRestore: () -> Unit, onPickFolder: () -> Unit) {
+  val backup by settings.backup.backup.collectAsStateWithLifecycle()
   val askNotifications = rememberNotificationRequest()
   Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
     Kicker("Full backup")
@@ -70,14 +69,14 @@ internal fun BackupSection(vm: QuireViewModel, onBackUp: () -> Unit, onRestore: 
     }
     Toggle("Back up automatically", "A new backup in a folder on this phone; older ones are deleted", backup.auto) {
       if (!backup.auto) askNotifications()
-      vm.setAutoBackup(!backup.auto)
+      settings.backup.setAutoBackup(!backup.auto)
     }
     if (backup.auto) {
       Choice("How often") {
-        Segmented(BackupInterval.entries.map { SegOption(it.name, backup.interval == it, { vm.setAutoBackupInterval(it) }) })
+        Segmented(BackupInterval.entries.map { SegOption(it.name, backup.interval == it, { settings.backup.setInterval(it) }) })
       }
       Choice("Backups to keep") {
-        Segmented(listOf(3, 5, 10).map { n -> SegOption("$n", backup.keep == n, { vm.setAutoBackupKeep(n) }) })
+        Segmented(listOf(3, 5, 10).map { n -> SegOption("$n", backup.keep == n, { settings.backup.setKeep(n) }) })
       }
       Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -115,13 +114,13 @@ private fun Choice(label: String, control: @Composable () -> Unit) {
  * choice once a backup was picked. [choosing] is the "Back up now" sheet's visibility.
  */
 @Composable
-internal fun BackupSheets(vm: QuireViewModel, choosing: Boolean, onDismissChoosing: () -> Unit) {
-  val backup by vm.backup.collectAsStateWithLifecycle()
-  val sizes by vm.backupSizes.collectAsStateWithLifecycle()
-  val storage by vm.storageBytes.collectAsStateWithLifecycle()
+internal fun BackupSheets(settings: SettingsState, choosing: Boolean, onDismissChoosing: () -> Unit) {
+  val backup by settings.backup.backup.collectAsStateWithLifecycle()
+  val sizes by settings.backup.sizes.collectAsStateWithLifecycle()
+  val storage by settings.storageBytes.collectAsStateWithLifecycle()
   val askNotifications = rememberNotificationRequest()
   val create = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(BackupFiles.MIME)) { uri ->
-    if (uri != null) vm.startBackup(uri)
+    if (uri != null) settings.backup.start(uri)
   }
   BackHandler(enabled = choosing, onBack = onDismissChoosing)
   SheetHost(choosing, onDismissChoosing, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
@@ -129,9 +128,9 @@ internal fun BackupSheets(vm: QuireViewModel, choosing: Boolean, onDismissChoosi
       QText("Back up now", 17f, weight = 500)
       QText("Your library, reading data and settings are always included. Choose what else goes in; automatic backups use the same choice.", 12.5f, color = Nq.neutral400, lh = 1.5f)
       val c = backup.contents
-      Toggle("Search index", storage?.let { "${formatBytes(it.index)} · saves indexing the library again" } ?: "Saves indexing the library again", c.index) { vm.setBackupContents(c.copy(index = !c.index)) }
-      Toggle("Covers", sizes?.let { "${count(it.covers, "cover")} · ${formatBytes(it.coverBytes)}" } ?: "Thumbnails; rebuilt by a rescan if left out", c.covers) { vm.setBackupContents(c.copy(covers = !c.covers)) }
-      Toggle("Imported books", importedSub(sizes), c.imported) { vm.setBackupContents(c.copy(imported = !c.imported)) }
+      Toggle("Search index", storage?.let { "${formatBytes(it.index)} · saves indexing the library again" } ?: "Saves indexing the library again", c.index) { settings.backup.setContents(c.copy(index = !c.index)) }
+      Toggle("Covers", sizes?.let { "${count(it.covers, "cover")} · ${formatBytes(it.coverBytes)}" } ?: "Thumbnails; rebuilt by a rescan if left out", c.covers) { settings.backup.setContents(c.copy(covers = !c.covers)) }
+      Toggle("Imported books", importedSub(sizes), c.imported) { settings.backup.setContents(c.copy(imported = !c.imported)) }
       QButton(
         "Choose where to save",
         {
@@ -143,7 +142,7 @@ internal fun BackupSheets(vm: QuireViewModel, choosing: Boolean, onDismissChoosi
       )
     }
   }
-  RestoreSheet(vm)
+  RestoreSheet(settings.restore)
 }
 
 private fun importedSub(sizes: BackupSizes?): String = when {
@@ -157,18 +156,18 @@ private fun importedSub(sizes: BackupSizes?): String = when {
  * onboarding, where there is no library to merge into yet.
  */
 @Composable
-fun RestoreSheet(vm: QuireViewModel, allowMerge: Boolean = true) {
-  val restore by vm.restore.collectAsStateWithLifecycle()
+fun RestoreSheet(restore: RestoreState, allowMerge: Boolean = true) {
+  val ui by restore.ui.collectAsStateWithLifecycle()
   var confirming by remember { mutableStateOf(false) }
   // Keep showing the last backup while the sheet animates out.
   var shown by remember { mutableStateOf<RestoreUi.Ready?>(null) }
-  (restore as? RestoreUi.Ready)?.let { shown = it }
-  val visible = restore is RestoreUi.Ready || restore is RestoreUi.Working
+  (ui as? RestoreUi.Ready)?.let { shown = it }
+  val visible = ui is RestoreUi.Ready || ui is RestoreUi.Working
   LaunchedEffect(visible) { if (!visible) confirming = false }
-  BackHandler(enabled = restore is RestoreUi.Ready) { if (confirming) confirming = false else vm.dismissRestore() }
-  SheetHost(visible, vm::dismissRestore, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+  BackHandler(enabled = ui is RestoreUi.Ready) { if (confirming) confirming = false else restore.dismiss() }
+  SheetHost(visible, restore::dismiss, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
     Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-      when (val r = restore) {
+      when (val r = ui) {
         is RestoreUi.Working -> {
           QText(r.label, 17f, weight = 500)
           ProgressLine(r.progress ?: 0f)
@@ -184,12 +183,12 @@ fun RestoreSheet(vm: QuireViewModel, allowMerge: Boolean = true) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               QButton("Cancel", { confirming = false }, Modifier.weight(1f), size = 13f, height = 42.dp)
-              QButton("Replace", vm::replaceFromBackup, Modifier.weight(1f), size = 13f, height = 42.dp, color = Nq.danger)
+              QButton("Replace", restore::replace, Modifier.weight(1f), size = 13f, height = 42.dp, color = Nq.danger)
             }
           } else {
             if (allowMerge) {
               Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                QButton("Merge reading data", vm::mergeFromBackup, Modifier.fillMaxWidth(), BtnKind.Primary, size = 13f, height = 42.dp)
+                QButton("Merge reading data", restore::merge, Modifier.fillMaxWidth(), BtnKind.Primary, size = 13f, height = 42.dp)
                 QText("Adds its highlights, notes, bookmarks, positions and tags to your library. Nothing here is replaced.", 11.5f, color = Nq.neutral500, lh = 1.45f)
               }
             }

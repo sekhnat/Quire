@@ -52,7 +52,7 @@ fun QuireApp(
         Destination.Library -> LibraryScreen(libState, lib, vm.library)
         is Destination.Detail -> DetailScreen(d.state, lib)
         is Destination.Reader -> ReaderScreen(d.state)
-        Destination.Settings -> SettingsScreen(vm)
+        is Destination.Settings -> SettingsScreen(d.state)
       }
     }
     Toast(toast, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 120.dp))

@@ -3,6 +3,7 @@ package com.quire.reader.ui
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.ui.detail.DetailState
 import com.quire.reader.ui.reader.ReaderState
+import com.quire.reader.ui.settings.SettingsState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -19,7 +20,7 @@ sealed interface Destination {
   data object Library : Destination
   data class Detail(val state: DetailState) : Destination
   data class Reader(val state: ReaderState) : Destination
-  data object Settings : Destination
+  data class Settings(val state: SettingsState) : Destination
 }
 
 /** How to open a book in the reader. */
