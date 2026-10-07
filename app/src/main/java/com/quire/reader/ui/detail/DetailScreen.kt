@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,21 +55,20 @@ import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
-import com.quire.reader.ui.QuireViewModel
 import com.quire.reader.ui.Scope
 import com.quire.reader.ui.ScopeKind
 import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.Tag
-import com.quire.reader.ui.UiState
 import com.quire.reader.ui.bleed
 import com.quire.reader.ui.cornerGlow
 import com.quire.reader.ui.statusLabel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel) {
-  BackHandler { vm.goLibrary() }
-  val book = lib.byId[bookId]
+fun DetailScreen(detail: DetailState, lib: LibraryData) {
+  val editOpen by detail.editOpen.collectAsStateWithLifecycle()
+  BackHandler { detail.back() }
+  val book = lib.byId[detail.bookId]
   if (book == null) { Box(Modifier.fillMaxSize().background(Nq.bg)); return }
   val siblings = lib.siblings(book)
   val more = lib.moreBy(book)
@@ -77,9 +77,9 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
   Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(Nq.bg).cornerGlow(420.dp, 320.dp, Nq.section).statusBarsPadding()) {
       Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconBtn(Ic.ArrowLeft, vm::goLibrary)
+        IconBtn(Ic.ArrowLeft, detail::back)
         Box(Modifier.weight(1f))
-        IconBtn(Ic.Pencil, { vm.openEdit(true) }, tint = Nq.neutral300)
+        IconBtn(Ic.Pencil, { detail.openEdit(true) }, tint = Nq.neutral300)
       }
       Column(
         Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
@@ -91,11 +91,11 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
             if (book.series != null) {
               QText(
                 book.series + (book.seriesNoLabel?.let { " · Book $it" } ?: ""), 10f,
-                Modifier.clickable { vm.openLibraryScope(Scope(ScopeKind.Series, book.series)) }, color = Nq.accent, ls = 0.1f, upper = true,
+                Modifier.clickable { detail.showScope(Scope(ScopeKind.Series, book.series)) }, color = Nq.accent, ls = 0.1f, upper = true,
               )
             }
             QText(book.title, 22f, weight = 500, ls = -0.01f, lh = 1.15f, balance = true)
-            QText(book.author, 13.5f, Modifier.clickable { vm.openLibraryScope(Scope(ScopeKind.Author, book.primaryAuthor)) }, color = Nq.accent300)
+            QText(book.author, 13.5f, Modifier.clickable { detail.showScope(Scope(ScopeKind.Author, book.primaryAuthor)) }, color = Nq.accent300)
             Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
               if (book.rating > 0) (1..5).forEach { i -> Ph(if (i <= book.rating) Ic.StarFill else Ic.Star, 13.dp, if (i <= book.rating) Nq.accent else Nq.neutral700) }
               QText(listOfNotNull(book.year?.toString(), "${book.pages} pages").joinToString(" · "), 11.5f, Modifier.padding(start = if (book.rating > 0) 6.dp else 0.dp), color = Nq.neutral500)
@@ -106,9 +106,9 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val cta = when (book.status) { BookStatus.Reading -> "Continue · ${book.pct}%"; BookStatus.Finished -> "Read again"; BookStatus.Unread -> "Start reading" }
-            QButton(cta, { vm.read(book.id, restart = book.status == BookStatus.Finished) }, Modifier.weight(1f), BtnKind.Primary, icon = Ic.BookOpen, height = 44.dp, enabled = book.readable)
-            IconBtn(Ic.FolderSimplePlus, { vm.openEdit(true) }, size = 44.dp, iconSize = 19.dp, bordered = true)
-            IconBtn(Ic.CheckBold, { vm.setFinished(book.id, book.status != BookStatus.Finished) }, size = 44.dp, iconSize = 19.dp, bordered = true, tint = if (book.status == BookStatus.Finished) Nq.accent else Nq.text)
+            QButton(cta, { detail.read(restart = book.status == BookStatus.Finished) }, Modifier.weight(1f), BtnKind.Primary, icon = Ic.BookOpen, height = 44.dp, enabled = book.readable)
+            IconBtn(Ic.FolderSimplePlus, { detail.openEdit(true) }, size = 44.dp, iconSize = 19.dp, bordered = true)
+            IconBtn(Ic.CheckBold, { detail.setFinished(book.status != BookStatus.Finished) }, size = 44.dp, iconSize = 19.dp, bordered = true, tint = if (book.status == BookStatus.Finished) Nq.accent else Nq.text)
           }
           if (!book.readable) QText("This file can’t be opened. It may be damaged or protected.", 12f, color = Nq.neutral500)
           if (reading) {
@@ -122,8 +122,8 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
         if (!book.desc.isNullOrBlank()) QText(book.desc, 14f, color = Nq.neutral300, lh = 1.6f)
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          book.tags.take(12).forEach { t -> Tag(t, { vm.openLibraryScope(Scope(ScopeKind.Tag, t)) }, size = 12f, vPad = 3.dp) }
-          Tag("Tag", { vm.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
+          book.tags.take(12).forEach { t -> Tag(t, { detail.showScope(Scope(ScopeKind.Tag, t)) }, size = 12f, vPad = 3.dp) }
+          Tag("Tag", { detail.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
         }
 
         if (siblings.size > 1) {
@@ -132,7 +132,7 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
             Column {
               siblings.forEach { b ->
                 Row(
-                  Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (b.id == book.id) Nq.surface else Color.Transparent).clickable { vm.openDetail(b.id) }.padding(8.dp),
+                  Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (b.id == book.id) Nq.surface else Color.Transparent).clickable { detail.openBook(b.id) }.padding(8.dp),
                   horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
                   QText(b.seriesNoLabel ?: "–", 12f, Modifier.width(16.dp), color = Nq.neutral500, tabular = true)
@@ -169,7 +169,7 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
             Kicker("More by ${book.authorLast}")
             LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
               items(more, key = { it.id }) { b ->
-                Column(Modifier.width(84.dp).clickable { vm.openDetail(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(Modifier.width(84.dp).clickable { detail.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                   MoreCover(b)
                   QText(statusLabel(b), 11f, color = Nq.neutral500)
                 }
@@ -179,26 +179,26 @@ fun DetailScreen(bookId: Long, s: UiState, lib: LibraryData, vm: QuireViewModel)
         }
       }
     }
-    EditSheet(s.editOpen, book, vm)
+    EditSheet(editOpen, book, detail)
   }
 }
 
 /** Quire-side edits: rating and tags. They live in Quire's database and never change Calibre's files. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun EditSheet(open: Boolean, book: Book, vm: QuireViewModel) {
+private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
   var newTag by remember(book.id, open) { mutableStateOf("") }
   val notesExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
-    if (uri != null) vm.exportNotes(book.id, uri)
+    if (uri != null) detail.exportNotes(uri)
   }
-  SheetHost(open, { vm.openEdit(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+  SheetHost(open, { detail.openEdit(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
     Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       QText("Edit in Quire", 17f, weight = 500)
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Kicker("Rating")
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
           (1..5).forEach { i ->
-            Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).clickable { vm.setRating(book.id, if (book.rating == i) null else i) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).clickable { detail.setRating(if (book.rating == i) null else i) }, contentAlignment = Alignment.Center) {
               Ph(if (i <= book.rating) Ic.StarFill else Ic.Star, 22.dp, if (i <= book.rating) Nq.accent else Nq.neutral600)
             }
           }
@@ -208,9 +208,9 @@ private fun EditSheet(open: Boolean, book: Book, vm: QuireViewModel) {
         Kicker("Tags")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
           book.tags.filter { it !in book.userTags }.forEach { t -> Tag(t, {}, size = 12f, vPad = 4.dp) }
-          book.userTags.forEach { t -> Tag(t, { vm.removeTag(book.id, t) }, size = 12f, icon = Ic.X, accent = true, vPad = 4.dp) }
+          book.userTags.forEach { t -> Tag(t, { detail.removeTag(t) }, size = 12f, icon = Ic.X, accent = true, vPad = 4.dp) }
         }
-        QTextField(newTag, { newTag = it }, "Add a tag", leadingIcon = Ic.Plus, onSubmit = { if (newTag.isNotBlank()) { vm.addTag(book.id, newTag); newTag = "" } })
+        QTextField(newTag, { newTag = it }, "Add a tag", leadingIcon = Ic.Plus, onSubmit = { if (newTag.isNotBlank()) { detail.addTag(newTag); newTag = "" } })
       }
       QText("Your tags (outlined in purple) can be removed here. Tags that came with the book can only be changed in Calibre. Your changes stay in Quire.", 11.5f, color = Nq.neutral500, lh = 1.4f)
       QButton("Export notes", { notesExport.launch("${book.title} — notes.md") }, Modifier.fillMaxWidth(), icon = Ic.FileDown, size = 12.5f)

@@ -20,14 +20,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 
+/** Where a feature asked to go: a [ReaderRequest], a [Scope], or one of these. */
+sealed interface Visit {
+  data object Library : Visit
+  data class Detail(val bookId: Long) : Visit
+  data object Settings : Visit
+}
+
 /** Records where the feature asked to go. */
 class RecordingNavigator : AppNavigator {
   val visits = mutableListOf<Any>()
-  override fun openLibrary() { visits += Destination.Library }
+  override fun openLibrary() { visits += Visit.Library }
   override fun openLibraryScope(scope: Scope) { visits += scope }
-  override fun openDetail(bookId: Long) { visits += Destination.Detail(bookId) }
+  override fun openDetail(bookId: Long) { visits += Visit.Detail(bookId) }
   override fun openReader(request: ReaderRequest) { visits += request }
-  override fun openSettings() { visits += Destination.Settings }
+  override fun openSettings() { visits += Visit.Settings }
 }
 
 /** Records every toast. */

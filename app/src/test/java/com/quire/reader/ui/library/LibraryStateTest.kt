@@ -3,7 +3,6 @@ package com.quire.reader.ui.library
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextStatusFilter
 import com.quire.reader.reader.STALE_TARGET_MESSAGE
-import com.quire.reader.ui.Destination
 import com.quire.reader.ui.FakeIndexer
 import com.quire.reader.ui.FakeLibraryPrefs
 import com.quire.reader.ui.FakeLibraryStore
@@ -16,6 +15,7 @@ import com.quire.reader.ui.SearchScope
 import com.quire.reader.ui.SortKey
 import com.quire.reader.ui.testBook
 import com.quire.reader.ui.testTarget
+import com.quire.reader.ui.Visit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -92,7 +92,7 @@ class LibraryStateTest {
   @Test fun `browsing actions go through the navigator`() = runTest {
     val library = library()
     library.openBook(2); library.read(1); library.openSettings()
-    assertEquals(listOf(Destination.Detail(2), ReaderRequest(1), Destination.Settings), nav.visits)
+    assertEquals(listOf(Visit.Detail(2), ReaderRequest(1), Visit.Settings), nav.visits)
   }
 
   @Test fun `the inside-books search runs with the library filter`() = runTest {

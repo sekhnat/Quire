@@ -76,9 +76,6 @@ data class UiState(
   val useCalibre: Boolean = true,
   val watchFolders: Boolean = true,
 
-  // detail
-  val editOpen: Boolean = false,
-
   // reader overlays (the reading settings themselves live in ReaderPrefs)
   val chrome: Boolean = false,
   val sheet: Sheet? = null,

@@ -8,6 +8,8 @@ import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.scan.StoragePaths
+import com.quire.reader.ui.detail.BookEditor
+import com.quire.reader.ui.detail.DetailState
 import com.quire.reader.ui.library.LibraryPrefs
 import com.quire.reader.ui.library.LibraryState
 import com.quire.reader.ui.library.LibraryStore
@@ -52,6 +54,16 @@ class Features(private val app: QuireApplication) {
     override suspend fun setLibrarySort(name: String, ascending: Boolean) { settings.setLibrarySort(name, ascending) }
     override suspend fun setTextSearchOrder(order: SearchOrder) { settings.setTextSearchOrder(order) }
   }
+
+  private val bookEditor = object : BookEditor {
+    override suspend fun setFinished(bookId: Long, finished: Boolean) = repo.setFinished(bookId, finished)
+    override suspend fun setUserRating(bookId: Long, rating: Int?) = repo.setUserRating(bookId, rating)
+    override suspend fun addTag(bookId: Long, tag: String) = repo.addTag(bookId, tag)
+    override suspend fun removeTag(bookId: Long, tag: String) = repo.removeTag(bookId, tag)
+  }
+
+  fun detail(bookId: Long, notes: NotesExport, nav: AppNavigator, toasts: Toasts, persist: CoroutineScope) =
+    DetailState(bookId, bookEditor, notes, nav, toasts, persist)
 
   fun library(nav: AppNavigator, toasts: Toasts, scope: CoroutineScope) =
     LibraryState(libraryStore, libraryPrefs, indexer, nav, toasts, StoragePaths::hasAllFilesAccess, scope)

@@ -50,7 +50,7 @@ fun QuireApp(
         Destination.Splash -> Box(Modifier.fillMaxSize().background(Nq.bg))
         Destination.Onboard -> OnboardingScreen(s, vm)
         Destination.Library -> LibraryScreen(libState, lib, vm.library)
-        is Destination.Detail -> DetailScreen(d.bookId, s, lib, vm)
+        is Destination.Detail -> DetailScreen(d.state, lib)
         Destination.Reader -> ReaderScreen(s, lib, vm)
         Destination.Settings -> SettingsScreen(vm)
       }
