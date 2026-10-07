@@ -42,6 +42,9 @@ class AdvancedControlsComponentTest {
     EpubPreferences(publisherStyles = true),
   )
 
+  /** The basic line height the controls show and set, kept beside the advanced state. */
+  private val lineHeight = mutableStateOf(1.6f)
+
   private fun setState(initial: AdvancedReaderPrefs, availability: ReaderPreferenceContext = ReaderPreferenceContext.neutralReflowable()): MutableState<AdvancedReaderPrefs> {
     val state = mutableStateOf(initial)
     compose.setContent {
@@ -50,6 +53,8 @@ class AdvancedControlsComponentTest {
         availability = availability,
         onAdvanced = { change -> state.value = change(state.value) },
         onPreset = { preset -> state.value = state.value.withPreset(preset) ?: state.value },
+        lineHeight = lineHeight.value,
+        onLineHeight = { lineHeight.value = it },
       )
     }
     return state
@@ -60,7 +65,7 @@ class AdvancedControlsComponentTest {
     for (row in listOf(
       "TYPOGRAPHY", "Quire typography",
       "PARAGRAPHS", "First-line indent", "Paragraph spacing",
-      "TEXT SPACING", "Letter spacing", "Word spacing", "Weight",
+      "TEXT SPACING", "Line spacing", "Letter spacing", "Word spacing", "Weight",
       "WRITING SYSTEM", "Hyphenation", "Ligatures", "Vertical text", "Reading direction",
       "PAGE", "Images", "Page layout",
     )) {
@@ -83,6 +88,17 @@ class AdvancedControlsComponentTest {
     // The chooser closed with the choice applied, and the row now shows it.
     compose.waitUntil(5_000) { !exists("Very wide") }
     check(exists("Wider"))
+  }
+
+  @Test fun `line spacing offers its steps by name and sets the line height`() {
+    setState(AdvancedReaderPrefs())
+    compose.onNodeWithText("Line spacing").assert(hasState("Normal")) { "state" }
+    compose.onNodeWithText("Line spacing").performClick()
+    compose.waitUntil(5_000) { exists("Relaxed") }
+    for (option in listOf("Tight", "Compact", "Normal", "Relaxed", "Loose")) check(exists(option))
+    compose.onNodeWithText("Loose").performClick()
+    compose.waitUntil(5_000) { lineHeight.value == 2.0f }
+    compose.onNodeWithText("Line spacing").assert(hasState("Loose")) { "state" }
   }
 
   @Test fun `the paragraph preset offers exactly the three presets`() {

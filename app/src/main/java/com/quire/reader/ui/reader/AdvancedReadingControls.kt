@@ -70,6 +70,9 @@ internal fun AdvancedReadingControls(
   availability: ReaderPreferenceContext?,
   onAdvanced: ((AdvancedReaderPrefs) -> AdvancedReaderPrefs) -> Unit,
   onPreset: (ParagraphPreset) -> Unit,
+  /** Line spacing is a basic setting (the basic row offers three of these steps); the picker here offers them all. */
+  lineHeight: Float,
+  onLineHeight: (Float) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Column(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -93,6 +96,9 @@ internal fun AdvancedReadingControls(
     })
 
     Kicker("Text spacing")
+    PickerRow("Line spacing", lineSpacingLabel(lineHeight), availability?.lineHeight, LineSpacingSteps.map { (value, label) ->
+      Option(label, value == lineHeight, enabled = true) { onLineHeight(value) }
+    })
     PickerRow("Letter spacing", advanced.letterSpacing.label(), availability?.letterSpacing, WidenLevel.entries.map { level ->
       Option(level.label(), level == advanced.letterSpacing, enabled = true) { onAdvanced { it.copy(letterSpacing = level) } }
     })
@@ -207,6 +213,12 @@ private fun ToggleRow(label: String, sub: String, availability: Availability?, o
     com.quire.reader.ui.Toggle(on, { onToggle(!on) }, enabled = enabled)
   }
 }
+
+/** The line-spacing steps, within the 1.0–2.0 range Readium supports; 1.4, 1.6 and 1.85 are the basic row's. */
+private val LineSpacingSteps = listOf(1.2f to "Tight", 1.4f to "Compact", 1.6f to "Normal", 1.85f to "Relaxed", 2.0f to "Loose")
+
+/** The step nearest [value], so a line height saved by an older version still reads as a word, never a number. */
+private fun lineSpacingLabel(value: Float) = LineSpacingSteps.minBy { kotlin.math.abs(it.first - value) }.second
 
 private fun TypographySource.label() = when (this) { TypographySource.Quire -> "Quire typography"; TypographySource.Book -> "Book typography" }
 private fun SpacingLevel.label() = when (this) { SpacingLevel.None -> "None"; SpacingLevel.Small -> "Small"; SpacingLevel.Medium -> "Medium"; SpacingLevel.Large -> "Large"; SpacingLevel.Default -> "Default" }

@@ -122,7 +122,11 @@ internal fun DisplaySheet(s: UiState, session: ReaderSession, prefs: ReaderPrefs
         }
         AnimatedVisibility(s.advancedOpen) {
           Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            AdvancedReadingControls(prefs.advanced, session.preferenceContext, vm::updateBookAdvanced, vm::chooseParagraphPreset)
+            AdvancedReadingControls(
+              prefs.advanced, session.preferenceContext, vm::updateBookAdvanced, vm::chooseParagraphPreset,
+              lineHeight = prefs.lineHeight,
+              onLineHeight = { v -> vm.updatePrefs { it.copy(lineHeight = v) } },
+            )
             var confirmRestore by remember { mutableStateOf(false) }
             QButton("Restore advanced defaults", { confirmRestore = true }, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f, enabled = hasAdvancedOverride)
             if (confirmRestore) SheetHost(true, { confirmRestore = false }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
