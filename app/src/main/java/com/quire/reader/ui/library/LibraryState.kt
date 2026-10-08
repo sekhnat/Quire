@@ -14,6 +14,8 @@ import com.quire.reader.data.scan.ScanProgress
 import com.quire.reader.data.scan.ScanResult
 import com.quire.reader.reader.STALE_TARGET_MESSAGE
 import com.quire.reader.ui.AppNavigator
+import com.quire.reader.ui.AuthorEntry
+import com.quire.reader.ui.BookQuery
 import com.quire.reader.ui.IndexerControl
 import com.quire.reader.ui.LibFilter
 import com.quire.reader.ui.LibLayout
@@ -24,25 +26,45 @@ import com.quire.reader.ui.LibraryUiState
 import com.quire.reader.ui.ReaderRequest
 import com.quire.reader.ui.Scope
 import com.quire.reader.ui.SearchScope
+import com.quire.reader.ui.SeriesEntry
+import com.quire.reader.ui.ShelfDef
 import com.quire.reader.ui.SortKey
 import com.quire.reader.ui.Toasts
+import com.quire.reader.ui.bookQuery
 import com.quire.reader.ui.books
 import com.quire.reader.ui.describe
 import com.quire.reader.ui.libLayoutOf
 import com.quire.reader.ui.sortKeyOf
 import com.quire.reader.ui.textSearchInput
 import com.quire.reader.ui.textSearchStatus
+import com.quire.reader.ui.visibleBooks
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
+
+/** The Books view's list for [query], from the library snapshot [lib]. Compared by identity, like [Derived]. */
+class VisibleBooks(val query: BookQuery, val lib: LibraryData, val books: List<Book>) {
+  companion object { val None = VisibleBooks(BookQuery(), LibraryData.Empty, emptyList()) }
+}
+
+/**
+ * A value worked out from one library snapshot. Compared by identity, so a state flow taking a new one never compares
+ * two whole lists, on the main thread where it collects.
+ */
+class Derived<out T>(val value: T)
 
 /** What the library needs from the data layer (`LibraryRepository`). */
 interface LibraryStore {
@@ -83,12 +105,39 @@ class LibraryState(
   private val toasts: Toasts,
   private val hasFileAccess: () -> Boolean,
   private val scope: CoroutineScope,
+  /** Where the book list and everything derived from it are worked out; never the main thread. */
+  private val compute: CoroutineContext = Dispatchers.Default,
 ) {
   private val _state = MutableStateFlow(LibraryUiState())
   val state: StateFlow<LibraryUiState> = _state
 
   val data: StateFlow<LibraryData> = combine(store.books, store.folders) { books, folders -> trace("LibraryData") { LibraryData(books, folders) } }
+    .flowOn(compute)
     .stateIn(scope, SharingStarted.Eagerly, LibraryData.Empty)
+
+  /**
+   * The Books view's list. It is worked out again only when the books or the [BookQuery] change, not for a new layout,
+   * view or open sheet. Only runs while something observes it, and keeps the last list meanwhile, so coming back to
+   * the library shows it at once.
+   */
+  val visible: StateFlow<VisibleBooks> = combine(data, _state.map { it.bookQuery }.distinctUntilChanged()) { lib, query ->
+    VisibleBooks(query, lib, visibleBooks(query, lib))
+  }
+    .flowOn(compute)
+    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), VisibleBooks.None)
+
+  /** The Authors view's groups; null until the library has loaded. */
+  val authors: StateFlow<Derived<List<Pair<Char, List<AuthorEntry>>>>?> = derived { it.authorGroups }
+  /** The Series view's series; null until the library has loaded. */
+  val series: StateFlow<Derived<List<SeriesEntry>>?> = derived { it.series }
+  /** The shelves layout's rows; null until the library has loaded. */
+  val shelves: StateFlow<Derived<List<ShelfDef>>?> = derived { it.shelves }
+
+  /** [pick] of each loaded library, worked out off the main thread and only while something observes it. */
+  private fun <T> derived(pick: (LibraryData) -> T): StateFlow<Derived<T>?> = data.filter { it.loaded }
+    .map { Derived(pick(it)) }
+    .flowOn(compute)
+    .stateIn(scope, SharingStarted.WhileSubscribed(5_000), null)
 
   val scan: StateFlow<ScanProgress> = store.scan
 

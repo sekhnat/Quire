@@ -92,7 +92,6 @@ import com.quire.reader.ui.Tag
 import com.quire.reader.ui.bleed
 import com.quire.reader.ui.cardStatus
 import com.quire.reader.ui.cssGradient
-import com.quire.reader.ui.visibleBooks
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.isActive
@@ -173,8 +172,8 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
             val search by library.textSearch.collectAsStateWithLifecycle()
             TextSearchResults(s, lib, search, library)
           } else BooksView(s, lib, library)
-          LibView.Authors -> AuthorsView(lib, library)
-          LibView.Series -> SeriesView(lib, library)
+          LibView.Authors -> AuthorsView(library)
+          LibView.Series -> SeriesView(library)
           LibView.Tags -> TagsView(lib, library)
         }
       }
@@ -222,41 +221,46 @@ private fun ScanStatusCard(library: LibraryState) {
 
 @Composable
 private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
-  val list = visibleBooks(s, lib.books)
+  val visible by library.visible.collectAsStateWithLifecycle()
+  val list = visible.books
   val filtered = s.scope != null || s.query.isNotBlank() || s.filter != LibFilter.All
   val layout = if (s.layout == LibLayout.Shelves && filtered) LibLayout.Grid else s.layout
   val bottom = 32.dp + navBottomPadding()
   val hPad = 20.dp
-  val shelves = lib.shelves
   when (layout) {
     LibLayout.Grid -> LazyVerticalGrid(
       GridCells.Fixed(3), Modifier.fillMaxSize(),
       contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom),
       horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-      item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, list, layout) }
+      item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, visible, layout) }
       items(list, key = { it.id }) { b -> GridCard(b, s.sort) { library.openBook(b.id) } }
     }
     LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
-      item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, list, layout) } }
+      item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, visible, layout) } }
       items(list, key = { it.id }) { b -> ListRow(b, s.sort) { library.openBook(b.id) } }
     }
     LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
-      item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, list, layout) } }
+      item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, visible, layout) } }
       items(list, key = { it.id }) { b ->
         Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
         ComfortableRow(b, s.sort) { library.openBook(b.id) }
       }
     }
-    LibLayout.Shelves -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-      item { BooksHeader(s, lib, library, list, layout) }
-      items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, library) }
+    LibLayout.Shelves -> {
+      // Only observed while shelves are on screen, so the other layouts never build them.
+      val shelves = library.shelves.collectAsStateWithLifecycle().value?.value.orEmpty()
+      LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        item { BooksHeader(s, lib, library, visible, layout) }
+        items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, library) }
+      }
     }
   }
 }
 
 @Composable
-private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibraryState, list: List<Book>, layout: LibLayout) {
+private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibraryState, visible: VisibleBooks, layout: LibLayout) {
+  val list = visible.books
   val showHero = s.scope == null && s.filter == LibFilter.All && s.query.isBlank() && layout != LibLayout.Shelves
   val showSortRow = layout != LibLayout.Shelves
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -271,10 +275,11 @@ private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibrarySta
     if (showSortRow) SortRow(s, library)
     val resume = lib.resume
     if (showHero && resume != null) Hero(resume, library)
-    if (lib.loaded && list.isEmpty() && layout != LibLayout.Shelves) {
+    // From the same snapshot as the list, so a list still being worked out never shows as empty.
+    if (visible.lib.loaded && list.isEmpty() && layout != LibLayout.Shelves) {
       Column(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Ph(Ic.Books, 28.dp, Nq.neutral500)
-        if (lib.books.isEmpty()) {
+        if (visible.lib.books.isEmpty()) {
           QText("No books yet. Add a folder that has EPUB files in it.", 13f, color = Nq.neutral500, align = androidx.compose.ui.text.style.TextAlign.Center)
           QButton("Add books", { library.openImport(true) }, kind = BtnKind.Primary, icon = Ic.Plus, size = 13f)
         } else QText("Nothing matches that filter.", 13f, color = Nq.neutral500)

@@ -12,20 +12,28 @@ data class SeriesEntry(val name: String, val author: String, val books: List<Boo
 data class ShelfDef(val title: String, val sub: String, val coverWidthDp: Int, val books: List<Book>, val filter: LibFilter? = null, val scope: Scope? = null)
 
 /**
- * Everything the library screens derive from the book list, computed once per change rather than on
- * every recomposition.
+ * Everything the library screens derive from the book list, computed once per change rather than on every
+ * recomposition. `LibraryState` builds it off the main thread. The cheap values every screen shows are worked out then;
+ * the lazy ones belong to one view each and are first read by `LibraryState`'s derived flows, also off the main
+ * thread, so composition only ever reads values that are already there.
  */
 class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val loaded: Boolean = true) {
   val byId: Map<Long, Book> = books.associateBy { it.id }
 
-  val counts: Map<LibFilter, Int> by traced("counts") {
-    mapOf(
-      LibFilter.All to books.size,
-      LibFilter.Reading to books.count { it.status == BookStatus.Reading },
-      LibFilter.Unread to books.count { it.status == BookStatus.Unread },
-      LibFilter.Recent to books.count { it.isNew },
-      LibFilter.Finished to books.count { it.status == BookStatus.Finished },
-    )
+  val counts: Map<LibFilter, Int> = mapOf(
+    LibFilter.All to books.size,
+    LibFilter.Reading to books.count { it.status == BookStatus.Reading },
+    LibFilter.Unread to books.count { it.status == BookStatus.Unread },
+    LibFilter.Recent to books.count { it.isNew },
+    LibFilter.Finished to books.count { it.status == BookStatus.Finished },
+  )
+
+  /** The book "Continue reading" points at: the most recently opened one that is still in progress. */
+  val resume: Book? = books.filter { it.status == BookStatus.Reading }.maxByOrNull { it.lastOpened }
+
+  /** What a metadata search looks in, lowercased, by position in [books]. */
+  val searchText: List<String> by traced("searchText") {
+    books.map { (it.title + " " + it.author + " " + (it.series ?: "") + " " + it.tags.joinToString(" ")).lowercase() }
   }
 
   /** Authors grouped by the first letter of their sort name; anything that isn't A–Z goes under '#'. */
@@ -58,9 +66,6 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
   }
 
   val ratedFive: Int by traced("ratedFive") { books.count { it.rating == 5 } }
-
-  /** The book "Continue reading" points at: the most recently opened one that is still in progress. */
-  val resume: Book? by traced("resume") { books.filter { it.status == BookStatus.Reading }.maxByOrNull { it.lastOpened } }
 
   val shelves: List<ShelfDef> by traced("shelves") {
     buildList {
