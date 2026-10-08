@@ -1,5 +1,6 @@
 package com.quire.reader.data.backup
 
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -40,6 +41,7 @@ class StagedRestoreTest {
     File(at.covers, "only-here.webp").put("old cover")
     File(at.imported, "Emma.epub").put("emma")
     File(at.imported, "Mine.epub").put("imported since the backup")
+    File(at.imported, "Twin.epub").put("local twin")
     at.snapshot.put("old snapshot")
     at.pendingRestoreFiles.forEach { it.put("pending") }
   }
@@ -53,7 +55,22 @@ class StagedRestoreTest {
     File(restore.stagedImported, "Emma.epub").put("emma")
     File(restore.stagedImported, "Persuasion.epub").put("persuasion")
     File(restore.stagedImported, "Mine.epub").put("a different book with the same name")
+    File(restore.stagedImported, "Twin.epub").put("other twin")
+    runBlocking { restore.dropImportedAlreadyPresent() }
     restore.writeMarker(marker)
+  }
+
+  /** The imported books after a swap: the backup's at the names its library expects, and the different local ones moved aside. */
+  private fun assertImportedSwapped() {
+    assertEquals(
+      setOf("Emma.epub", "Mine.epub", "Mine (before restore).epub", "Persuasion.epub", "Twin.epub", "Twin (before restore).epub"),
+      at.imported.list()!!.toSet(),
+    )
+    assertEquals("emma", File(at.imported, "Emma.epub").readText())
+    assertEquals("a different book with the same name", File(at.imported, "Mine.epub").readText())
+    assertEquals("imported since the backup", File(at.imported, "Mine (before restore).epub").readText())
+    assertEquals("other twin", File(at.imported, "Twin.epub").readText())
+    assertEquals("local twin", File(at.imported, "Twin (before restore).epub").readText())
   }
 
   private val everything = RestoreMarker(RestoreMarker.STAGED, index = true, covers = true, settings = true)
@@ -64,7 +81,7 @@ class StagedRestoreTest {
     assertEquals("old library", at.libraryDb.readText())
   }
 
-  @Test fun `a staged restore replaces databases, settings, covers and the snapshot, and only adds imported books`() {
+  @Test fun `a staged restore replaces databases, settings, covers and the snapshot, and deletes no imported book`() {
     current()
     val restore = StagedRestore(at)
     stage(restore, everything)
@@ -78,8 +95,7 @@ class StagedRestoreTest {
     assertEquals("new snapshot", at.snapshot.readText())
     assertEquals(setOf("a.webp"), at.covers.list()!!.toSet())
     assertEquals("new cover a", File(at.covers, "a.webp").readText())
-    assertEquals(setOf("Emma.epub", "Mine.epub", "Mine (restored).epub", "Persuasion.epub"), at.imported.list()!!.toSet())
-    assertEquals("imported since the backup", File(at.imported, "Mine.epub").readText())
+    assertImportedSwapped()
     assertTrue(at.pendingRestoreFiles.none { it.exists() })
     assertFalse(restore.stagedDir.exists())
     // The replaced files are kept until the restored app has started, then cleared.
@@ -109,15 +125,34 @@ class StagedRestoreTest {
     File(restore.previousDir, "quire.db").put("old library")
     at.libraryDb.delete()
     File(at.libraryDb.path + "-wal").delete()
-    // ...and after half of the imported books.
+    // ...and after half of the imported books, and between moving a local book aside and moving the backup's in.
     File(restore.stagedImported, "Persuasion.epub").renameTo(File(at.imported, "Persuasion.epub"))
+    File(at.imported, "Mine.epub").renameTo(File(at.imported, "Mine (before restore).epub"))
     restore.swapIfStaged()
     assertEquals("new library", at.libraryDb.readText())
     assertEquals("new index", at.indexDb.readText())
-    assertEquals(setOf("Emma.epub", "Mine.epub", "Mine (restored).epub", "Persuasion.epub"), at.imported.list()!!.toSet())
+    assertImportedSwapped()
     // Swapping again after it finished changes nothing.
     assertEquals(RestoreMarker.SWAPPED, restore.swapIfStaged()!!.phase)
     assertEquals("new library", at.libraryDb.readText())
+  }
+
+  @Test fun `staging keeps only the imported books that differ from the local one of their name`() {
+    current()
+    val restore = StagedRestore(at)
+    stage(restore, everything)
+    assertEquals(setOf("Mine.epub", "Persuasion.epub", "Twin.epub"), restore.stagedImported.list()!!.toSet())
+  }
+
+  @Test fun `a book moved aside by an earlier restore is not overwritten by the next`() {
+    current()
+    File(at.imported, "Mine (before restore).epub").put("aside from an earlier restore")
+    val restore = StagedRestore(at)
+    stage(restore, everything)
+    restore.swapIfStaged()
+    assertEquals("aside from an earlier restore", File(at.imported, "Mine (before restore).epub").readText())
+    assertEquals("imported since the backup", File(at.imported, "Mine (before restore 2).epub").readText())
+    assertEquals("a different book with the same name", File(at.imported, "Mine.epub").readText())
   }
 
   @Test fun `a database created by a start whose swap failed is replaced by the retried swap`() {
