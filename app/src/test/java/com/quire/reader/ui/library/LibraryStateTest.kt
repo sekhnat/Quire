@@ -8,6 +8,7 @@ import com.quire.reader.ui.FakeLibraryPrefs
 import com.quire.reader.ui.FakeLibraryStore
 import com.quire.reader.ui.LibFilter
 import com.quire.reader.ui.LibLayout
+import com.quire.reader.ui.LibView
 import com.quire.reader.ui.ReaderRequest
 import com.quire.reader.ui.RecordingNavigator
 import com.quire.reader.ui.RecordingToasts
@@ -26,8 +27,11 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.EmptyCoroutineContext
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class LibraryStateTest {
@@ -37,7 +41,7 @@ class LibraryStateTest {
   private val toasts = RecordingToasts()
 
   private fun TestScope.library(prefs: FakeLibraryPrefs = FakeLibraryPrefs(), access: Boolean = true, scope: CoroutineScope = backgroundScope) =
-    LibraryState(store, prefs, indexer, nav, toasts, { access }, scope)
+    LibraryState(store, prefs, indexer, nav, toasts, { access }, scope, compute = EmptyCoroutineContext)
 
   @Test fun `the saved sort and layout are applied at start`() = runTest {
     val library = library(FakeLibraryPrefs(layout = "List", sort = "Added", ascending = true))
@@ -46,6 +50,31 @@ class LibraryStateTest {
     assertEquals(SortKey.Added to true, s.sort to s.sortAscending)
     assertEquals(LibLayout.List, s.layout)
     assertEquals(2, library.data.value.books.size)
+  }
+
+  @Test fun `the book list follows the query and the books, not the layout or view`() = runTest {
+    val library = library()
+    backgroundScope.launch { library.visible.collect {} }
+    runCurrent()
+    assertEquals(listOf(2L, 1L), library.visible.value.books.map { it.id })
+    library.setQuery("emma"); runCurrent()
+    assertEquals(listOf(1L), library.visible.value.books.map { it.id })
+    val before = library.visible.value
+    library.cycleLayout(); library.setView(LibView.Authors); library.openSort(true); runCurrent()
+    assertSame(before, library.visible.value)
+    store.books.value = store.books.value + testBook(3, "Emma Again"); runCurrent()
+    assertEquals(listOf(3L, 1L), library.visible.value.books.map { it.id })
+  }
+
+  @Test fun `a view's groups are only worked out while it is observed`() = runTest {
+    val library = library()
+    runCurrent()
+    assertNull(library.authors.value)
+    backgroundScope.launch { library.authors.collect {} }
+    runCurrent()
+    assertEquals(listOf('A'), library.authors.value?.value?.map { it.first })
+    assertNull(library.shelves.value)
+    assertNull(library.series.value)
   }
 
   @Test fun `a sort picked while the saved one is loading wins and is saved`() = runTest {

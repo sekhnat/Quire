@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
 import com.quire.reader.theme.Nq
@@ -52,9 +53,11 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun AuthorsView(lib: LibraryData, library: LibraryState) {
-  val groups = lib.authorGroups
-  val letterIndex = remember(groups) {
+internal fun AuthorsView(library: LibraryState) {
+  val derived = library.authors.collectAsStateWithLifecycle().value
+  val groups = derived?.value.orEmpty()
+  // Keyed by the snapshot, which compares by identity, rather than by the list, which would compare every author.
+  val letterIndex = remember(derived) {
     var i = 0
     groups.associate { (letter, authors) -> letter to i.also { i += 1 + authors.size } }
   }
@@ -105,10 +108,12 @@ private fun displayName(name: String): String {
 // ── series ──────────────────────────────────────────────────────────────────
 
 @Composable
-internal fun SeriesView(lib: LibraryData, library: LibraryState) {
-  val series = lib.series
+internal fun SeriesView(library: LibraryState) {
+  // Null until worked out, which shows nothing rather than the empty message.
+  val derived = library.series.collectAsStateWithLifecycle().value
+  val series = derived?.value.orEmpty()
   LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 32.dp + navBottomPadding()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    if (series.isEmpty() && lib.loaded) item { Empty("No series found. Series come from your Calibre metadata.") }
+    if (derived != null && series.isEmpty()) item { Empty("No series found. Series come from your Calibre metadata.") }
     items(series.size, key = { series[it].name }) { i ->
       val entry = series[i]
       Column(

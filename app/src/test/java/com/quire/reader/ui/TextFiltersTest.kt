@@ -27,7 +27,7 @@ class TextFiltersTest {
   @Test fun `the metadata query never narrows a text search though it narrows the book list`() {
     val books = listOf(testBook(1, "Alpha", "Jane Austen"), testBook(2, "Beta", "Mary Shelley"))
     val state = LibraryUiState(query = "austen", scope = Scope(ScopeKind.Author, "Mary Shelley"))
-    assertEquals(emptyList<Long>(), visibleBooks(state, books).map { it.id })
+    assertEquals(emptyList<Long>(), visibleBooks(state.bookQuery, LibraryData(books, emptyList())).map { it.id })
     assertEquals(TextSearchFilters(author = "Mary Shelley"), textFilters(state))
   }
 }

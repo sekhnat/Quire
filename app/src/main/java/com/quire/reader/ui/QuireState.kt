@@ -91,36 +91,46 @@ fun cardStatus(b: Book, sort: SortKey): String = when (sort) {
   SortKey.Opened -> statusLabel(b)
 }
 
-/** Books for the library list after sort, scope, filter and search have been applied. */
-fun visibleBooks(s: LibraryUiState, all: List<Book>): List<Book> = trace("Library.visibleBooks") {
-  val order = compareBy<Book> { s.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
-  var list = all.sortedWith(if (s.sortAscending) order else order.reversed())
-  s.scope?.let { sc ->
-    list = list.filter {
-      when (sc.kind) {
-        ScopeKind.Author -> it.primaryAuthor == sc.value
-        ScopeKind.Series -> it.series == sc.value
-        ScopeKind.Tag -> sc.value in it.tags
-      }
+/** What decides the library's book list. Nothing else in [LibraryUiState] changes it, so nothing else recomputes it. */
+data class BookQuery(
+  val sort: SortKey = SortKey.Opened,
+  val ascending: Boolean = false,
+  val filter: LibFilter = LibFilter.All,
+  val scope: Scope? = null,
+  val query: String = "",
+)
+
+val LibraryUiState.bookQuery: BookQuery get() = BookQuery(sort, sortAscending, filter, scope, query)
+
+/**
+ * Books for the library list: those in the scope (or, without one, passing the status filter) that match the search,
+ * in the chosen order. Only the survivors are sorted.
+ */
+fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.visibleBooks") {
+  val scope = q.scope
+  val text = q.query.takeIf { it.isNotBlank() }?.lowercase()
+  val searchText = if (text != null) lib.searchText else null
+  val kept = ArrayList<Book>()
+  lib.books.forEachIndexed { i, b ->
+    val inView = if (scope != null) when (scope.kind) {
+      ScopeKind.Author -> b.primaryAuthor == scope.value
+      ScopeKind.Series -> b.series == scope.value
+      ScopeKind.Tag -> scope.value in b.tags
+    } else when (q.filter) {
+      LibFilter.All -> true
+      LibFilter.Recent -> b.isNew
+      LibFilter.Reading -> b.status == BookStatus.Reading
+      LibFilter.Unread -> b.status == BookStatus.Unread
+      LibFilter.Finished -> b.status == BookStatus.Finished
     }
-    if (sc.kind == ScopeKind.Series && s.sort == SortKey.Opened) list = list.sortedBy { it.seriesNo ?: Double.MAX_VALUE }
+    if (inView && (text == null || searchText!![i].contains(text))) kept += b
   }
-  if (s.scope == null) {
-    list = list.filter {
-      when (s.filter) {
-        LibFilter.All -> true
-        LibFilter.Recent -> it.isNew
-        LibFilter.Reading -> it.status == BookStatus.Reading
-        LibFilter.Unread -> it.status == BookStatus.Unread
-        LibFilter.Finished -> it.status == BookStatus.Finished
-      }
-    }
-  }
-  if (s.query.isNotBlank()) {
-    val q = s.query.lowercase()
-    list = list.filter { (it.title + " " + it.author + " " + (it.series ?: "") + " " + it.tags.joinToString(" ")).lowercase().contains(q) }
-  }
-  list
+  var order = compareBy<Book> { q.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
+  if (!q.ascending) order = order.reversed()
+  // In a series, the default sort is reading order; books without a number come last, still most recently opened first.
+  if (scope?.kind == ScopeKind.Series && q.sort == SortKey.Opened) order = compareBy<Book> { it.seriesNo ?: Double.MAX_VALUE }.then(order)
+  kept.sortWith(order)
+  kept
 }
 
 /**
