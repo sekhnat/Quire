@@ -188,6 +188,8 @@ dependencies {
 
   // Core Android dependencies
   implementation(libs.androidx.core.ktx)
+  // Trace sections for Perfetto; already on the runtime classpath through Compose.
+  implementation(libs.androidx.tracing.ktx)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.activity.compose)
 

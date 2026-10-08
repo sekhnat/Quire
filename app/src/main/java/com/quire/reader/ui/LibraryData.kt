@@ -1,5 +1,6 @@
 package com.quire.reader.ui
 
+import androidx.tracing.trace
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
 import com.quire.reader.data.db.FolderEntity
@@ -17,7 +18,7 @@ data class ShelfDef(val title: String, val sub: String, val coverWidthDp: Int, v
 class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val loaded: Boolean = true) {
   val byId: Map<Long, Book> = books.associateBy { it.id }
 
-  val counts: Map<LibFilter, Int> by lazy {
+  val counts: Map<LibFilter, Int> by traced("counts") {
     mapOf(
       LibFilter.All to books.size,
       LibFilter.Reading to books.count { it.status == BookStatus.Reading },
@@ -28,7 +29,7 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
   }
 
   /** Authors grouped by the first letter of their sort name; anything that isn't A–Z goes under '#'. */
-  val authorGroups: List<Pair<Char, List<AuthorEntry>>> by lazy {
+  val authorGroups: List<Pair<Char, List<AuthorEntry>>> by traced("authorGroups") {
     books.groupBy { it.primaryAuthor }
       .map { (name, bs) -> AuthorEntry(name, bs.sortedBy { it.sortTitle }) }
       .sortedBy { it.books.first().authorSort }
@@ -37,7 +38,7 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
       .map { it.key to it.value }
   }
 
-  val series: List<SeriesEntry> by lazy {
+  val series: List<SeriesEntry> by traced("series") {
     books.filter { it.series != null }.groupBy { it.series!! }.map { (name, bs) ->
       val sorted = bs.sortedBy { it.seriesNo ?: Double.MAX_VALUE }
       val owned = sorted.mapNotNull { it.seriesNo }.map { it.toInt() }.toSet()
@@ -47,7 +48,7 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
   }
 
   /** Every tag with its book count, most used first, then by name. */
-  val tags: List<Pair<String, Int>> by lazy {
+  val tags: List<Pair<String, Int>> by traced("tags") {
     val count = LinkedHashMap<String, Int>()
     books.forEach { b -> b.tags.forEach { count[it] = (count[it] ?: 0) + 1 } }
     // Lowercased once per tag rather than on every comparison.
@@ -56,12 +57,12 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
       .map { it.first to it.second }
   }
 
-  val ratedFive: Int by lazy { books.count { it.rating == 5 } }
+  val ratedFive: Int by traced("ratedFive") { books.count { it.rating == 5 } }
 
   /** The book "Continue reading" points at: the most recently opened one that is still in progress. */
-  val resume: Book? by lazy { books.filter { it.status == BookStatus.Reading }.maxByOrNull { it.lastOpened } }
+  val resume: Book? by traced("resume") { books.filter { it.status == BookStatus.Reading }.maxByOrNull { it.lastOpened } }
 
-  val shelves: List<ShelfDef> by lazy {
+  val shelves: List<ShelfDef> by traced("shelves") {
     buildList {
       val reading = books.filter { it.status == BookStatus.Reading }.sortedByDescending { it.lastOpened }
       if (reading.isNotEmpty()) add(ShelfDef("Continue reading", reading.size.toString(), 120, reading, filter = LibFilter.Reading))
@@ -81,3 +82,6 @@ class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val lo
 
   companion object { val Empty = LibraryData(emptyList(), emptyList(), loaded = false) }
 }
+
+/** A lazy value whose first computation shows in a system trace as `LibraryData.<name>`. */
+private fun <T> traced(name: String, compute: () -> T): Lazy<T> = lazy { trace("LibraryData.$name", compute) }

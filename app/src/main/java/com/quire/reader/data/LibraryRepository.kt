@@ -3,6 +3,8 @@ package com.quire.reader.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.tracing.trace
+import androidx.tracing.traceAsync
 import com.quire.reader.data.db.BookTagEntity
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
@@ -46,7 +48,7 @@ class LibraryRepository(
   private val app = context.applicationContext
 
   val books: Flow<List<Book>> = db.books().observeAll()
-    .map { rows -> val now = System.currentTimeMillis(); rows.map { it.toBook(now) } }
+    .map { rows -> trace("Library.mapRows") { val now = System.currentTimeMillis(); rows.map { it.toBook(now) } } }
     .flowOn(Dispatchers.Default)
   val folders: Flow<List<FolderEntity>> = db.folders().observeAll()
 
@@ -189,16 +191,18 @@ class LibraryRepository(
   suspend fun updatePageCount(bookId: Long, pages: Int) { if (pages > 0) db.books().setPages(bookId, pages) }
 
   /** Saves where the reader is. Reaching the end marks the book finished. */
-  suspend fun savePosition(bookId: Long, locatorJson: String, progress: Float) = db.states().edit(bookId) {
-    val status = when {
-      progress >= FINISHED_AT -> BookStateEntity.STATUS_FINISHED
-      progress > 0f -> BookStateEntity.STATUS_READING
-      else -> it.status
+  suspend fun savePosition(bookId: Long, locatorJson: String, progress: Float) = traceAsync("Library.savePosition", 0) {
+    db.states().edit(bookId) {
+      val status = when {
+        progress >= FINISHED_AT -> BookStateEntity.STATUS_FINISHED
+        progress > 0f -> BookStateEntity.STATUS_READING
+        else -> it.status
+      }
+      it.copy(
+        locatorJson = locatorJson, progress = progress, status = status,
+        finishedAt = if (status == BookStateEntity.STATUS_FINISHED && it.status != status) System.currentTimeMillis() else it.finishedAt,
+      )
     }
-    it.copy(
-      locatorJson = locatorJson, progress = progress, status = status,
-      finishedAt = if (status == BookStateEntity.STATUS_FINISHED && it.status != status) System.currentTimeMillis() else it.finishedAt,
-    )
   }
 
   fun bookmarks(bookId: Long): Flow<List<BookmarkEntity>> = db.annotations().observeBookmarks(bookId)
