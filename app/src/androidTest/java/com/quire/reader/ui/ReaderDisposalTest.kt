@@ -13,6 +13,7 @@ import com.quire.reader.data.index.EpubFixtures
 import com.quire.reader.navigator.epub.ContinuousBookState
 import com.quire.reader.navigator.epub.ContinuousBookWebView
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.navigator.epub.PressureTiers
 import com.quire.reader.reader.ReaderSession
 import java.io.File
 import java.lang.ref.WeakReference
@@ -187,6 +188,9 @@ class ReaderDisposalTest {
     awaitCondition("the surface was rebuilt") { nav.continuousBook != null && nav.continuousBook !== first }
     awaitCondition("ready again", 60_000) { runBlocking { nav.awaitWholeBookReadiness() } }
     assertEquals("the dead surface was disposed", ContinuousBookState.Disposed, first.state.value)
+    // The rebuilt surface starts with the reduced window, so the book is less likely to be killed again.
+    assertEquals(PressureTiers.Tier.Reduced, nav.memoryPressureTier)
+    assertEquals(PressureTiers.Tier.Reduced.ordinal, nav.continuousBook!!.pressureTier)
 
     val second = nav.continuousBook!!
     scenario.onActivity { nav.bookHost.onRendererGone(false) }

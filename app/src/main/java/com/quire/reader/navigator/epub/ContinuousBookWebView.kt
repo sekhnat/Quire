@@ -42,7 +42,9 @@ import android.graphics.RectF
 import android.util.Log
 import android.view.ActionMode
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
+import android.view.ViewConfiguration
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
@@ -50,6 +52,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.Scroller
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.util.concurrent.CopyOnWriteArrayList
@@ -339,6 +342,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
                 shellLoaded = true
                 shell.evaluateJavascript("JSON.stringify({w:innerWidth,h:innerHeight,dpr:devicePixelRatio})") { r ->
                 }
+                if (navigator.scrollTelemetry != null) {
+                    shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.enableTelemetry();", null)
+                }
                 createFramesIfMeasurable()
             }
         }
@@ -432,6 +438,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
                     "${JSONObject.quote(href)}, ${host.positionCount(index)});",
             )
         }
+        js.append("QuireShellHost.setPressure($pressureTier);")
         js.append("QuireShellHost.initialWindow($initialIndex);")
         js.append("}")
         shell.evaluateJavascript(js.toString(), null)
@@ -580,6 +587,29 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         evaluateOnShell("window.QuireShellHost ? QuireShellHost.measuredCount() : -1") { result ->
             result?.trim()?.toIntOrNull() ?: -1
         }
+
+    /** Memory-pressure tier for the shell's window: 0 normal, 1 reduced, 2 minimal. See [setPressureTier]. */
+    internal var pressureTier = 0
+        private set
+
+    /**
+     * Shrinks or restores the live window for memory pressure (see `ScrollMemoryPressure`): applied at
+     * once to a loaded shell, and handed to the shell with its frames otherwise.
+     */
+    fun setPressureTier(tier: Int) {
+        if (disposed || tier == pressureTier) return
+        pressureTier = tier
+        if (shellLoaded) shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.setPressure($tier);", null)
+    }
+
+    /** Selects the shell's window policy, `adaptive` or `static`; the benchmark compares the two. */
+    internal fun setPolicy(name: String) {
+        if (disposed) return
+        shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.setPolicy(${JSONObject.quote(name)});", null)
+    }
+
+    /** Evaluates [script] on the shell document and answers the WebView's raw result. For tests. */
+    internal suspend fun evaluateShell(script: String): String? = evaluateOnShell(script) { it }
 
     /** Asks the shell to keep (or stop keeping) the document of [href] loaded. */
     private fun pinFrame(href: Url, pinned: Boolean) {
@@ -895,8 +925,9 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         fun event(json: String) {
             val obj = runCatching { JSONObject(json) }.getOrNull() ?: return
             val gen = generation
-            if (!json.startsWith("{\"kind\":\"geometry\"")) Log.d(TAG, "shell event: ${json.take(200)}")
-            when (obj.optString("kind")) {
+            val kind = obj.optString("kind")
+            if (kind != "geometry" && kind != "telemetry") Log.d(TAG, "shell event: ${json.take(200)}")
+            when (kind) {
                 "frameEvicted" -> post { onFrameEvicted(obj.optString("href"), gen) }
                 "frameLoaded" -> post {
                     val href = obj.optString("href")
@@ -924,6 +955,8 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
                     }
                 }
                 "scroll" -> post { navigator.bookHost.onProgressionChanged() }
+                // Only benchmark builds have a collector; everywhere else the events are dropped.
+                "telemetry" -> if (gen == generation) navigator.scrollTelemetry?.onEvent(obj)
             }
         }
 
@@ -1053,6 +1086,68 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
 
     private var selectionHref: Url? = null
 
+    // ── fling prediction ────────────────────────────────────────────────────────
+
+    private var velocityTracker: VelocityTracker? = null
+
+    /** Models the fling last hinted, so a finger landing on it knows what is left of its velocity. */
+    private val flingScroller by lazy { Scroller(context) }
+
+    /** Content velocity (px/s, positive forwards) of the fling a finger just landed on, or 0. */
+    private var carriedVelocity = 0f
+
+    /**
+     * Watches the reader's finger on the shell to tell the shell where a fling will stop the moment the
+     * finger lifts, so it loads the chapters there first instead of every chapter on the way. The stop
+     * is predicted with Android's own fling curve (`Scroller`), which Chromium's Android fling
+     * follows; the benchmark compares predictions with where flings actually stop. A finger landing
+     * stops a fling, so it clears the hint, but Chromium boosts the next fling in the same direction
+     * by what was left of the stopped one, so that is carried into the next prediction.
+     */
+    private fun onShellTouch(event: MotionEvent) {
+        if (disposed || _state.value != ContinuousBookState.Ready) return
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                carriedVelocity = if (flingScroller.computeScrollOffset()) {
+                    flingScroller.currVelocity * (if (flingScroller.finalY >= flingScroller.startY) 1f else -1f)
+                } else 0f
+                flingScroller.forceFinished(true)
+                velocityTracker?.recycle()
+                velocityTracker = VelocityTracker.obtain().also { it.addMovement(event) }
+                sendFlingHint(null, 0.0, 0)
+            }
+            MotionEvent.ACTION_MOVE -> velocityTracker?.addMovement(event)
+            MotionEvent.ACTION_UP -> {
+                val tracker = velocityTracker ?: return
+                velocityTracker = null
+                tracker.addMovement(event)
+                val config = ViewConfiguration.get(context)
+                tracker.computeCurrentVelocity(1000, config.scaledMaximumFlingVelocity.toFloat())
+                val fingerVelocity = tracker.yVelocity
+                tracker.recycle()
+                if (kotlin.math.abs(fingerVelocity) < config.scaledMinimumFlingVelocity) return
+                // The content moves against the finger.
+                var velocity = -fingerVelocity
+                if (carriedVelocity != 0f && (carriedVelocity > 0) == (velocity > 0)) velocity += carriedVelocity
+                carriedVelocity = 0f
+                val maxY = (shell.contentHeight * context.resources.displayMetrics.density).toInt() - shell.height
+                // Left running (it is only ever read, never drawn): the next touch reads its velocity.
+                flingScroller.fling(0, shell.scrollY, 0, velocity.toInt(), 0, 0, 0, maxY.coerceAtLeast(0))
+                val density = context.resources.displayMetrics.density.toDouble()
+                sendFlingHint(flingScroller.finalY / density, velocity / density, flingScroller.duration)
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                velocityTracker?.recycle()
+                velocityTracker = null
+            }
+        }
+    }
+
+    private fun sendFlingHint(stopCss: Double?, velocityCss: Double, durationMs: Int) {
+        val args = if (stopCss == null) "null, 0, 0" else "$stopCss, $velocityCss, $durationMs"
+        shell.evaluateJavascript("window.QuireShellHost && QuireShellHost.flingHint($args);", null)
+    }
+
     /** Converts a frame-local point into shell-document coordinates, exactly once. */
     private fun framePointToShell(href: String, point: PointF): PointF {
         val url = Url(href) ?: return point
@@ -1067,6 +1162,12 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
      * instead of the app's Highlight/Note/Copy actions.
      */
     private inner class ShellWebView(context: Context) : WebView(context) {
+
+        @SuppressLint("ClickableViewAccessibility")
+        override fun onTouchEvent(event: MotionEvent): Boolean {
+            onShellTouch(event)
+            return super.onTouchEvent(event)
+        }
 
         override fun startActionMode(callback: ActionMode.Callback?): ActionMode? {
             val custom = navigator.bookHost.selectionActionModeCallback
@@ -1124,6 +1225,7 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         if (disposed) return
         disposed = true
         Log.d(TAG, "dispose surface #${System.identityHashCode(this)}")
+        navigator.scrollTelemetry?.logSummary("surface #${System.identityHashCode(this)} disposed")
         generation++
         layoutGeneration++
         layoutGenerationFlow.value = layoutGeneration
@@ -1133,6 +1235,8 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         releasePendingShellEvaluations()
         scope.cancel()
         shell.removeCallbacks(progressionNotifyRunnable)
+        velocityTracker?.recycle()
+        velocityTracker = null
         // Synchronous teardown, mirroring R2BasicWebView.destroy(): the JavaScript
         // interfaces are inner classes retaining this surface and its navigator, and no
         // method may be called on a destroyed WebView (readium/r2-navigator-kotlin#52).
