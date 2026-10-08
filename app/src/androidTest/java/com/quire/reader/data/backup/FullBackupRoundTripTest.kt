@@ -13,6 +13,7 @@ import com.quire.reader.data.index.IndexStore
 import com.quire.reader.data.index.RoomIndexSql
 import com.quire.reader.data.index.SourceElement
 import com.quire.reader.data.index.TextChunker
+import com.quire.reader.data.scan.BookIdentity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -62,8 +63,11 @@ class FullBackupRoundTripTest : DbTestCase() {
 
   private class Source(val at: BackupLocations, val db: QuireDatabase, val index: IndexDatabase, val bookId: Long)
 
-  /** A small library with reading data, an indexed book, settings, a cover and an imported book. */
-  private fun source(): Source = runBlocking {
+  /**
+   * A small library with reading data, an indexed book, settings, a cover and an imported book holding [imported]. With
+   * [importedData] the imported book is in the library too, identified by its fingerprint, with a highlight of its own.
+   */
+  private fun source(imported: ByteArray = IMPORTED, importedData: Boolean = false): Source = runBlocking {
     val at = install("source")
     val db = open(at.libraryDb)
     val index = openIndex(at.indexDb)
@@ -76,7 +80,11 @@ class FullBackupRoundTripTest : DbTestCase() {
     IndexStore(RoomIndexSql(index)).replaceBook(id, book.mtime, book.sizeBytes, chunks("Highbury was quiet", "Mr Knightley called"), false, 0, fingerprint = "100:aaaa")
     at.settings.apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1, 2, 3, 4)) }
     File(at.covers, "c1.webp").apply { parentFile!!.mkdirs(); writeText("cover bytes") }
-    File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeText("imported book bytes") }
+    val importedFile = File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeBytes(imported) }
+    if (importedData) {
+      val importedId = db.books().save(importedRow(folderId, importedFile), emptyList())
+      db.annotations().addHighlight(HighlightEntity(bookId = importedId, locatorJson = """{"href":"i1.xhtml"}""", text = "Hartfield", progress = 0.1f, createdAt = 13))
+    }
     Source(at, db, index, id)
   }
 
@@ -89,12 +97,38 @@ class FullBackupRoundTripTest : DbTestCase() {
     archive to manifest
   }
 
-  private fun restorer(at: BackupLocations, db: QuireDatabase? = null, scanned: MutableList<Unit> = mutableListOf()): FullRestore {
+  private fun restorer(
+    at: BackupLocations,
+    db: QuireDatabase? = null,
+    scanned: MutableList<Unit> = mutableListOf(),
+    scan: suspend () -> Unit = {},
+  ): FullRestore {
     val library = db ?: open(File(root, "unused-${UUID.randomUUID()}.db"))
     return FullRestore(
-      target, at, library, settings, { scanned += Unit }, SnapshotImporter(library, settings),
+      target, at, library, settings, { scanned += Unit; scan() }, SnapshotImporter(library, settings),
       SnapshotWriter(library, settings, File(root, "snapshots-restore"), CoroutineScope(Dispatchers.IO)),
     )
+  }
+
+  /** The row a scan stores for an imported [file]: its own path and fingerprint. */
+  private fun importedRow(folderId: Long, file: File) =
+    bookEntity(folderId, file.nameWithoutExtension).copy(path = file.path, sizeBytes = file.length(), fingerprint = BookIdentity.fingerprint(file))
+
+  /** What a scan of the imported-books folder does here: each file it does not know yet becomes a book. */
+  private suspend fun scanImported(db: QuireDatabase, at: BackupLocations, folderId: Long) {
+    for (file in at.imported.listFiles().orEmpty().filter { it.name.endsWith(".epub") }) {
+      if (db.books().byPath(file.path) == null) db.books().save(importedRow(folderId, file), emptyList())
+    }
+  }
+
+  /** A copy of [archive] cut off part way into its imported book, as a backup whose copy or download stopped early. */
+  private fun truncatedInImported(archive: File): File {
+    val bytes = archive.readBytes()
+    val text = String(bytes, Charsets.ISO_8859_1)
+    // The entry's name follows its 30-byte local header; the manifest and the central directory hold the name too.
+    val name = generateSequence(text.indexOf(BackupPaths.IMPORTED + "Imported.epub")) { text.indexOf(BackupPaths.IMPORTED + "Imported.epub", it + 1).takeIf { i -> i >= 0 } }
+      .first { it >= 30 && text.startsWith("PK\u0003\u0004", it - 30) }
+    return File(root, "truncated-${UUID.randomUUID()}.zip").apply { writeBytes(bytes.copyOf(name + BIG_IMPORTED.size / 2)) }
   }
 
   private fun IndexDatabase.pragma(name: String): Long = runBlocking { useReaderConnection { c -> c.usePrepared("PRAGMA $name") { it.step(); it.getLong(0) } } }
@@ -152,7 +186,7 @@ class FullBackupRoundTripTest : DbTestCase() {
 
     assertArrayEquals(byteArrayOf(1, 2, 3, 4), at.settings.readBytes())
     assertEquals("cover bytes", File(at.covers, "c1.webp").readText())
-    assertEquals("imported book bytes", File(at.imported, "Imported.epub").readText())
+    assertArrayEquals(IMPORTED, File(at.imported, "Imported.epub").readBytes())
     assertTrue(SnapshotCodec.decode(at.snapshot.readText()) is SnapshotCodec.Decoded.Ok)
   }
 
@@ -194,12 +228,111 @@ class FullBackupRoundTripTest : DbTestCase() {
 
     assertEquals(1, outcome.booksAdded)
     assertEquals(1, scanned.size)
-    assertEquals("imported book bytes", File(at.imported, "Imported.epub").readText())
+    assertArrayEquals(IMPORTED, File(at.imported, "Imported.epub").readBytes())
     assertEquals(listOf("Highbury"), db.annotations().highlightsOf(local).map { it.text })
     assertEquals(0.4f, db.states().get(local)!!.progress)
     // Merging again adds nothing new.
     assertEquals(0, restorer(at, db, scanned).merge(Uri.fromFile(archive)).booksAdded)
     assertEquals(1, db.annotations().highlightsOf(local).size)
+  }
+
+  @Test fun `a merge does not copy an imported book the library already has byte for byte`() = runBlocking {
+    val (archive) = backUp(source(importedData = true))
+    val at = install("target")
+    val db = open(at.libraryDb)
+    val folderId = folder(db)
+    val localFile = File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeBytes(IMPORTED) }
+    scanImported(db, at, folderId)
+    val local = db.books().byPath(localFile.path)!!.id
+
+    val outcome = restorer(at, db) { scanImported(db, at, folderId) }.merge(Uri.fromFile(archive))
+
+    assertEquals(0, outcome.booksAdded)
+    assertEquals(setOf("Imported.epub"), at.imported.list()!!.toSet())
+    assertEquals(listOf("Hartfield"), db.annotations().highlightsOf(local).map { it.text })
+  }
+
+  @Test fun `a merge keeps a different imported book of the same name and size beside the local one`() =
+    mergeKeepsBoth(SAME_SIZE)
+
+  @Test fun `a merge keeps a different imported book of the same name and another size beside the local one`() =
+    mergeKeepsBoth(OTHER_SIZE)
+
+  /** Merging a backup whose imported book differs from the local [localBytes] of the same name: both stay, each with its own data. */
+  private fun mergeKeepsBoth(localBytes: ByteArray) = runBlocking {
+    val (archive) = backUp(source(importedData = true))
+    val at = install("target")
+    val db = open(at.libraryDb)
+    val folderId = folder(db)
+    val localFile = File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeBytes(localBytes) }
+    scanImported(db, at, folderId)
+    val local = db.books().byPath(localFile.path)!!.id
+
+    val outcome = restorer(at, db) { scanImported(db, at, folderId) }.merge(Uri.fromFile(archive))
+
+    assertEquals(1, outcome.booksAdded)
+    assertArrayEquals(localBytes, localFile.readBytes())
+    val kept = File(at.imported, "Imported (2).epub")
+    assertArrayEquals(IMPORTED, kept.readBytes())
+    val restored = db.books().byPath(kept.path)!!.id
+    assertEquals("the backup's highlight belongs to the backup's book", listOf("Hartfield"), db.annotations().highlightsOf(restored).map { it.text })
+    assertTrue(db.annotations().highlightsOf(local).isEmpty())
+    // Merging the same backup again finds the copy it kept and adds nothing.
+    assertEquals(0, restorer(at, db) { scanImported(db, at, folderId) }.merge(Uri.fromFile(archive)).booksAdded)
+    assertEquals(setOf("Imported.epub", "Imported (2).epub"), at.imported.list()!!.toSet())
+  }
+
+  @Test fun `a merge cut off while copying a book leaves the local books as they were and a retry finishes it`() = runBlocking {
+    val (archive) = backUp(source(imported = BIG_IMPORTED))
+    val at = install("target")
+    val db = open(at.libraryDb)
+    val localFile = File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeBytes(SAME_SIZE) }
+
+    assertTrue(runCatching { restorer(at, db).merge(Uri.fromFile(truncatedInImported(archive))) }.isFailure)
+    assertEquals("no partial copy is left behind", setOf("Imported.epub"), at.imported.list()!!.toSet())
+    assertArrayEquals(SAME_SIZE, localFile.readBytes())
+
+    assertEquals(1, restorer(at, db).merge(Uri.fromFile(archive)).booksAdded)
+    assertArrayEquals(BIG_IMPORTED, File(at.imported, "Imported (2).epub").readBytes())
+    assertArrayEquals(SAME_SIZE, localFile.readBytes())
+  }
+
+  @Test fun `a replace restore puts the backed up book at its own name and moves a different local one aside`() = runBlocking {
+    val (archive) = backUp(source())
+    for ((case, localBytes) in listOf("identical" to IMPORTED, "same-size" to SAME_SIZE, "other-size" to OTHER_SIZE)) {
+      val at = install("target-$case")
+      File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeBytes(localBytes) }
+      val restore = StagedRestore(at)
+
+      restorer(at).stage(Uri.fromFile(archive))
+      assertEquals(case, case != "identical", File(restore.stagedImported, "Imported.epub").exists())
+      restore.swapIfStaged()
+
+      assertArrayEquals(case, IMPORTED, File(at.imported, "Imported.epub").readBytes())
+      if (case == "identical") {
+        assertEquals(case, setOf("Imported.epub"), at.imported.list()!!.toSet())
+      } else {
+        assertEquals(case, setOf("Imported.epub", "Imported (before restore).epub"), at.imported.list()!!.toSet())
+        assertArrayEquals(case, localBytes, File(at.imported, "Imported (before restore).epub").readBytes())
+      }
+    }
+  }
+
+  @Test fun `a replace restore cut off while staging a book stages nothing and leaves the local books as they were`() = runBlocking {
+    val (archive) = backUp(source(imported = BIG_IMPORTED))
+    val at = install("target")
+    val localFile = File(at.imported, "Imported.epub").apply { parentFile!!.mkdirs(); writeBytes(SAME_SIZE) }
+
+    try {
+      restorer(at).stage(Uri.fromFile(truncatedInImported(archive)))
+      fail("a truncated archive was staged")
+    } catch (e: BackupException) {
+      assertNull(StagedRestore(at).marker())
+      assertFalse(StagedRestore(at).stagedDir.exists())
+    }
+    assertNull(StagedRestore(at).swapIfStaged())
+    assertEquals(setOf("Imported.epub"), at.imported.list()!!.toSet())
+    assertArrayEquals(SAME_SIZE, localFile.readBytes())
   }
 
   @Test fun `after a restore without covers and books whose cover did not come back are queued for a new one`() = runBlocking {
@@ -218,6 +351,15 @@ class FullBackupRoundTripTest : DbTestCase() {
     assertNull(db.books().byId(lost)!!.coverPath)
     assertFalse(settings.coversBackfilled.first())
     assertNull(StagedRestore(at).marker())
+  }
+
+  private companion object {
+    val IMPORTED = "imported book bytes".toByteArray()
+    /** A different book exactly as long as [IMPORTED]. */
+    val SAME_SIZE = "imported book BYTES".toByteArray()
+    val OTHER_SIZE = "a longer, different local book".toByteArray()
+    /** An imported book big enough to cut an archive off in the middle of it. */
+    val BIG_IMPORTED = ByteArray(1 shl 20).also { java.util.Random(7).nextBytes(it) }
   }
 
   /** A copy of [archive] whose manifest is changed by [change]. */

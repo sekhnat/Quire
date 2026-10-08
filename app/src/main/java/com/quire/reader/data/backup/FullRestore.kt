@@ -32,6 +32,10 @@ data class MergeOutcome(val result: ImportResult, val booksAdded: Int)
  *
  * **Merge reading data** ([merge]) keeps the library and adds the backup's reading data to it, through the same importer
  * as a reading-data file; imported books the library lacks are copied in first, so their data finds them.
+ *
+ * Neither way deletes an imported book unless the same bytes are already there: two different books can share a name
+ * and a size. A replace gives the backup's book the name its restored library knows it by and moves a different local
+ * one aside; a merge keeps the backup's beside it, where the importer finds it by its identity.
  */
 class FullRestore(
   private val context: Context,
@@ -95,6 +99,7 @@ class FullRestore(
       manifest to useIndex
     }
     progress(null)
+    staged.dropImportedAlreadyPresent()
 
     val snapshot = runCatching { staged.stagedSnapshot.readText() }.map(SnapshotCodec::decode).getOrNull()
     if (snapshot !is SnapshotCodec.Decoded.Ok) throw BackupException("The backup's reading data is damaged")
@@ -188,19 +193,21 @@ class FullRestore(
     MergeOutcome(result, added)
   }
 
-  /** Copies an imported book from the archive unless a file of that name and size is already there; true if copied. */
+  /**
+   * Copies an imported book from the archive unless the folder already holds its bytes; a different book of the same name
+   * stays, and this one is kept beside it (see [ImportedBooks.placeIncoming]). True if copied.
+   */
   private suspend fun copyImported(zip: ZipInputStream, name: String): Boolean {
     val dir = locations.imported.apply { mkdirs() }
-    val existing = File(dir, name)
     // Streamed zip entries do not declare their size up front, so the copy is made first and compared.
     val tmp = File(dir, "$name.tmp")
-    tmp.outputStream().use { copy(zip, it) {} }
-    if (existing.isFile && existing.length() == tmp.length()) { tmp.delete(); return false }
-    var target = existing
-    var n = 2
-    while (target.exists()) target = File(dir, "${existing.nameWithoutExtension} ($n).${existing.extension}").also { n++ }
-    if (!tmp.renameTo(target)) { tmp.delete(); throw BackupException("Couldn't copy $name") }
-    return true
+    try {
+      tmp.outputStream().use { copy(zip, it) {} }
+      return ImportedBooks.placeIncoming(dir, name, tmp) != null
+    } catch (e: Throwable) {
+      tmp.delete()
+      throw e
+    }
   }
 
   /**

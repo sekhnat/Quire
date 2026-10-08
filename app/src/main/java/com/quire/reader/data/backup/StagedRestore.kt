@@ -3,6 +3,8 @@ package com.quire.reader.data.backup
 import android.content.Context
 import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.QuireDatabase
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -103,9 +105,24 @@ class StagedRestore(private val at: BackupLocations) {
   val stagedImported get() = File(stagedDir, "imported")
 
   /**
+   * Drops each staged imported book whose bytes the imported-books folder already holds under the same name; the restored
+   * library then finds it there. Runs while staging, so the comparison never slows down the start that swaps; every book
+   * left staged differs from the one of its name and is swapped in by [swapIfStaged] without deleting anything.
+   */
+  suspend fun dropImportedAlreadyPresent() {
+    val files = stagedImported.listFiles()?.filter { it.isFile } ?: return
+    for (file in files) {
+      currentCoroutineContext().ensureActive()
+      val existing = File(at.imported, file.name)
+      if (existing.isFile && ImportedBooks.sameContents(existing, file)) file.delete()
+    }
+  }
+
+  /**
    * Swaps a staged restore into place and marks it [RestoreMarker.SWAPPED]; returns the marker, or null when nothing is
-   * staged. Safe to call again after an interruption at any point. Imported books are only ever added: a book imported
-   * since the backup was made stays, and is found as a new book by the next scan.
+   * staged. Safe to call again after an interruption at any point. No imported book is ever deleted: the backup's take the
+   * names the restored library knows them by, and a different local book of the same name is moved aside and found as a
+   * new book by the next scan.
    */
   fun swapIfStaged(): RestoreMarker? {
     val marker = marker() ?: return null
@@ -149,16 +166,18 @@ class StagedRestore(private val at: BackupLocations) {
     move(staged, target)
   }
 
+  /**
+   * Moves each staged book to the name the restored library knows it by. A local book of that name is a different one
+   * (staging dropped the identical ones, see [dropImportedAlreadyPresent]), so it is moved aside first, never deleted;
+   * the next scan finds it as a new book.
+   */
   private fun addImported(staged: File, target: File) {
     val files = staged.listFiles()?.filter { it.isFile } ?: return
     target.mkdirs()
     for (file in files) {
       val existing = File(target, file.name)
-      when {
-        !existing.exists() -> move(file, existing)
-        existing.length() == file.length() -> file.delete()
-        else -> move(file, uniqueSibling(existing))
-      }
+      if (existing.exists()) move(existing, uniqueSibling(existing))
+      move(file, existing)
     }
     staged.deleteRecursively()
   }
@@ -176,11 +195,9 @@ class StagedRestore(private val at: BackupLocations) {
   }
 
   private fun uniqueSibling(file: File): File {
-    val base = file.nameWithoutExtension
-    val ext = file.extension.let { if (it.isEmpty()) "" else ".$it" }
     var n = 1
     var candidate: File
-    do candidate = File(file.parentFile, "$base (restored${if (n > 1) " $n" else ""})$ext").also { n++ } while (candidate.exists())
+    do candidate = ImportedBooks.numbered(file, " (before restore${if (n > 1) " $n" else ""})").also { n++ } while (candidate.exists())
     return candidate
   }
 
