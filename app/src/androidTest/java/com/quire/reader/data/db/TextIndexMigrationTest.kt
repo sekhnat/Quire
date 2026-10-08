@@ -143,7 +143,7 @@ class TextIndexMigrationTest : DbTestCase() {
       assertEquals(0, sqlite.count(legacyTables))
       val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid").map { it.take(before.getValue(t).first().size) } }
       assertEquals(before, after.mapValues { (t, rows) -> if (t == "book") rows.dropLast(1) else rows }) // less the book added above
-      assertEquals(listOf(1L, 2L, 3L), db.books().observeAll().first().map { it.id }.sorted())
+      assertEquals(listOf(1L, 2L, 3L), db.books().observeCatalog().first().map { it.id }.sorted())
       assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
       db.close()
     }
@@ -175,7 +175,7 @@ class TextIndexMigrationTest : DbTestCase() {
       listOf(listOf<String?>(null, null, null, null), listOf<String?>(null, null, null, null)),
       sqlite.rows("SELECT calibreUuid, epubUid, fingerprint, missingSince FROM book ORDER BY id"),
     )
-    assertEquals(listOf(1L, 2L), db.books().observeAll().first().map { it.id }.sorted())
+    assertEquals(listOf(1L, 2L), db.books().observeCatalog().first().map { it.id }.sorted())
     assertEquals(listOf(false, false), db.books().knownFiles().sortedBy { it.id }.map { it.hasIdentity })
     assertEquals(listOf(false, false), db.books().knownFiles().sortedBy { it.id }.map { it.missing })
     assertEquals(emptyList<MissingBookRow>(), db.books().observeMissing().first())
@@ -195,7 +195,7 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals("{\"fontSize\":1.2}", db.states().get(1)!!.prefsJson)
     assertEquals(listOf("Chapter 2"), db.annotations().observeBookmarks(1).first().map { it.label })
     assertEquals(listOf("I am Dracula", "the blood is the life"), db.annotations().observeHighlights(1).first().map { it.text })
-    val row = db.books().observeAll().first().single { it.id == 1L }
+    val row = db.books().observeCatalog().first().single { it.id == 1L }
     assertEquals(setOf("Horror", "to-reread"), row.tagList.toSet())
     assertEquals(listOf("to-reread"), row.userTagList)
     // AUTOINCREMENT continues past the seeded ids rather than reusing them.

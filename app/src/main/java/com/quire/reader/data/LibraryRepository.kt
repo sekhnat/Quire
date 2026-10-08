@@ -47,8 +47,16 @@ class LibraryRepository(
 ) {
   private val app = context.applicationContext
 
-  val books: Flow<List<Book>> = db.books().observeAll()
-    .map { rows -> trace("Library.mapRows") { val now = System.currentTimeMillis(); rows.map { it.toBook(now) } } }
+  /**
+   * The library's books. The catalogue is mapped only when books change; a saved position re-reads just the reading
+   * states (a small query), which are joined onto the mapped books here.
+   */
+  val books: Flow<List<Book>> = combine(
+    db.books().observeCatalog().map { rows -> trace("Library.mapCatalog") { val now = System.currentTimeMillis(); rows.map { it.toBook(now) } } },
+    db.states().observeReading().map { rows -> rows.associateBy { it.bookId } },
+  ) { catalog, states ->
+    trace("Library.joinStates") { val now = System.currentTimeMillis(); catalog.map { it.withReadingState(states[it.id], now) } }
+  }
     .flowOn(Dispatchers.Default)
   val folders: Flow<List<FolderEntity>> = db.folders().observeAll()
 

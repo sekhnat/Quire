@@ -9,8 +9,11 @@ import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
-/** A book joined with its reading state and tags, as the library screens consume it. */
-data class BookRow(
+/**
+ * A library book's own columns and tags, without its reading state: positions are saved far more often than books
+ * change, so the library reads the two apart (see [ReadingStateRow]) and joins them in Kotlin.
+ */
+data class CatalogRow(
   val id: Long,
   val path: String,
   val folderId: Long,
@@ -25,16 +28,12 @@ data class BookRow(
   val language: String?,
   val description: String?,
   val calibreRating: Int,
-  val userRating: Int?,
   val sizeBytes: Long,
   val addedAt: Long,
   val pageEstimate: Int,
   val coverPath: String?,
   val source: String,
   val readable: Boolean,
-  val progress: Float?,
-  val status: String?,
-  val lastOpenedAt: Long?,
   /** Tags separated by the ASCII unit separator (U+001F), each prefixed `c` (from the book) or `u` (added in Quire). */
   val tags: String?,
 ) {
@@ -42,6 +41,9 @@ data class BookRow(
   val tagList: List<String> get() = tagEntries.map { it.substring(1) }
   val userTagList: List<String> get() = tagEntries.filter { it[0] == 'u' }.map { it.substring(1) }
 }
+
+/** The part of a book's reading state the library shows; a book without a `book_state` row has none yet. */
+data class ReadingStateRow(val bookId: Long, val progress: Float, val status: String, val lastOpenedAt: Long, val userRating: Int?)
 
 /** Identity of a file already in the database, used to skip unchanged files on rescan. */
 data class KnownFile(
@@ -122,23 +124,23 @@ interface FolderDao {
   @Query("UPDATE folder SET lastScanAt = :at WHERE id = :id") suspend fun markScanned(id: Long, at: Long)
 }
 
-/** The columns and joins of a [BookRow] for the books in the library (not missing ones); append an AND clause to narrow it. */
-private const val BOOK_ROWS_SQL = """
+/** The columns of a [CatalogRow] for the books in the library (not missing ones); append an AND clause to narrow it. */
+private const val CATALOG_SQL = """
     SELECT b.id, b.path, b.folderId, b.title, b.sortTitle, b.author, b.primaryAuthor, b.authorSort, b.series, b.seriesIndex,
-           b.pubYear, b.language, b.description, b.calibreRating, s.userRating AS userRating, b.sizeBytes, b.addedAt,
-           b.pageEstimate, b.coverPath, b.source, b.readable, s.progress AS progress, s.status AS status,
-           s.lastOpenedAt AS lastOpenedAt,
+           b.pubYear, b.language, b.description, b.calibreRating, b.sizeBytes, b.addedAt, b.pageEstimate, b.coverPath, b.source,
+           b.readable,
            (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
-    FROM book b LEFT JOIN book_state s ON s.bookId = b.id
+    FROM book b
     WHERE b.missingSince IS NULL
     """
 
 @Dao
 abstract class BookDao {
-  @Query(BOOK_ROWS_SQL)
-  abstract fun observeAll(): Flow<List<BookRow>>
+  /** Reads `book` and `book_tag` only, so saving a reading position does not run it again. */
+  @Query(CATALOG_SQL)
+  abstract fun observeCatalog(): Flow<List<CatalogRow>>
 
-  @Query("$BOOK_ROWS_SQL AND b.id IN (:ids)") abstract suspend fun rowsByIds(ids: List<Long>): List<BookRow>
+  @Query("$CATALOG_SQL AND b.id IN (:ids)") abstract suspend fun catalogByIds(ids: List<Long>): List<CatalogRow>
 
   /** Every book with a path, missing ones included, so a file that comes back finds its row. */
   @Query("SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath, missingSince IS NOT NULL AS missing, fingerprint IS NOT NULL AS hasIdentity FROM book")
@@ -297,6 +299,9 @@ abstract class StateDao {
   @Query("SELECT * FROM book_state WHERE bookId = :bookId") abstract suspend fun get(bookId: Long): BookStateEntity?
   @Query("UPDATE book_state SET prefsJson = NULL WHERE prefsJson IS NOT NULL") abstract suspend fun clearAllPrefs(): Int
   @Query("SELECT * FROM book_state WHERE bookId = :bookId") abstract fun observe(bookId: Long): Flow<BookStateEntity?>
+  @Query("SELECT bookId, progress, status, lastOpenedAt, userRating FROM book_state") abstract fun observeReading(): Flow<List<ReadingStateRow>>
+  @Query("SELECT bookId, progress, status, lastOpenedAt, userRating FROM book_state WHERE bookId IN (:ids)")
+  abstract suspend fun readingOf(ids: List<Long>): List<ReadingStateRow>
   @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun put(state: BookStateEntity)
 
   @Transaction

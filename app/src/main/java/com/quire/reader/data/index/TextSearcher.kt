@@ -7,6 +7,7 @@ import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.data.db.SearchableBook
 import com.quire.reader.data.db.SearchableState
 import com.quire.reader.data.toBook
+import com.quire.reader.data.withReadingState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -130,12 +131,14 @@ class TextSearcher(
     val shownIdx = rankOrder(q, matching, counts, byIndex, ranges, order, examined, capped).take(maxBooks)
     val snippetIds = shownIdx.flatMap { firstIds[it] }
     val built = snippets(q, snippetIds)
-    val bookRows = db.books().rowsByIds(shownIdx.map { byIndex[it].book.id }).associateBy { it.id }
+    val shownIds = shownIdx.map { byIndex[it].book.id }
+    val bookRows = db.books().catalogByIds(shownIds).associateBy { it.id }
+    val states = db.states().readingOf(shownIds).associateBy { it.bookId }
     val results = shownIdx.mapNotNull { i ->
       val c = byIndex[i]
       val book = bookRows[c.book.id] ?: return@mapNotNull null
       val snippets = firstIds[i].mapNotNull { id -> built[id]?.let { snippet(c.state, it.first, it.second) } }
-      BookTextResult(book.toBook(now), PassageCount(counts[i], capped), c.state.gap, snippets)
+      BookTextResult(book.toBook(now).withReadingState(states[book.id], now), PassageCount(counts[i], capped), c.state.gap, snippets)
     }
     return TextSearchResult(results, matching.size, capped, incomplete, downgraded)
   }
