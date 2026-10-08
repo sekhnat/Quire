@@ -1,6 +1,7 @@
 package com.quire.reader.ui.library
 
 import android.net.Uri
+import androidx.tracing.trace
 import com.quire.reader.data.Book
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
@@ -86,7 +87,7 @@ class LibraryState(
   private val _state = MutableStateFlow(LibraryUiState())
   val state: StateFlow<LibraryUiState> = _state
 
-  val data: StateFlow<LibraryData> = combine(store.books, store.folders) { books, folders -> LibraryData(books, folders) }
+  val data: StateFlow<LibraryData> = combine(store.books, store.folders) { books, folders -> trace("LibraryData") { LibraryData(books, folders) } }
     .stateIn(scope, SharingStarted.Eagerly, LibraryData.Empty)
 
   val scan: StateFlow<ScanProgress> = store.scan

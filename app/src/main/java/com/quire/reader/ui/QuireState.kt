@@ -1,5 +1,6 @@
 package com.quire.reader.ui
 
+import androidx.tracing.trace
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
 import com.quire.reader.data.index.SearchOrder
@@ -91,7 +92,7 @@ fun cardStatus(b: Book, sort: SortKey): String = when (sort) {
 }
 
 /** Books for the library list after sort, scope, filter and search have been applied. */
-fun visibleBooks(s: LibraryUiState, all: List<Book>): List<Book> {
+fun visibleBooks(s: LibraryUiState, all: List<Book>): List<Book> = trace("Library.visibleBooks") {
   val order = compareBy<Book> { s.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
   var list = all.sortedWith(if (s.sortAscending) order else order.reversed())
   s.scope?.let { sc ->
@@ -119,7 +120,7 @@ fun visibleBooks(s: LibraryUiState, all: List<Book>): List<Book> {
     val q = s.query.lowercase()
     list = list.filter { (it.title + " " + it.author + " " + (it.series ?: "") + " " + it.tags.joinToString(" ")).lowercase().contains(q) }
   }
-  return list
+  list
 }
 
 /**
