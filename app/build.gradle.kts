@@ -20,6 +20,9 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The bundled SQLite (search index) is native code; 64-bit only keeps the APK small.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+        // Scroll-window telemetry (renderer memory, live documents, blank viewport time) is
+        // compiled in only for the benchmark build type below.
+        buildConfigField("boolean", "SCROLL_TELEMETRY", "false")
     }
 
     signingConfigs {
@@ -63,7 +66,24 @@ android {
             // Debug key locally, release keystore in CI — keeps every artifact upgradeable.
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
+        // Release-based build for measuring the scroll surface: its own application id (so a
+        // run never replaces the installed app or a .dbtest install), telemetry on. Not
+        // minified: what it measures is the WebView renderer, and the benchmark reaches
+        // navigator internals. Debuggable because AGP 9.0.1 runs L8 over the test APK of a
+        // non-debuggable app and rejects the androidTest names that contain spaces; the
+        // renderer process, where the measured work happens, is not affected. Run its
+        // instrumented tests with -PtestBuildType=benchmark.
+        create("benchmark") {
+            initWith(getByName("release"))
+            isMinifyEnabled = false
+            isDebuggable = true
+            signingConfig = signingConfigs.getByName("debug")
+            applicationIdSuffix = ".bench"
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "SCROLL_TELEMETRY", "true")
+        }
     }
+    testBuildType = providers.gradleProperty("testBuildType").getOrElse("debug")
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -73,7 +93,7 @@ android {
     buildFeatures {
       compose = true
       aidl = false
-      buildConfig = false
+      buildConfig = true
       shaders = false
     }
 

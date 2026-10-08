@@ -11,6 +11,7 @@ import com.quire.reader.data.ReadMode
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.index.EpubFixtures
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.navigator.epub.PressureTiers
 import com.quire.reader.reader.ReaderSession
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -179,7 +180,42 @@ class ReaderBoundedScrollTest {
     assertEquals(EpubFixtures.longHeading(last), JSONTokener(raw ?: "null").nextValue().toString().trim())
   }
 
+  @Test fun `memory pressure shrinks the live window to the viewport and its release restores it`() {
+    open()
+    val session = session()
+    val nav = session.navigator!!
+    session.go(session.toc.first { it.title == EpubFixtures.longHeading(20) }.link)
+    awaitTargetInView(session, 20, "h20")
+    // Background measurement adds documents of its own; let it finish first.
+    awaitCondition("every chapter measured", 60_000) { runBlocking { nav.continuousBook!!.measuredFrameCount() } >= 40 }
+
+    scenario.onActivity { nav.simulateMemoryPressure(PressureTiers.Tier.Minimal) }
+    var held = emptyList<Pair<Double, Double>>()
+    awaitCondition("the window shrinks to the viewport", 5_000) {
+      held = heldSlots(nav)
+      // The minimal tier keeps three documents at most, all within a viewport above and a viewport and a half below.
+      shellTier(nav) == 2 && held.size in 1..3 && held.all { (top, bottom) -> top < 2.5 && bottom > -1.0 }
+    }
+    assertTrue("the visible chapter stays loaded: $held", held.any { (top, bottom) -> top <= 0.0 && bottom > 0.0 })
+
+    scenario.onActivity { nav.simulateMemoryPressure(null) }
+    awaitCondition("the normal window is back", 5_000) { shellTier(nav) == 0 }
+    assertTrue("the reader is still on chapter 20", visibleTop(session, 20, "h20") != null)
+  }
+
   // ── helpers ───────────────────────────────────────────────────────────────
+
+  /** The slots holding a document, as their top and bottom in reader viewports from the viewport top. */
+  private fun heldSlots(nav: EpubNavigatorFragment): List<Pair<Double, Double>> {
+    val js = "JSON.stringify(Array.prototype.filter.call(document.querySelectorAll('.slot'), function (s) { return s.querySelector('iframe'); })" +
+      ".map(function (s) { var r = s.getBoundingClientRect(); return [r.top / innerHeight, r.bottom / innerHeight]; }))"
+    val raw = runBlocking { nav.continuousBook!!.evaluateShell(js) } ?: return emptyList()
+    val list = org.json.JSONArray(JSONTokener(raw).nextValue() as String)
+    return List(list.length()) { list.getJSONArray(it).let { r -> r.getDouble(0) to r.getDouble(1) } }
+  }
+
+  private fun shellTier(nav: EpubNavigatorFragment): Int? =
+    runBlocking { nav.continuousBook!!.evaluateShell("QuireShellHost.pressureTier()") }?.trim()?.toIntOrNull()
 
   private fun href(chapter: Int) = Url("l$chapter.xhtml")!!
 
