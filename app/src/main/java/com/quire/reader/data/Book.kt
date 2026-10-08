@@ -1,8 +1,9 @@
 package com.quire.reader.data
 
 import androidx.compose.ui.graphics.Color
-import com.quire.reader.data.db.BookRow
 import com.quire.reader.data.db.BookStateEntity
+import com.quire.reader.data.db.CatalogRow
+import com.quire.reader.data.db.ReadingStateRow
 import com.quire.reader.theme.Nq
 import java.time.Instant
 import java.time.ZoneId
@@ -98,17 +99,34 @@ fun String.lastWord() = trim().split(' ').last()
 const val RECENT_DAYS = 30L
 private const val DAY_MS = 24L * 60 * 60 * 1000
 
-fun BookRow.toBook(now: Long): Book {
-  val st = when (status) {
+private fun isNew(status: BookStatus, addedAt: Long, now: Long) = status == BookStatus.Unread && now - addedAt < RECENT_DAYS * DAY_MS
+
+/**
+ * The book as the library shows it before it is ever opened: unread, Calibre's rating. [withReadingState] adds what
+ * the reader saved. Mapped once per catalogue change, since positions are saved far more often.
+ */
+fun CatalogRow.toBook(now: Long): Book = Book(
+  id = id, path = path, folderId = folderId, title = title, sortTitle = sortTitle, author = author, primaryAuthor = primaryAuthor,
+  authorSort = authorSort, series = series, seriesNo = seriesIndex, year = pubYear, pages = pageEstimate, tags = tagList, userTags = userTagList, language = language,
+  rating = calibreRating, status = BookStatus.Unread, progress = 0f, lastOpened = 0L, addedAt = addedAt,
+  sizeBytes = sizeBytes, desc = description, coverPath = coverPath, fromCalibre = source == "calibre", readable = readable,
+  isNew = isNew(BookStatus.Unread, addedAt, now),
+)
+
+/**
+ * This book with its reading state [state] (none: never opened). Only for a book straight from [CatalogRow.toBook]:
+ * its rating must still be Calibre's, which a user rating replaces.
+ */
+fun Book.withReadingState(state: ReadingStateRow?, now: Long): Book {
+  val status = when (state?.status) {
     BookStateEntity.STATUS_READING -> BookStatus.Reading
     BookStateEntity.STATUS_FINISHED -> BookStatus.Finished
     else -> BookStatus.Unread
   }
-  return Book(
-    id = id, path = path, folderId = folderId, title = title, sortTitle = sortTitle, author = author, primaryAuthor = primaryAuthor,
-    authorSort = authorSort, series = series, seriesNo = seriesIndex, year = pubYear, pages = pageEstimate, tags = tagList, userTags = userTagList, language = language,
-    rating = userRating ?: calibreRating, status = st, progress = progress ?: 0f, lastOpened = lastOpenedAt ?: 0L, addedAt = addedAt,
-    sizeBytes = sizeBytes, desc = description, coverPath = coverPath, fromCalibre = source == "calibre", readable = readable,
-    isNew = st == BookStatus.Unread && now - addedAt < RECENT_DAYS * DAY_MS,
+  val new = isNew(status, addedAt, now)
+  if (state == null && new == isNew) return this
+  return copy(
+    rating = state?.userRating ?: rating, status = status, progress = state?.progress ?: 0f, lastOpened = state?.lastOpenedAt ?: 0L,
+    isNew = new,
   )
 }

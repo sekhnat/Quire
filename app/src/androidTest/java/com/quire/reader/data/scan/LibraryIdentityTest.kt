@@ -63,7 +63,7 @@ class LibraryIdentityTest : DbTestCase() {
     assertEquals(listOf("nice"), db.annotations().observeHighlights(bookId).first().map { it.note })
   }
 
-  private fun Fixture.live() = runBlocking { db.books().observeAll().first() }
+  private fun Fixture.live() = runBlocking { db.books().observeCatalog().first() }
   private fun Fixture.missing() = runBlocking { db.books().observeMissing().first() }
   private fun Fixture.scan() = runBlocking { scanner.scan() }
 
