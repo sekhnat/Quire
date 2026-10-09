@@ -22,6 +22,8 @@ import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextSearchResult
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearcher
+import com.quire.reader.data.mobi.MobiBook
+import com.quire.reader.data.scan.BookFormats
 import com.quire.reader.data.scan.CoverStore
 import com.quire.reader.data.scan.LibraryScanner
 import com.quire.reader.data.scan.ScanResult
@@ -134,16 +136,24 @@ class LibraryRepository(
 
   suspend fun forgetAllMissing() = forgetMissing(withContext(Dispatchers.IO) { db.books().missingIds() })
 
-  /** Copies picked EPUBs into app storage (a folder that is always readable) and scans it. */
+  /** Copies picked books (EPUB, AZW3, MOBI) into app storage (a folder that is always readable) and scans it. */
   suspend fun importFiles(uris: List<Uri>): Int = withContext(Dispatchers.IO) {
     val dir = File(app.filesDir, "imported").apply { mkdirs() }
     var copied = 0
     for (uri in uris) {
       runCatching {
-        val name = displayName(uri)?.takeIf { it.endsWith(".epub", true) } ?: "import-${System.currentTimeMillis()}.epub"
-        val target = uniqueFile(dir, name.replace(Regex("[\\\\/:*?\"<>|]"), "_"))
-        app.contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { input.copyTo(it) } } ?: error("cannot open $uri")
-        copied++
+        val incoming = File(dir, ".import-${System.currentTimeMillis()}.tmp")
+        try {
+          app.contentResolver.openInputStream(uri)?.use { input -> incoming.outputStream().use { input.copyTo(it) } } ?: error("cannot open $uri")
+          // A picker may hand over a file without its name; a MOBI then still needs its extension to be found.
+          val ext = if (MobiBook.isMobi(incoming)) "mobi" else "epub"
+          val name = displayName(uri)?.takeIf { BookFormats.isBook(it) } ?: "import-${System.currentTimeMillis()}.$ext"
+          val target = uniqueFile(dir, name.replace(Regex("[\\\\/:*?\"<>|]"), "_"))
+          if (!incoming.renameTo(target)) error("cannot store $name")
+          copied++
+        } finally {
+          incoming.delete()
+        }
       }
     }
     if (copied > 0) scanImported()
@@ -180,7 +190,8 @@ class LibraryRepository(
     var f = File(dir, name)
     var n = 1
     val base = name.substringBeforeLast('.')
-    while (f.exists()) f = File(dir, "$base ($n).epub").also { n++ }
+    val ext = name.substringAfterLast('.', "epub")
+    while (f.exists()) f = File(dir, "$base ($n).$ext").also { n++ }
     return f
   }
 

@@ -126,5 +126,15 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
     }
   }
 
+  /**
+   * Whether to ask for the notification permission now: once ever, while indexing is on, so the indexing notification can
+   * show. A refusal changes nothing else; indexing runs either way.
+   */
+  suspend fun claimNotificationRequest(): Boolean {
+    if (!app.settings.indexingEnabled.first() || app.settings.notificationsAsked.first()) return false
+    app.settings.setNotificationsAsked()
+    return true
+  }
+
   override fun onCleared() { closeHolder(_destination.value); super.onCleared() }
 }

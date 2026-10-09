@@ -22,6 +22,16 @@ class CoverStore(context: Context) {
     saveFromBitmap(bmp, bookPath)
   }.getOrNull()
 
+  /** Saves an encoded image (JPEG, PNG…) held in memory, such as a MOBI's cover record. */
+  fun saveFromBytes(bytes: ByteArray, bookPath: String): String? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0) return null
+    val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth) }
+    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
+    saveFromBitmap(bmp, bookPath)
+  }.getOrNull()
+
   fun saveFromBitmap(bitmap: Bitmap, bookPath: String): String? = runCatching {
     val scaled = if (bitmap.width > TARGET_WIDTH) bitmap.scale(TARGET_WIDTH, (bitmap.height * TARGET_WIDTH.toFloat() / bitmap.width).toInt().coerceAtLeast(1)) else bitmap
     val out = fileFor(bookPath)
