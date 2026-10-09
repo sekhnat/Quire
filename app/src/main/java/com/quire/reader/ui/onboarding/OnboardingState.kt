@@ -159,7 +159,7 @@ class OnboardingState(
 
   fun openLibrary() = nav.openLibrary()
 
-  /** "Import EPUB files": books that come in finish onboarding and open the library. */
+  /** "Import book files": books that come in finish onboarding and open the library. */
   fun importFiles(uris: List<Uri>) {
     if (uris.isEmpty()) return
     persist.launch {

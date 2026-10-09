@@ -7,6 +7,7 @@ import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.KnownFile
 import com.quire.reader.data.db.MAX_SQL_ARGS
 import com.quire.reader.data.db.QuireDatabase
+import com.quire.reader.data.mobi.MobiBook
 import com.quire.reader.reader.PublicationLoader
 import org.readium.r2.shared.publication.services.cover
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,7 @@ enum class ScanPhase { Idle, Finding, Reading, Done }
 
 data class ScanProgress(
   val phase: ScanPhase = ScanPhase.Idle,
-  /** EPUB files seen so far (grows during [ScanPhase.Finding]). */
+  /** Book files seen so far (grows during [ScanPhase.Finding]). */
   val found: Int = 0,
   /** Files read so far out of [total] that needed reading. */
   val processed: Int = 0,
@@ -179,9 +180,10 @@ class LibraryScanner(
 
   private class Stored(val id: Long, val readable: Boolean)
 
-  /** Stores the book; [Stored.readable] is false when it was stored but could not be opened as an EPUB. */
+  /** Stores the book; [Stored.readable] is false when it was stored but could not be opened as a book. */
   private suspend fun readAndStore(file: FoundFile, folder: FolderEntity, existingId: Long, existingAddedAt: Long?, useCalibre: Boolean): Stored {
     val epub = File(file.path)
+    val mobi = BookFormats.isMobi(epub)
     val opfFile = File(epub.parentFile, "metadata.opf")
     var meta: OpfMetadata? = null
     var source = BookEntity.SOURCE_FILE
@@ -196,7 +198,15 @@ class LibraryScanner(
         if (cover.isFile) coverPath = covers.saveFromFile(cover, file.path)
       }
     }
-    if (meta == null || (coverPath == null && source == BookEntity.SOURCE_CALIBRE)) {
+    if (mobi && (meta == null || (coverPath == null && source == BookEntity.SOURCE_CALIBRE))) {
+      // A MOBI's header has its metadata and names its cover; converting the whole book is left until it is opened.
+      runCatching {
+        MobiBook.open(epub).use { book ->
+          if (meta == null) meta = book.metadata.toOpfMetadata()
+          if (coverPath == null) book.coverImage()?.let { coverPath = covers.saveFromBytes(it, file.path) }
+        }
+      }.onFailure { readable = false; Log.w(TAG, "cannot read MOBI ${file.path}: ${it.message}") }
+    } else if (meta == null || (coverPath == null && source == BookEntity.SOURCE_CALIBRE)) {
       // No Calibre metadata (or no cover.jpg): ask the EPUB itself.
       val opened = loader.open(epub)
       opened.onSuccess { pub ->
@@ -207,7 +217,7 @@ class LibraryScanner(
       }.onFailure { readable = false }
     }
 
-    // Both cover paths ran (Calibre cover.jpg, then the EPUB itself) and still nothing: say so, so a silent
+    // Both cover paths ran (Calibre cover.jpg, then the book itself) and still nothing: say so, so a silent
     // extraction regression is visible in logcat instead of just an empty card in the library.
     if (coverPath == null) Log.i(TAG, "no cover extracted for ${file.path}")
 
@@ -248,17 +258,20 @@ class LibraryScanner(
     return Stored(db.books().save(entity, m.tags), readable)
   }
 
+  /** Every book file under [root]; of a book kept in several formats under one name, only the best (see [BookFormats]). */
   private suspend fun walk(root: File, onFile: suspend (File) -> Unit) {
     val stack = ArrayDeque<File>().apply { add(root) }
     while (stack.isNotEmpty()) {
       val dir = stack.removeLast()
+      val files = ArrayList<File>()
       for (f in dir.listFiles().orEmpty()) {
         when {
           f.name.startsWith(".") -> continue
           f.isDirectory -> if (!(dir == root && f.name == "Android")) stack.add(f)
-          f.name.endsWith(".epub", ignoreCase = true) -> onFile(f)
+          BookFormats.isBook(f.name) -> files += f
         }
       }
+      for (f in BookFormats.preferred(files)) onFile(f)
     }
   }
 
@@ -269,8 +282,12 @@ class LibraryScanner(
     private const val PARALLELISM = 4
     const val UNKNOWN_AUTHOR = "Unknown author"
 
-    /** Pages from the amount of text in the EPUB's HTML files (no decompression needed). */
+    /** Pages from the amount of text in the EPUB's HTML files (no decompression needed), or a MOBI's text length. */
     fun estimatePages(file: File): Int {
+      if (BookFormats.isMobi(file)) {
+        val chars = runCatching { MobiBook.open(file).use { it.textLength } }.getOrDefault(0L)
+        if (chars > 0) return max(1, (chars / CHARS_PER_PAGE).toInt())
+      }
       val chars = runCatching {
         ZipFile(file).use { zip ->
           var total = 0L
