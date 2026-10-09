@@ -67,8 +67,14 @@ class IndexPolicyTest {
   @Test fun `queued work waits for charging only when charging is required and books remain`() {
     val queued = running.copy(running = false, workQueued = true)
     assertEquals(IndexActivity.WaitingForCharging, deriveActivity(queued.copy(chargingOnly = true)))
-    assertEquals(IndexActivity.Idle, deriveActivity(queued))
     assertEquals(IndexActivity.Idle, deriveActivity(queued.copy(chargingOnly = true, pending = 0)))
+  }
+
+  @Test fun `queued work with books left keeps showing progress between runs`() {
+    val queued = running.copy(running = false, workQueued = true)
+    assertEquals(IndexActivity.Running(done = 6, total = 10), deriveActivity(queued))
+    assertEquals(IndexActivity.Idle, deriveActivity(queued.copy(pending = 0)))
+    assertEquals(IndexActivity.Idle, deriveActivity(queued.copy(workQueued = false)))
   }
 
   @Test fun `a book none of whose resources can be read is unreadable and fails`() {

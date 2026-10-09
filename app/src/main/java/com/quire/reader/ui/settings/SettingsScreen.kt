@@ -202,7 +202,7 @@ fun SettingsScreen(settings: SettingsState) {
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Kicker("Library search")
-        Toggle("Index book text", "Lets you search inside books. Runs in the background and steps aside while you read.", indexing) { settings.setIndexingEnabled(!indexing) }
+        Toggle("Index book text", "Lets you search inside books. Runs in the background with a notification, and steps aside while you read.", indexing) { settings.setIndexingEnabled(!indexing) }
         Toggle("Index only while charging", "Applies to all indexing, including updates for new and changed books.", chargingOnly) { settings.setIndexChargingOnly(!chargingOnly) }
         LibrarySearchStatus(indexStatusText(coverage, activity, inSettings = true), coverage)
         Value("Library storage", storage?.let { formatBytes(it.library) } ?: "…", "Books, reading state, highlights and notes. The search index lives in its own file, below.")
