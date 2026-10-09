@@ -39,13 +39,11 @@ internal data class ReadiumCss(
     // FIXME: Replace existing attributes instead of adding new ones
     @Throws
     internal fun injectHtml(html: String): String {
-        // jsoup swallows the body behind a self-closing <title/>, so the lang attributes would be read from an empty body.
-        val document = Jsoup.parse(normalizeHtml(html))
         val content = StringBuilder(html)
         injectStyles(content)
         injectCssProperties(content)
         injectDir(content)
-        injectLang(content, document)
+        injectLang(content) { langElements(html) }
         return content.toString()
     }
 
@@ -215,8 +213,9 @@ internal data class ReadiumCss(
      *
      * https://github.com/readium/readium-css/blob/develop/docs/CSS16-internationalization.md#language
      */
-    private fun injectLang(content: StringBuilder, document: Document) {
+    private fun injectLang(content: StringBuilder, document: () -> Document) {
         val language = layout.language?.code ?: return
+        val document = document()
 
         fun Element.hasLang(): Boolean =
             hasAttr("xml:lang") || hasAttr("lang")
@@ -262,6 +261,19 @@ internal data class ReadiumCss(
                 ?: throw IllegalArgumentException("No <$tag> opening tag found in this resource")
             ) + tag.length + 1
 }
+
+/**
+ * The part of [html] that holds the `lang` attributes [ReadiumCss] reads, parsed: everything up to the `<body>` start
+ * tag, which is all of it that matters and, for a long chapter, a small share of it. The whole document when no body
+ * tag follows the head. jsoup swallows the body behind a self-closing `<title/>`, so the head is normalised first.
+ */
+internal fun langElements(html: String): Document {
+    val headEnd = html.indexOf("</head>", ignoreCase = true).coerceAtLeast(0)
+    val bodyEnd = bodyStartTag.find(html, headEnd)?.range?.last
+    return Jsoup.parse(normalizeHtml(if (bodyEnd != null) html.substring(0, bodyEnd + 1) else html))
+}
+
+private val bodyStartTag = Regex("""<body(?:[\s/][^>]*)?>""", RegexOption.IGNORE_CASE)
 
 private val dirRegex = Regex(
     """(<(?:html|body)[^\>]*)\s+dir=[\"']\w*[\"']""",

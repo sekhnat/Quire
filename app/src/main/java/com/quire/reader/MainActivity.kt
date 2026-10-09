@@ -11,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
+import com.quire.reader.reader.WebViewWarmup
 import com.quire.reader.theme.QuireTheme
 import com.quire.reader.ui.QuireApp
 
@@ -36,5 +37,7 @@ class MainActivity : FragmentActivity() {
     setContent {
       QuireTheme { Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { QuireApp() } }
     }
+    // So the first book opened does not also pay for starting the WebView engine.
+    WebViewWarmup.startWhenIdle(this)
   }
 }

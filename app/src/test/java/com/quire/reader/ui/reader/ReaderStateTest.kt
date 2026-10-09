@@ -14,7 +14,9 @@ import com.quire.reader.ui.childScope
 import com.quire.reader.ui.testBook
 import com.quire.reader.ui.testPage
 import com.quire.reader.ui.testTarget
+import com.quire.reader.data.ReaderPrefs
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -108,12 +110,24 @@ class ReaderStateTest {
     val load = reader.awaitSettled()
     assertTrue(load is ReaderLoad.Ready)
     assertEquals(listOf(File("/books/1.epub")), opened)
+    runCurrent()
     assertTrue("opened 1" in store.writes)
     assertEquals(listOf(true), indexer.busy)
     reader.leave()
     assertEquals(listOf(Visit.Library), nav.visits)
     reader.close()
     assertEquals(listOf(true, false), indexer.busy)
+  }
+
+  @Test fun `the book is ready with its own settings and brightness, so the page is never laid out twice`() = runTest(dispatcher) {
+    store.prefs.value = ReaderPrefs(fontSize = 25)
+    store.brightness.value = 40
+    val reader = reader()
+    // Runs the moment the load turns ready, before anything started afterwards could fill the settings in.
+    val atReady = backgroundScope.async { reader.load.first { it is ReaderLoad.Ready }; reader.prefs.value.fontSize to reader.ui.value.brightness }
+    reader.awaitSettled()
+    runCurrent()
+    assertEquals(25 to 40, atReady.await())
   }
 
   @Test fun `settings edits are published at once and written for this book`() = runTest(dispatcher) {

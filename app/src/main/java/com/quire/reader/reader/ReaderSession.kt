@@ -190,6 +190,14 @@ class ReaderSession(
     return TargetOutcome.Unresolved
   }
 
+  /**
+   * Waits, at most [timeoutMs], until the navigator has shown the book: its first page in paged mode, the prepared book
+   * in scroll mode. False when it failed or took longer.
+   */
+  suspend fun awaitShown(timeoutMs: Long): Boolean = withTimeoutOrNull(timeoutMs) {
+    navigatorFlow.filterNotNull().first().readiness.first { it !is EpubNavigatorFragment.Readiness.Preparing }
+  } is EpubNavigatorFragment.Readiness.Ready
+
   private suspend fun awaitNavigator(): EpubNavigatorFragment? =
     withTimeoutOrNull(NAVIGATOR_TIMEOUT_MS) { navigatorFlow.filterNotNull().first() }
 

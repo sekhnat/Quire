@@ -267,10 +267,20 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
             false
         }
 
-        resourceUrl?.let {
+        resourceUrl?.let { url ->
             isLoading = true
             _isLoaded.value = false
-            webView.loadUrl(it.toString())
+            val navigator = navigator
+            val link = link
+            if (navigator != null && link != null && navigator.holdsBack(link)) {
+                // A neighbour of the page the book opens on: it loads once that page has shown.
+                viewLifecycleOwner.lifecycleScope.launch {
+                    navigator.awaitNeighbourTurn()
+                    webView.loadUrl(url.toString())
+                }
+            } else {
+                webView.loadUrl(url.toString())
+            }
         }
 
         setupPadding()

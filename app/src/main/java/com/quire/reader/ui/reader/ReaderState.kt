@@ -1,5 +1,6 @@
 package com.quire.reader.ui.reader
 
+import android.util.Log
 import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.ParagraphPreset
 import com.quire.reader.data.ReaderPrefs
@@ -35,7 +36,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +95,12 @@ interface ReaderStore {
   suspend fun searchBookPage(bookId: Long, query: FtsQuery.Result.Query, afterSeq: Int = -1): BookTextPage
   suspend fun isCurrent(target: IndexTarget): Boolean
 }
+
+private const val TAG = "ReaderOpen"
+/** How long the opening log waits for the book to show before reporting that it did not. */
+private const val SHOWN_LOG_TIMEOUT_MS = 30_000L
+/** How long chapter anchors wait for the first page before being worked out anyway. */
+private const val ANCHORS_WAIT_MS = 5_000L
 
 sealed interface ReaderLoad {
   data object Idle : ReaderLoad
@@ -189,37 +199,64 @@ class ReaderState(
     scope.launch { open() }
   }
 
-  private suspend fun open() {
+  /**
+   * Opens the book. Everything the first page needs besides the book itself (its reading settings, the brightness and
+   * the saved position) is read while the publication is parsed, so the navigator is built once with the book's own
+   * settings instead of being laid out with the defaults and then again when they arrive. Bookkeeping writes happen
+   * after the book is shown.
+   */
+  private suspend fun open(): Unit = coroutineScope {
+    val started = System.nanoTime()
     var unclaimed: Publication? = null
     try {
       val path = store.bookPath(bookId)
-      if (path == null) { fail("This book is no longer in the library."); return }
+      if (path == null) { fail("This book is no longer in the library."); return@coroutineScope }
+      val opening = openingPosition(request.restart, hasTarget = request.target != null)
+      val prefs = async { store.readerPrefs(bookId).first() }
+      val brightness = async { store.brightness.first() }
+      val saved = async { if (opening == OpeningPosition.Saved) store.savedLocator(bookId) else null }
       val publication = openPublication(File(path)).getOrElse {
+        coroutineContext.cancelChildren()
         store.markUnreadable(bookId)
         fail("This book can’t be opened. The file may be damaged or protected.")
-        return
+        return@coroutineScope
       }
       unclaimed = publication
+      val parsed = System.nanoTime()
       val positions = withContext(Dispatchers.IO) { runCatching { publication.positions() }.getOrDefault(emptyList()) }
-      val initial = when (openingPosition(request.restart, hasTarget = request.target != null)) {
+      val initial = when (opening) {
         OpeningPosition.Target -> request.target?.let { ReaderSession.targetLocator(it, positions) }
-        OpeningPosition.Saved -> ReaderSession.parseLocator(store.savedLocator(bookId))
+        OpeningPosition.Saved -> ReaderSession.parseLocator(saved.await())
         OpeningPosition.Start -> null
       }
-      store.markOpened(bookId)
-      store.updatePageCount(bookId, positions.size)
       val book = library.first { it.loaded }.byId[bookId]
-      if (book == null) { fail("This book is no longer in the library."); return }
+      if (book == null) { coroutineContext.cancelChildren(); fail("This book is no longer in the library."); return@coroutineScope }
+      _prefs.value = prefs.await()
+      edit { copy(brightness = brightness.await()) }
       val session = ReaderSession(book, publication, positions, initial)
       unclaimed = null
       _load.value = ReaderLoad.Ready(session)
+      // Off the opening path: neither write changes what is shown.
+      persist.launch {
+        store.markOpened(bookId)
+        store.updatePageCount(bookId, positions.size)
+      }
       startJobs(session)
+      scope.launch { logOpening(session, started, parsed, System.nanoTime()) }
       request.target?.let { target -> targetJob = scope.launch { reportOutcome(session.goToTarget(target)) } }
       request.libraryQuery?.let { enterBookSearch(it) }
     } finally {
       // Opened but never handed to a session: the load failed or the reader was left while it ran.
       unclaimed?.close()
     }
+  }
+
+  /** Logs how long each part of opening took, once the navigator has shown the book; `adb logcat -s ReaderOpen`. */
+  private suspend fun logOpening(session: ReaderSession, started: Long, parsed: Long, ready: Long) {
+    val shown = if (session.awaitShown(SHOWN_LOG_TIMEOUT_MS)) System.nanoTime() else null
+    fun ms(from: Long, to: Long) = (to - from) / 1_000_000
+    Log.i(TAG, "book $bookId: parsed in ${ms(started, parsed)} ms, ready at ${ms(started, ready)} ms, " +
+      (shown?.let { "shown at ${ms(started, it)} ms" } ?: "not shown within ${SHOWN_LOG_TIMEOUT_MS / 1000} s"))
   }
 
   private fun fail(message: String) {
@@ -237,7 +274,8 @@ class ReaderState(
     scope.launch { store.brightness.collect { b -> edit { copy(brightness = b) } } }
     // Save the position a moment after the reader stops moving.
     scope.launch { session.current.filterNotNull().drop(1).debounce(800).collect { savePosition(session, it) } }
-    scope.launch { runCatching { session.resolveChapterAnchors() } }
+    // Reads every chapter file with an anchored entry; it waits for the first page so it never competes with it.
+    scope.launch { session.awaitShown(ANCHORS_WAIT_MS); runCatching { session.resolveChapterAnchors() } }
     // Keep highlight decorations in step with the database and with the navigator coming and going.
     scope.launch { _highlights.collect { list -> runCatching { session.applyHighlights(list) } } }
   }
