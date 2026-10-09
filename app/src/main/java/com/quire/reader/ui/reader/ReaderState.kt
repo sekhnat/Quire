@@ -232,7 +232,8 @@ class ReaderState(
       val book = library.first { it.loaded }.byId[bookId]
       if (book == null) { coroutineContext.cancelChildren(); fail("This book is no longer in the library."); return@coroutineScope }
       _prefs.value = prefs.await()
-      edit { copy(brightness = brightness.await()) }
+      val level = brightness.await()
+      edit { copy(brightness = level) }
       val session = ReaderSession(book, publication, positions, initial)
       unclaimed = null
       _load.value = ReaderLoad.Ready(session)
