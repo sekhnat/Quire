@@ -328,6 +328,29 @@ public class EpubNavigatorFragment internal constructor(
 
     private var state: State = State.Initializing
 
+    /**
+     * Whether pages other than the one the book opens on may load. The pager builds the chapters on either side of the
+     * opening one at the same time, and every page shares the WebView renderer's one main thread, so until the opening
+     * page has shown (or the reader moves elsewhere) the neighbours wait and the first page is laid out alone.
+     */
+    private val neighboursMayLoad = MutableStateFlow(false)
+
+    /** True when the page for [link] should wait for the opening page before it loads; see [awaitNeighbourTurn]. */
+    internal fun holdsBack(link: Link): Boolean {
+        if (neighboursMayLoad.value || state == State.Ready) return false
+        val opening = when (val s = state) {
+            is State.Loading -> s.initialResourceHref
+            // Opening at the start of the book: no jump was made, so the opening page is the pager's current one.
+            else -> (adapter.getResource(resourcePager.currentItem) as? PageResource.EpubReflowable)?.link?.url()
+        } ?: return false
+        return !link.url().removeFragment().isEquivalent(opening.removeFragment())
+    }
+
+    /** Waits until neighbouring pages may load; at most [NEIGHBOUR_HOLD_MAX_MS], so a page that never shows holds nothing up. */
+    internal suspend fun awaitNeighbourTurn() {
+        withTimeoutOrNull(NEIGHBOUR_HOLD_MAX_MS) { neighboursMayLoad.first { it } }
+    }
+
     // Configurable
 
     override val settings: StateFlow<EpubSettings> get() = viewModel.settings
@@ -1039,6 +1062,9 @@ public class EpubNavigatorFragment internal constructor(
 
         if (state == State.Initializing) {
             state = State.Loading(locator.href)
+        } else {
+            // A move after the opening one: the page it lands on must not wait for the opening page.
+            neighboursMayLoad.value = true
         }
 
         listener?.onJumpToLocator(locator)
@@ -1262,6 +1288,7 @@ public class EpubNavigatorFragment internal constructor(
         }
 
         override fun onPageLoaded(webView: R2BasicWebView, link: Link) {
+            neighboursMayLoad.value = true
             paginationListener?.onPageLoaded()
 
             val href = link.url()
@@ -1650,6 +1677,9 @@ public class EpubNavigatorFragment internal constructor(
 
         /** Two renderer losses closer together than this make the scroll surface give up. */
         private const val RENDERER_LOSS_WINDOW_MS = 30_000L
+
+        /** The longest the pages beside the opening one wait for it before loading anyway. */
+        private const val NEIGHBOUR_HOLD_MAX_MS = 2_000L
 
         /**
          * Creates a factory for a dummy [EpubNavigatorFragment].
