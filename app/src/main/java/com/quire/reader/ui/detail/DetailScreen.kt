@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.scan.BookFormats
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.QuireFonts
 import com.quire.reader.ui.BtnKind
@@ -148,7 +149,7 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
           Kicker("File", Modifier.padding(bottom = 6.dp))
           listOf(
-            Triple("Format", "EPUB · ${book.sizeLabel}", false),
+            Triple("Format", "${BookFormats.label(book.path)} · ${book.sizeLabel}", false),
             Triple("Language", book.languageLabel, false),
             Triple("Added", book.addedLabel, false),
             Triple("Source", if (book.fromCalibre) "Calibre · metadata.opf" else "Folder scan", false),

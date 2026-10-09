@@ -24,13 +24,17 @@ data class ActivityInputs(
   val pending: Int,
 )
 
-/** The one thing to tell the user, in order of what blocks indexing most firmly. */
+/**
+ * The one thing to tell the user, in order of what blocks indexing most firmly. Queued work with books left is still
+ * running as far as the user can tell: one run hands over to the next, and the progress bar should not blink out between them.
+ */
 fun deriveActivity(i: ActivityInputs): IndexActivity = when {
   !i.enabled -> IndexActivity.Disabled
   i.permissionMissing -> IndexActivity.PermissionMissing
   i.readerBusy && (i.running || i.pending > 0) -> IndexActivity.PausedForReader
   i.running -> IndexActivity.Running(i.eligible - i.pending, i.eligible)
   i.chargingOnly && i.workQueued && i.pending > 0 -> IndexActivity.WaitingForCharging
+  i.workQueued && i.pending > 0 -> IndexActivity.Running(i.eligible - i.pending, i.eligible)
   else -> IndexActivity.Idle
 }
 

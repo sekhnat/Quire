@@ -4,7 +4,7 @@ import java.io.File
 
 data class FolderCandidate(val name: String, val path: String, val epubCount: Int)
 
-/** How far [FolderDiscovery.discover] has got: top-level folders [done] of [total], the one it is in now, and EPUBs seen so far. */
+/** How far [FolderDiscovery.discover] has got: top-level folders [done] of [total], the one it is in now, and books seen so far. */
 data class DiscoveryProgress(val done: Int, val total: Int, val current: String, val epubs: Int) {
   val fraction: Float get() = if (total == 0) 0f else done.toFloat() / total
 }
@@ -16,9 +16,9 @@ object FolderDiscovery {
   private const val EPUB_REPORT_STEP = 25
 
   /**
-   * The top-level folders of [roots] that hold EPUBs, most first. [onProgress] hears about each folder as it is
-   * entered, every [EPUB_REPORT_STEP] EPUBs inside it, and once more when it is done, with the folder's candidate
-   * if it had any EPUBs.
+   * The top-level folders of [roots] that hold books, most first. [onProgress] hears about each folder as it is
+   * entered, every [EPUB_REPORT_STEP] books inside it, and once more when it is done, with the folder's candidate
+   * if it had any books.
    */
   fun discover(
     roots: List<File> = storageRoots(),
@@ -48,16 +48,18 @@ object FolderDiscovery {
     return roots.filter { it.isDirectory }
   }
 
-  /** EPUB files under [dir], looking up to six levels down (enough for Calibre's Author/Book layout). [onEpub] runs for each. */
+  /**
+   * Books under [dir] (EPUB, AZW3 and MOBI files, a book kept in several formats once), looking up to six levels down
+   * (enough for Calibre's Author/Book layout). [onEpub] runs for each.
+   */
   fun countEpubs(dir: File, depth: Int = 1, onEpub: () -> Unit = {}): Int {
     if (depth > MAX_DEPTH) return 0
     var n = 0
+    val files = ArrayList<File>()
     for (f in dir.listFiles().orEmpty()) {
-      when {
-        f.isDirectory -> if (!f.name.startsWith(".")) n += countEpubs(f, depth + 1, onEpub)
-        f.name.endsWith(".epub", ignoreCase = true) -> { n++; onEpub() }
-      }
+      if (f.isDirectory) { if (!f.name.startsWith(".")) n += countEpubs(f, depth + 1, onEpub) } else files += f
     }
+    repeat(BookFormats.preferred(files).size) { n++; onEpub() }
     return n
   }
 }

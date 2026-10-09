@@ -1,5 +1,6 @@
 package com.quire.reader.data.scan
 
+import com.quire.reader.data.mobi.MobiBook
 import java.io.File
 import java.io.RandomAccessFile
 import java.security.MessageDigest
@@ -12,30 +13,39 @@ import java.util.zip.ZipFile
 data class BookIdentity(
   /** Calibre's book uuid from the `metadata.opf` beside the file; survives title and author edits that rename the file. */
   val calibreUuid: String?,
-  /** The EPUB's own `unique-identifier`. Weak: tools reuse placeholder ids and editions share ISBNs. */
+  /**
+   * The EPUB's own `unique-identifier`, or a MOBI's ASIN or ISBN. Weak: tools reuse placeholder ids and editions share
+   * ISBNs.
+   */
   val epubUid: String?,
-  /** File size plus a hash of the file's end; see [fingerprint]. Equal for byte-identical copies. */
+  /** File size plus a hash of the file's end (all of it for a MOBI); see [fingerprint]. Equal for byte-identical copies. */
   val fingerprint: String?,
 ) {
   companion object {
     /** Bytes hashed from the end of the file. */
     const val TAIL_BYTES = 64 * 1024
 
-    /** Reads every key of [epub]. Never throws; a key that cannot be read is null. */
-    fun read(epub: File): BookIdentity = BookIdentity(calibreUuid(epub), epubUid(epub), fingerprint(epub))
+    /** Reads every key of [book]. Never throws; a key that cannot be read is null. */
+    fun read(book: File): BookIdentity =
+      if (BookFormats.isMobi(book)) BookIdentity(calibreUuid(book), mobiUid(book), fullFingerprint(book))
+      else BookIdentity(calibreUuid(book), epubUid(book), fingerprint(book))
 
     /**
-     * The uuid of the Calibre `metadata.opf` next to [epub], when [epub] is the only EPUB in its folder: a `metadata.opf`
-     * beside several EPUBs is not Calibre's (it keeps one book per folder) and must not give them all one identity.
+     * The uuid of the Calibre `metadata.opf` next to [book], when [book] is the only book in its folder (counting a book
+     * kept in several formats once): a `metadata.opf` beside several books is not Calibre's (it keeps one book per
+     * folder) and must not give them all one identity.
      */
-    fun calibreUuid(epub: File): String? = runCatching {
-      val dir = epub.parentFile ?: return null
+    fun calibreUuid(book: File): String? = runCatching {
+      val dir = book.parentFile ?: return null
       val opf = File(dir, "metadata.opf")
       if (!opf.isFile) return null
-      val epubs = dir.listFiles { f -> f.isFile && !f.name.startsWith(".") && f.name.endsWith(".epub", ignoreCase = true) }.orEmpty()
-      if (epubs.size != 1) return null
+      val books = BookFormats.preferred(dir.listFiles { f -> f.isFile }.orEmpty().asList())
+      if (books.size != 1) return null
       opf.inputStream().use(OpfParser::identifiers)?.uuid
     }.getOrNull()
+
+    /** A MOBI's ASIN, else its ISBN, from its EXTH header. */
+    fun mobiUid(book: File): String? = runCatching { MobiBook.open(book).use { it.metadata.uniqueId?.take(MAX_ID_LENGTH) } }.getOrNull()
 
     /** The value of the identifier the package document's `unique-identifier` names, found through `META-INF/container.xml`. */
     fun epubUid(epub: File): String? = runCatching {
@@ -63,6 +73,20 @@ data class BookIdentity(
         raf.readFully(tail)
         "$size:" + MessageDigest.getInstance("SHA-1").digest(tail).joinToString("") { "%02x".format(it) }
       }
+    }.getOrNull()
+
+    /**
+     * `size:sha1` of the whole file. A MOBI's tail holds images and indexes, its text sits in the middle, and no table at
+     * the end sums up the rest, so only the whole file tells two versions apart.
+     */
+    fun fullFingerprint(file: File): String? = runCatching {
+      val digest = MessageDigest.getInstance("SHA-1")
+      val size = file.length()
+      file.inputStream().use { input ->
+        val buf = ByteArray(64 * 1024)
+        while (true) { val n = input.read(buf); if (n < 0) break; digest.update(buf, 0, n) }
+      }
+      "$size:" + digest.digest().joinToString("") { "%02x".format(it) }
     }.getOrNull()
 
     private const val MAX_ID_LENGTH = 256

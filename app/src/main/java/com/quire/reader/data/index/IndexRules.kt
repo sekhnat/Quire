@@ -13,7 +13,8 @@ fun needsIndexing(bookMtime: Long, bookSize: Long, state: IndexSignature?): Bool
 /**
  * True when a book that [needsIndexing] only because its signature moved can keep its index: same size, and the file's
  * fingerprint equals the one the index was built from. The fingerprint hashes the file's tail, which for an EPUB is the zip
- * central directory holding every entry's CRC, so any change to the content changes it; a copied or touched file does not.
+ * central directory holding every entry's CRC (a MOBI's whole file, see [com.quire.reader.data.scan.BookIdentity]), so any
+ * change to the content changes it; a copied or touched file does not.
  */
 fun canCarryIndex(bookSize: Long, bookFingerprint: String?, state: IndexSignature?, sourceFingerprint: String?): Boolean =
   state != null && state.sizeBytes == bookSize && bookFingerprint != null && bookFingerprint == sourceFingerprint

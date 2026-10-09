@@ -1,5 +1,6 @@
 package com.quire.reader.data.scan
 
+import com.quire.reader.data.mobi.MobiMetadata
 import org.readium.r2.shared.publication.Publication
 
 /** Reads the same fields a Calibre OPF would carry from the EPUB's own metadata. */
@@ -21,3 +22,19 @@ fun Publication.toOpfMetadata(): OpfMetadata {
     addedAtMillis = null,
   )
 }
+
+/** The same fields from a MOBI's EXTH header. MOBI has no series; Calibre keeps that in its `metadata.opf`. */
+fun MobiMetadata.toOpfMetadata(): OpfMetadata = OpfMetadata(
+  title = title.takeIf { it.isNotBlank() } ?: "Untitled",
+  titleSort = null,
+  authors = authors,
+  authorSort = null,
+  series = null,
+  seriesIndex = null,
+  tags = subjects,
+  rating = 0,
+  description = description?.let(OpfParser::stripHtml)?.takeIf { it.isNotBlank() },
+  year = OpfParser.parseYear(published),
+  language = language,
+  addedAtMillis = null,
+)
