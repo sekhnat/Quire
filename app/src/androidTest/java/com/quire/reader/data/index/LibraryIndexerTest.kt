@@ -149,6 +149,29 @@ class LibraryIndexerTest : DbTestCase() {
     assertEquals(emptyList<Any>(), f.indexer.catalog.eligibleBooks())
   }
 
+  /** A copy of one of the MOBI fixtures shared with the unit tests (`src/test/resources/mobi`). */
+  private fun mobi(name: String): File =
+    File(epubDir, name).also { f -> checkNotNull(javaClass.getResourceAsStream("/mobi/$name")) { "missing fixture $name" }.use { f.outputStream().use(it::copyTo) } }
+
+  @Test fun `MOBI and AZW3 books are indexed with their chapters, leaving the reader's cache alone`() = runBlocking {
+    val f = fixture()
+    val cache = File(target.cacheDir, "converted").apply { deleteRecursively() }
+    val books = listOf("mobi6.mobi", "kf8.azw3").map { f.add(it, mobi(it)) }
+
+    val result = f.indexer.runBatch(deadline)
+
+    assertEquals(BatchResult(processed = 2, stop = BatchStop.Drained), result)
+    for (book in books) {
+      assertEquals(IndexStateEntity.STATUS_DONE, f.index.stateOf(book.id)!!.status)
+      assertTrue(f.chapters(book.id).containsAll(listOf("Chapter One", "Chapter Two", "Chapter Three")))
+    }
+    // "Some preamble." opens chapter three of each book; "Ærøskøbing" is in every paragraph of the long chapter two.
+    assertEquals(2, f.index.hits("preamble").size)
+    assertTrue(f.index.hits("ærøskøbing").size >= 2)
+    // Read through a temporary copy that is gone again: indexing converts nothing into the reader's cache.
+    assertEquals(emptyList<String>(), cache.walkTopDown().filter { it.isFile }.map { it.name }.toList())
+  }
+
   @Test fun `an unchanged book is not read again`() = runBlocking {
     val f = fixture()
     val book = f.add("Emma", epub("emma", EpubFixtures.chapter("One", "Highbury was quiet.")))

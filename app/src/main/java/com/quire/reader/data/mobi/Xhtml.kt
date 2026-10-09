@@ -48,11 +48,17 @@ internal object Xhtml {
     outputSettings().syntax(Document.OutputSettings.Syntax.xml).escapeMode(Entities.EscapeMode.xhtml).charset(Charsets.UTF_8).prettyPrint(false)
   }
 
-  /** A document that is already well-formed XHTML is kept byte for byte; anything else is reparsed as HTML and rewritten. */
+  /**
+   * A document that is already well-formed XHTML is kept as it is, but for its self-closing elements, which are written
+   * open/close (the same in XML): Readium's content iterator, and with it the text index and search in the book, parses
+   * documents as HTML, where `<div/>` or `<a id="x"/>` would wrap everything after it. Anything else is reparsed as HTML
+   * and rewritten.
+   */
   fun document(markup: String, title: String): String {
     val text = clean(DOCTYPE.replace(markup, "")).trimStart()
     if (Regex("<html[\\s>]").containsMatchIn(text) && text.contains("xmlns=\"$NS\"") && isWellFormed(text)) {
-      return if (XML_DECLARATION.containsMatchIn(text)) text else DECLARATION + text
+      val kept = expandSelfClosing(text)
+      return if (XML_DECLARATION.containsMatchIn(kept)) kept else DECLARATION + kept
     }
     val doc = parse(XML_DECLARATION.replace(text, ""))
     fix(doc, title)
