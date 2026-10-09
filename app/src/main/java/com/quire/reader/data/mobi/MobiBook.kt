@@ -79,6 +79,7 @@ class MobiBook private constructor(private val db: PalmDatabase, private val mob
 
   /** Converts the book into an EPUB written to [out]. A joint file whose KF8 half cannot be read falls back to its MOBI 6 half. */
   fun writeEpub(out: OutputStream) {
+    val kf8 = kf8
     val content = when {
       kf8 == null -> Mobi6Converter(this, db, mobi6).convert()
       kf8 === mobi6 -> Kf8Converter(this, db, kf8).convert()
