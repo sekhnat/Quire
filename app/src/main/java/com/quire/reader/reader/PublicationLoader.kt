@@ -33,6 +33,31 @@ class PublicationLoader(context: Context) {
     val epub = if (!BookFormats.isMobi(file)) file else {
       withContext(Dispatchers.IO) { runCatching { converted.epubFor(file) } }.getOrElse { return kotlin.Result.failure(IllegalStateException(it.message, it)) }
     }
+    return openEpub(epub)
+  }
+
+  /**
+   * Like [open], for a single read such as indexing: a MOBI without a cached copy is converted to a temporary one, deleted
+   * when the result is closed, so a pass over the whole library does not evict the books being read from the cache.
+   */
+  suspend fun openOnce(file: File): kotlin.Result<OpenedOnce> {
+    if (!BookFormats.isMobi(file)) return open(file).map { OpenedOnce(it, null) }
+    val cached = withContext(Dispatchers.IO) { converted.cached(file) }
+    if (cached != null) return openEpub(cached).map { OpenedOnce(it, null) }
+    val temporary = withContext(Dispatchers.IO) { runCatching { converted.temporary(file) } }
+      .getOrElse { return kotlin.Result.failure(IllegalStateException(it.message, it)) }
+    return openEpub(temporary).map { OpenedOnce(it, temporary) }.onFailure { temporary.delete() }
+  }
+
+  /** A publication opened by [openOnce]; [close] closes it and deletes the temporary copy it was read from, if any. */
+  class OpenedOnce(val publication: Publication, private val temporary: File?) : java.io.Closeable {
+    override fun close() {
+      publication.close()
+      temporary?.delete()
+    }
+  }
+
+  private suspend fun openEpub(epub: File): kotlin.Result<Publication> {
     val asset = assetRetriever.retrieve(epub.toUrl(isDirectory = false)).getOrElse { return kotlin.Result.failure(IllegalStateException(it.message)) }
     val publication = opener.open(asset, allowUserInteraction = false).getOrElse {
       asset.close()

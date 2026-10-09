@@ -57,6 +57,32 @@ class ConvertedBooksTest {
     assertFalse("the least recently used copy is evicted", ca.exists())
   }
 
+  @Test fun `a one-off copy stays out of the cache`() {
+    val dir = tmp.newFolder("cache")
+    val cache = ConvertedBooks(dir)
+    val book = fixture("kf8.azw3")
+    assertEquals(null, cache.cached(book))
+    val once = cache.temporary(book)
+    ZipFile(once).use { assertTrue(it.getEntry("OEBPS/content.opf") != null) }
+    // Not a cached copy: the next read still finds none, and the reader's copies are not counted against it.
+    assertEquals(null, cache.cached(book))
+    assertEquals(emptyList<String>(), dir.listFiles()!!.filter { it.isFile }.map { it.name })
+    once.delete()
+    val kept = cache.epubFor(book)
+    assertEquals(kept, cache.cached(book))
+  }
+
+  @Test fun `a one-off conversion that fails leaves nothing behind`() {
+    val dir = tmp.newFolder("cache")
+    val bad = File(tmp.root, "bad.azw3").apply { writeBytes(ByteArray(200) { 7 }) }
+    try {
+      ConvertedBooks(dir).temporary(bad)
+      error("converted a damaged book")
+    } catch (_: MobiException) {
+    }
+    assertEquals(emptyList<String>(), dir.walkTopDown().filter { it.isFile }.map { it.name }.toList())
+  }
+
   @Test fun `a book that cannot be converted leaves nothing behind`() {
     val dir = tmp.newFolder("cache")
     val bad = File(tmp.root, "bad.mobi").apply { writeBytes(ByteArray(200) { 7 }) }

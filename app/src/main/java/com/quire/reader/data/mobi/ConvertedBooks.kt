@@ -17,7 +17,7 @@ class ConvertedBooks(private val dir: File, private val maxBytes: Long = DEFAULT
   /** The EPUB copy of [source], converting it first if there is none. Blocking; throws [MobiException] or [IOException]. */
   fun epubFor(source: File): File {
     val key = keyFor(source.absolutePath)
-    val target = File(dir, "$key-${source.length()}-${source.lastModified()}-v${MobiBook.CONVERTER_VERSION}.epub")
+    val target = copyOf(source)
     synchronized(locks.getOrPut(key) { Any() }) {
       if (target.isFile) {
         target.setLastModified(System.currentTimeMillis())
@@ -38,6 +38,32 @@ class ConvertedBooks(private val dir: File, private val maxBytes: Long = DEFAULT
     }
   }
 
+  /** The cached copy of [source] when there is one, without converting it or counting it as used. */
+  fun cached(source: File): File? = copyOf(source).takeIf { it.isFile }
+
+  /**
+   * A fresh EPUB copy of [source] outside the cache, for a single read that should not push the books being read out of it
+   * (the indexer's pass over the library). The caller deletes it. Blocking; throws [MobiException] or [IOException].
+   */
+  fun temporary(source: File): File {
+    val once = File(dir, ONCE_DIR)
+    if (!once.isDirectory && !once.mkdirs()) throw IOException("cannot create $once")
+    val now = System.currentTimeMillis()
+    // Copies left behind by a process that died before deleting them.
+    once.listFiles().orEmpty().filter { now - it.lastModified() > STALE_TMP_MILLIS }.forEach { it.delete() }
+    val target = File.createTempFile("once-", ".epub", once)
+    try {
+      MobiBook.open(source).use { book -> target.outputStream().buffered().use(book::writeEpub) }
+      return target
+    } catch (e: Exception) {
+      target.delete()
+      throw e
+    }
+  }
+
+  private fun copyOf(source: File) =
+    File(dir, "${keyFor(source.absolutePath)}-${source.length()}-${source.lastModified()}-v${MobiBook.CONVERTER_VERSION}.epub")
+
   /** Deletes the least recently used copies until the rest fit in [maxBytes]; [keep] always stays. */
   private fun trim(keep: File) {
     val now = System.currentTimeMillis()
@@ -57,5 +83,6 @@ class ConvertedBooks(private val dir: File, private val maxBytes: Long = DEFAULT
   companion object {
     const val DEFAULT_MAX_BYTES = 256L * 1024 * 1024
     private const val STALE_TMP_MILLIS = 60 * 60 * 1000L
+    private const val ONCE_DIR = "once"
   }
 }

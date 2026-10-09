@@ -99,7 +99,7 @@ class MobiBook private constructor(private val db: PalmDatabase, private val mob
      * Saved reading positions, highlights and the search index name the converted documents (`OEBPS/part0003.xhtml`), so
      * a change must keep how the text is split into documents and how they are named.
      */
-    const val CONVERTER_VERSION = 1
+    const val CONVERTER_VERSION = 2
 
     fun isMobi(file: File): Boolean = PalmDatabase.isMobi(file)
 

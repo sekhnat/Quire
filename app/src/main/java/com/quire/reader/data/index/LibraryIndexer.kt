@@ -328,9 +328,13 @@ class LibraryIndexer(
     return true
   }
 
-  /** Reads the whole book into chunks. Always closes the publication; cancellation propagates. */
+  /**
+   * Reads the whole book into chunks. Always closes the publication; cancellation propagates. A MOBI is read through a
+   * temporary EPUB copy (see [PublicationLoader.openOnce]), so indexing the library leaves the reader's cache alone.
+   */
   private suspend fun extract(file: File, startEpoch: Long): Extraction {
-    val publication = loader.open(file).getOrElse { return Extraction(Extracted.Unreadable) }
+    val opened = loader.openOnce(file).getOrElse { return Extraction(Extracted.Unreadable) }
+    val publication = opened.publication
     try {
       val chunks = ArrayList<IndexChunk>()
       val chunker = TextChunker()
@@ -353,7 +357,7 @@ class LibraryIndexer(
     } catch (e: Exception) {
       return Extraction(Extracted.Unreadable)
     } finally {
-      publication.close()
+      opened.close()
     }
   }
 
