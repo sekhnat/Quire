@@ -1,6 +1,7 @@
 package com.quire.reader.data.mobi
 
 import java.io.Closeable
+import java.io.EOFException
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -60,7 +61,7 @@ internal class PalmDatabase private constructor(private val raf: RandomAccessFil
         return PalmDatabase(raf, offsets, length)
       } catch (e: Exception) {
         raf.close()
-        throw e
+        throw if (e is EOFException) MobiException("file is cut short") else e
       }
     }
   }
