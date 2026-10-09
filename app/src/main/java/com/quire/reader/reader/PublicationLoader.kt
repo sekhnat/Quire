@@ -1,6 +1,10 @@
 package com.quire.reader.reader
 
 import android.content.Context
+import com.quire.reader.data.mobi.ConvertedBooks
+import com.quire.reader.data.scan.BookFormats
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.asset.AssetRetriever
 import org.readium.r2.shared.util.getOrElse
@@ -10,7 +14,10 @@ import org.readium.r2.streamer.PublicationOpener
 import org.readium.r2.streamer.parser.DefaultPublicationParser
 import java.io.File
 
-/** Opens EPUB files into Readium [Publication]s. One instance is shared by the scanner and the reader. */
+/**
+ * Opens book files into Readium [Publication]s. One instance is shared by the scanner, the indexer and the reader. MOBI
+ * and AZW3 books are opened through an EPUB copy made on first use (see [ConvertedBooks]).
+ */
 class PublicationLoader(context: Context) {
   private val app = context.applicationContext
   private val httpClient = DefaultHttpClient()
@@ -19,9 +26,14 @@ class PublicationLoader(context: Context) {
     publicationParser = DefaultPublicationParser(app, httpClient, assetRetriever, pdfFactory = null),
   )
 
-  /** Returns the opened publication, or the reason it could not be read (corrupt, DRM, not an EPUB…). */
+  private val converted = ConvertedBooks(File(app.cacheDir, "converted"))
+
+  /** Returns the opened publication, or the reason it could not be read (corrupt, DRM, not a book…). */
   suspend fun open(file: File): kotlin.Result<Publication> {
-    val asset = assetRetriever.retrieve(file.toUrl(isDirectory = false)).getOrElse { return kotlin.Result.failure(IllegalStateException(it.message)) }
+    val epub = if (!BookFormats.isMobi(file)) file else {
+      withContext(Dispatchers.IO) { runCatching { converted.epubFor(file) } }.getOrElse { return kotlin.Result.failure(IllegalStateException(it.message, it)) }
+    }
+    val asset = assetRetriever.retrieve(epub.toUrl(isDirectory = false)).getOrElse { return kotlin.Result.failure(IllegalStateException(it.message)) }
     val publication = opener.open(asset, allowUserInteraction = false).getOrElse {
       asset.close()
       return kotlin.Result.failure(IllegalStateException(it.message))

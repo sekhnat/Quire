@@ -27,6 +27,13 @@ class FolderDiscoveryTest {
     assertEquals(listOf("Calibre Library" to 30, "Books" to 2), found.map { it.name to it.epubCount })
   }
 
+  @Test fun `counts MOBI and AZW3 books, each book once whatever its formats`() {
+    val root = tmp.newFolder("formats")
+    touch(root, "Kindle/a.mobi"); touch(root, "Kindle/b.azw3"); touch(root, "Kindle/b.mobi")
+    touch(root, "Kindle/Author/C (1)/C - Author.epub"); touch(root, "Kindle/Author/C (1)/C - Author.azw3"); touch(root, "Kindle/Author/C (1)/cover.jpg")
+    assertEquals(listOf("Kindle" to 3), FolderDiscovery.discover(listOf(root)).map { it.name to it.epubCount })
+  }
+
   @Test fun `progress counts top-level folders and EPUBs, and reports each candidate once`() {
     val reports = mutableListOf<Pair<DiscoveryProgress, FolderCandidate?>>()
     FolderDiscovery.discover(listOf(storage())) { p, c -> reports += p to c }

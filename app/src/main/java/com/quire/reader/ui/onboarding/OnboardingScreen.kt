@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.quire.reader.data.scan.BookFormats
 import com.quire.reader.data.scan.DiscoveryProgress
 import com.quire.reader.data.scan.ScanPhase
 import com.quire.reader.data.scan.StoragePaths
@@ -99,13 +100,13 @@ private fun Welcome(onboarding: OnboardingState) {
       }
       QText("Every book on your phone, in one quiet place.", 34f, Modifier.padding(top = 60.dp), weight = 500, ls = -0.02f, lh = 1.1f, balance = true)
       QText(
-        "Choose the folders where you keep your EPUBs. Quire reads your Calibre metadata, picks up new files as they arrive, and stays fast with ten thousand books.",
+        "Choose the folders where you keep your books. Quire reads your Calibre metadata, picks up new files as they arrive, and stays fast with ten thousand books.",
         14f, color = Nq.neutral400, lh = 1.6f,
       )
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
       QButton("Choose folders", onboarding::chooseFolders, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FolderOpen, height = 46.dp)
-      QButton("Import individual files instead", { picker.launch(arrayOf("application/epub+zip", "application/octet-stream")) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
+      QButton("Import individual files instead", { picker.launch(BookFormats.MIME_TYPES) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
       QButton("Restore from a Quire backup", { backupOpen.launch(BACKUP_PICK_TYPES) }, Modifier.fillMaxWidth(), BtnKind.Ghost, size = 13f, height = 40.dp, color = Nq.neutral300)
     }
   }
@@ -138,7 +139,7 @@ private fun PickFolders(s: OnboardingUiState, onboarding: OnboardingState, onAdd
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
       QText("Where are your books?", 24f, weight = 500, ls = -0.01f)
       QText(
-        if (s.candidates.isEmpty() && !s.discovering) "We didn’t find any EPUB files yet. Add the folder where you keep them." else "We found EPUB files in these folders. Quire will watch the ones you pick for new books.",
+        if (s.candidates.isEmpty() && !s.discovering) "We didn’t find any books yet. Add the folder where you keep them." else "We found books in these folders. Quire will watch the ones you pick for new books.",
         13f, color = Nq.neutral400, lh = 1.5f,
       )
     }
@@ -159,7 +160,7 @@ private fun PickFolders(s: OnboardingUiState, onboarding: OnboardingState, onAdd
               QText(f.name, 14f, weight = 500, maxLines = 1)
               QText(f.path, 11f, color = Nq.neutral500, family = QuireFonts.Mono, maxLines = 1)
             }
-            QText(fmt(f.epubCount) + " EPUB", 12f, color = Nq.neutral400, tabular = true)
+            QText(fmt(f.epubCount) + (if (f.epubCount == 1) " book" else " books"), 12f, color = Nq.neutral400, tabular = true)
           }
         }
         // Locked while discovery runs; it would race the folders still being found.
@@ -193,7 +194,7 @@ private fun DiscoveryLine(p: DiscoveryProgress) {
   Column(Modifier.padding(top = 4.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
     ProgressLine(fraction, Modifier.fillMaxWidth())
     QText(
-      if (p.current.isEmpty()) "Looking for books…" else "Looking in ${p.current} · ${fmt(p.epubs)} EPUB found",
+      if (p.current.isEmpty()) "Looking for books…" else "Looking in ${p.current} · ${fmt(p.epubs)} found",
       11f, color = Nq.neutral500, family = QuireFonts.Mono, maxLines = 1,
     )
   }
@@ -237,7 +238,7 @@ private fun Scanning(s: OnboardingUiState, onboarding: OnboardingState) {
       )
     }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-      val steps = listOf("Finding EPUB files" to 0f, "Reading Calibre metadata" to .35f, "Extracting covers" to .65f, "Building author and series index" to .9f)
+      val steps = listOf("Finding books" to 0f, "Reading Calibre metadata" to .35f, "Extracting covers" to .65f, "Building author and series index" to .9f)
       steps.forEachIndexed { i, (label, at) ->
         val next = steps.getOrNull(i + 1)?.second ?: 1f
         val isDone = (scan.phase != ScanPhase.Finding && progress >= next) || done

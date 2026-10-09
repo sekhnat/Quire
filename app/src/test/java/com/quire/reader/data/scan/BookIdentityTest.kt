@@ -71,6 +71,37 @@ class BookIdentityTest {
     assertNull(BookIdentity.calibreUuid(epub(tmp.root.resolve("plain/Book.epub"))))
   }
 
+  @Test fun `the formats of one Calibre book count as one book`() {
+    val dir = tmp.root.resolve("Author/Formats (13)")
+    val epubFile = epub(dir.resolve("Formats - Author.epub"))
+    mobi(dir.resolve("Formats - Author.azw3"), "kf8.azw3")
+    mobi(dir.resolve("Formats - Author.mobi"), "mobi6.mobi")
+    calibreOpf(dir, "f-uuid")
+    assertEquals("f-uuid", BookIdentity.calibreUuid(epubFile))
+  }
+
+  @Test fun `a MOBI is known by its ASIN and its whole content`() {
+    val book = mobi(tmp.root.resolve("Author/Title (14)/Title - Author.azw3"), "kf8.azw3")
+    calibreOpf(book.parentFile, "m-uuid")
+    val id = BookIdentity.read(book)
+    assertEquals("m-uuid", id.calibreUuid)
+    assertEquals("9631128d-203d-4898-9944-5a65084ca7ac", id.epubUid)
+    assertEquals(id.fingerprint, BookIdentity.read(book.copyTo(tmp.root.resolve("copy/Renamed.azw3"))).fingerprint)
+    // An edit near the start, far from the tail, still changes it.
+    val edited = book.copyTo(tmp.root.resolve("edited/Title.azw3")).also { f ->
+      val bytes = f.readBytes()
+      bytes[10] = (bytes[10] + 1).toByte()
+      f.writeBytes(bytes)
+    }
+    assertNotEquals(id.fingerprint, BookIdentity.read(edited).fingerprint)
+  }
+
+  private fun mobi(file: File, fixture: String): File {
+    file.parentFile.mkdirs()
+    checkNotNull(javaClass.getResourceAsStream("/mobi/$fixture")).use { input -> file.outputStream().use(input::copyTo) }
+    return file
+  }
+
   @Test fun `an unreadable file has no keys`() {
     assertEquals(BookIdentity(null, null, null), BookIdentity.read(tmp.root.resolve("gone.epub")))
   }

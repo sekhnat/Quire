@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.quire.reader.data.scan.BookFormats
 import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.ShelfDef
@@ -280,7 +281,7 @@ private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibrarySta
       Column(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Ph(Ic.Books, 28.dp, Nq.neutral500)
         if (visible.lib.books.isEmpty()) {
-          QText("No books yet. Add a folder that has EPUB files in it.", 13f, color = Nq.neutral500, align = androidx.compose.ui.text.style.TextAlign.Center)
+          QText("No books yet. Add a folder that has EPUB, AZW3 or MOBI files in it.", 13f, color = Nq.neutral500, align = androidx.compose.ui.text.style.TextAlign.Center)
           QButton("Add books", { library.openImport(true) }, kind = BtnKind.Primary, icon = Ic.Plus, size = 13f)
         } else QText("Nothing matches that filter.", 13f, color = Nq.neutral500)
       }
@@ -430,7 +431,7 @@ private fun ImportSheet(s: LibraryUiState, lib: LibraryData, library: LibrarySta
         QButton("Rescan", library::rescan, Modifier.weight(1f), icon = Ic.Refresh, size = 12.5f)
         QButton("Add folder", onAddFolder, Modifier.weight(1f), icon = Ic.FolderPlus, size = 12.5f)
       }
-      QButton("Import EPUB files", { filePicker.launch(arrayOf("application/epub+zip", "application/octet-stream")) }, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FileDown, size = 13f, height = 42.dp)
+      QButton("Import book files", { filePicker.launch(BookFormats.MIME_TYPES) }, Modifier.fillMaxWidth(), BtnKind.Primary, icon = Ic.FileDown, size = 13f, height = 42.dp)
     }
   }
 }

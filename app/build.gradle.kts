@@ -102,6 +102,9 @@ android {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
       }
     }
+
+    // The instrumented MOBI tests open the same fixture files as the unit tests (resources/mobi).
+    sourceSets.getByName("androidTest").resources.srcDir("src/test/resources")
 }
 
 
