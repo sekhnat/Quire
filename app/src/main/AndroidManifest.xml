@@ -6,7 +6,7 @@
     <!-- Personal-use app, not distributed on Google Play, so the Play policy on this permission does not apply. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
 
-    <!-- Full backups run as a foreground worker with a progress notification, so a large one is not cut short. -->
+    <!-- Full backups and library indexing run as foreground workers with a progress notification, so leaving the app does not cut them short. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />

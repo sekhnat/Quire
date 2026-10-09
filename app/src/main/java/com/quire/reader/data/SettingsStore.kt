@@ -42,6 +42,10 @@ class SettingsStore(context: Context) {
   suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
   suspend fun setCoversBackfilled(v: Boolean) = store.edit { it[COVERS_BACKFILLED] = v }
 
+  /** Whether Quire has asked for the notification permission indexing shows its progress with (Android 13+); asked once. */
+  val notificationsAsked: Flow<Boolean> = flow(NOTIFICATIONS_ASKED, false)
+  suspend fun setNotificationsAsked() = store.edit { it[NOTIFICATIONS_ASKED] = true }
+
   /** Whether the full-text index was merged into its fastest form after the first complete build; cleared when the index is. */
   val indexOptimized: Flow<Boolean> = flow(INDEX_OPTIMIZED, false)
   suspend fun setIndexOptimized(v: Boolean) = store.edit { it[INDEX_OPTIMIZED] = v }
@@ -158,6 +162,7 @@ class SettingsStore(context: Context) {
     private val ADVANCED_READING_ENABLED = booleanPreferencesKey("advanced_reading_enabled")
     private val BRIGHTNESS = intPreferencesKey("brightness")
     private val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
+    private val NOTIFICATIONS_ASKED = booleanPreferencesKey("notifications_asked")
     private val TEXT_SEARCH_ORDER = stringPreferencesKey("text_search_order")
     private val LIBRARY_LAYOUT = stringPreferencesKey("library_layout")
     private val LIBRARY_SORT = stringPreferencesKey("library_sort")

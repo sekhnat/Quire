@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -93,6 +95,11 @@ class LibraryIndexer(
     val queued = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).map { infos -> infos.any { it.state == WorkInfo.State.ENQUEUED } }
     combine(flags, queued, catalog.observeCoverage()) { f, queuedWork, c ->
       deriveActivity(f.copy(workQueued = queuedWork, eligible = c.eligible, pending = c.eligible - c.searchable - c.failed - c.skipped))
+    }.retryWhen { e, _ ->
+      // Shared in the app scope, where an uncaught failure would take the whole process down; start over instead.
+      Log.w(TAG, "activity failed; observing again", e)
+      delay(1_000)
+      true
     }.stateIn(scope, SharingStarted.WhileSubscribed(5_000), IndexActivity.Idle)
   }
 
@@ -116,8 +123,11 @@ class LibraryIndexer(
    * worker behind the running one, unless one is already waiting. Safe to call often.
    */
   fun request() {
-    scope.launch { requestLock.withLock { enqueueIfAllowed() } }
+    scope.launch { requestNow() }
   }
+
+  /** [request], done before returning: the worker asks for its continuation this way, while it still counts as running. */
+  internal suspend fun requestNow() = requestLock.withLock { enqueueIfAllowed() }
 
   /** Applies a changed indexing setting: drops obsolete requests (and abandons a running one when disabled), then requests under the new policy. */
   suspend fun applyPolicy() = requestLock.withLock {
@@ -189,7 +199,18 @@ class LibraryIndexer(
     if (removed > 0) store.incrementalVacuum()
   }
 
+  /** Never throws: it runs in the app scope, where a failure would crash the app, and a missed request is retried by the next. */
   private suspend fun enqueueIfAllowed() {
+    try {
+      enqueue()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      Log.w(TAG, "request failed", e)
+    }
+  }
+
+  private suspend fun enqueue() {
     _permissionMissing.value = !StoragePaths.hasAllFilesAccess()
     if (!settings.indexingEnabled.first() || _permissionMissing.value) return
     val waiting = workManager.getWorkInfosForUniqueWorkFlow(WORK_NAME).first().any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.BLOCKED }
@@ -212,16 +233,22 @@ class LibraryIndexer(
    * Indexes eligible books, newest first, until none is left, [deadlineMillis] (epoch millis) passes, a reader opens or
    * the index is cleared. The deadline is checked between books; a book in progress is finished first.
    */
-  suspend fun runBatch(deadlineMillis: Long): BatchResult = withContext(dispatcher) {
+  suspend fun runBatch(deadlineMillis: Long): BatchResult = runBatch(deadline = { deadlineMillis })
+
+  /**
+   * [runBatch] with a [deadline] read afresh before every book, so the worker can lift it once it runs in the foreground,
+   * and [betweenBooks] called after each book.
+   */
+  suspend fun runBatch(deadline: () -> Long, betweenBooks: suspend () -> Unit = {}): BatchResult = withContext(dispatcher) {
     _running.value = true
     try {
-      batch(deadlineMillis)
+      batch(deadline, betweenBooks)
     } finally {
       _running.value = false
     }
   }
 
-  private suspend fun batch(deadlineMillis: Long): BatchResult {
+  private suspend fun batch(deadline: () -> Long, betweenBooks: suspend () -> Unit): BatchResult {
     val startEpoch = epoch.get()
     // In slices that let other writers in, and stopping at once if a reader opens or the index is cleared; the next batch resumes.
     dropLegacyIndex(db.openHelper.writableDatabase, keepGoing = { !_readerBusy.value && epoch.get() == startEpoch })
@@ -240,7 +267,7 @@ class LibraryIndexer(
       if (epoch.get() != startEpoch) return stop(BatchStop.Superseded)
       if (_readerBusy.value) return stop(BatchStop.ReaderBusy)
       val book = catalog.eligibleBooks().firstOrNull { it.id !in setAside } ?: return stop(BatchStop.Drained)
-      if (System.currentTimeMillis() >= deadlineMillis) return stop(BatchStop.Deadline)
+      if (System.currentTimeMillis() >= deadline()) return stop(BatchStop.Deadline)
       when (indexBook(book, startEpoch)) {
         Step.Settled -> processed++
         Step.Carried -> { processed++; carried++ }
@@ -249,6 +276,7 @@ class LibraryIndexer(
         Step.ReaderBusy -> return stop(BatchStop.ReaderBusy)
         Step.Superseded -> return stop(BatchStop.Superseded)
       }
+      betweenBooks()
       yield()
     }
   }
@@ -257,7 +285,22 @@ class LibraryIndexer(
 
   private class Extraction(val result: Extracted, val chunks: List<IndexChunk> = emptyList(), val truncated: Boolean = false)
 
+  /**
+   * Settles one book. A failure that is not the book's own (writing the index, reading the library) sets the book aside for
+   * this batch instead of ending it: before, one such book ended every batch that reached it, and indexing stopped for good.
+   */
   private suspend fun indexBook(book: EligibleBook, startEpoch: Long): Step = mutex.withLock {
+    try {
+      indexBookLocked(book, startEpoch)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      Log.w(TAG, "could not index ${book.path}; trying again in a later batch", e)
+      Step.SetAside
+    }
+  }
+
+  private suspend fun indexBookLocked(book: EligibleBook, startEpoch: Long): Step {
     if (epoch.get() != startEpoch) return Step.Superseded
     val file = File(book.path)
     if (!isUnchanged(file, book)) return Step.SetAside
@@ -274,7 +317,7 @@ class LibraryIndexer(
         Settlement.Discard -> false
       }
     }
-    when {
+    return when {
       written -> Step.Settled
       extraction.result == Extracted.Interrupted -> if (epoch.get() != startEpoch) Step.Superseded else Step.ReaderBusy
       epoch.get() != startEpoch -> Step.Superseded
@@ -330,10 +373,20 @@ class LibraryIndexer(
 
   /**
    * Reads the whole book into chunks. Always closes the publication; cancellation propagates. A MOBI is read through a
-   * temporary EPUB copy (see [PublicationLoader.openOnce]), so indexing the library leaves the reader's cache alone.
+   * temporary EPUB copy (see [PublicationLoader.openOnce]), so indexing the library leaves the reader's cache alone. A book
+   * that cannot be read, including one deep or large enough to exhaust the stack or the heap, is unreadable: it fails once
+   * instead of failing every batch that reaches it.
    */
   private suspend fun extract(file: File, startEpoch: Long): Extraction {
-    val opened = loader.openOnce(file).getOrElse { return Extraction(Extracted.Unreadable) }
+    val opened = try {
+      loader.openOnce(file).getOrElse { return Extraction(Extracted.Unreadable) }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return unreadable(file, e)
+    } catch (e: StackOverflowError) {
+      return unreadable(file, e)
+    }
     val publication = opened.publication
     try {
       val chunks = ArrayList<IndexChunk>()
@@ -355,10 +408,20 @@ class LibraryIndexer(
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      return Extraction(Extracted.Unreadable)
+      return unreadable(file, e)
+    } catch (e: StackOverflowError) {
+      return unreadable(file, e)
+    } catch (e: OutOfMemoryError) {
+      // What ran out is this book's own text and parse trees, unreachable once unwound here.
+      return unreadable(file, e)
     } finally {
       opened.close()
     }
+  }
+
+  private fun unreadable(file: File, e: Throwable): Extraction {
+    Log.w(TAG, "could not read ${file.path}", e)
+    return Extraction(Extracted.Unreadable)
   }
 
   /** Evidence of misreads other than the ones [normalizeHtml] repairs, for a later look; nothing is decided from it. */

@@ -1,5 +1,10 @@
 package com.quire.reader.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.updateTransition
@@ -10,10 +15,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,5 +63,18 @@ fun QuireApp(
       }
     }
     Toast(toast, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 120.dp))
+  }
+  if (destination == Destination.Library) NotificationRequest(vm::claimNotificationRequest)
+}
+
+/** Asks for the notification permission (Android 13+) when [claim] says it is time, which is once. */
+@Composable
+private fun NotificationRequest(claim: suspend () -> Boolean) {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+  val context = LocalContext.current
+  val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+  LaunchedEffect(Unit) {
+    val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+    if (!granted && claim()) launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
   }
 }
