@@ -14,17 +14,9 @@
 
 package com.quire.reader.navigator.extensions
 
-import kotlinx.coroutines.runBlocking
 import org.readium.r2.shared.DelicateReadiumApi
-import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.util.Url
-
-// These extensions will be removed in the next release, with `PositionsService`.
-
-internal val Publication.positionsByResource: Map<Url, List<Locator>>
-    get() = runBlocking { positions().groupBy { it.href } }
 
 /**
  * Historically, we used to have "absolute" HREFs in the manifest:

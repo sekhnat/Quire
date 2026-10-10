@@ -79,7 +79,6 @@ import com.quire.reader.navigator.epub.css.RsProperties
 import com.quire.reader.navigator.epub.css.buildFontFamilyDeclaration
 import org.readium.r2.navigator.extensions.normalizeLocator
 import com.quire.reader.navigator.extensions.optRectF
-import com.quire.reader.navigator.extensions.positionsByResource
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import com.quire.reader.navigator.input.CompositeInputListener
 import org.readium.r2.navigator.input.DragEvent
@@ -107,6 +106,7 @@ import org.readium.r2.shared.publication.Layout
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.services.positions
 import org.readium.r2.shared.publication.services.positionsByReadingOrder
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Url
@@ -527,6 +527,14 @@ public class EpubNavigatorFragment internal constructor(
         }
 
     internal lateinit var positions: List<Locator>
+
+    /**
+     * The book's positions by resource. Built once: it used to be rebuilt, grouping every position in the book, each
+     * time the location was published, which is every page turn and every pause in scrolling.
+     */
+    private val positionsByResource: Map<Url, List<Locator>> by lazy {
+        runBlocking { publication.positions() }.groupBy { it.href }
+    }
 
     internal lateinit var resourcePager: R2ViewPager
 
@@ -1655,7 +1663,7 @@ public class EpubNavigatorFragment internal constructor(
 
     /** Builds and publishes the locator for [link] at [progression]. */
     private fun emitCurrentLocation(link: Link, progression: Double) {
-        val positionLocator = publication.positionsByResource[link.url()]?.let { positions ->
+        val positionLocator = positionsByResource[link.url()]?.let { positions ->
             val index = ceil(progression * (positions.size - 1)).toInt()
             positions.getOrNull(index)
         }

@@ -224,6 +224,7 @@ class ReaderState(
       unclaimed = publication
       val parsed = System.nanoTime()
       val positions = withContext(Dispatchers.IO) { runCatching { publication.positions() }.getOrDefault(emptyList()) }
+      val positioned = System.nanoTime()
       val initial = when (opening) {
         OpeningPosition.Target -> request.target?.let { ReaderSession.targetLocator(it, positions) }
         OpeningPosition.Saved -> ReaderSession.parseLocator(saved.await())
@@ -243,7 +244,8 @@ class ReaderState(
         store.updatePageCount(bookId, positions.size)
       }
       startJobs(session)
-      scope.launch { logOpening(session, started, parsed, System.nanoTime()) }
+      val ready = System.nanoTime()
+      scope.launch { logOpening(session, started, parsed, positioned, ready) }
       request.target?.let { target -> targetJob = scope.launch { reportOutcome(session.goToTarget(target)) } }
       request.libraryQuery?.let { enterBookSearch(it) }
     } finally {
@@ -252,12 +254,16 @@ class ReaderState(
     }
   }
 
-  /** Logs how long each part of opening took, once the navigator has shown the book; `adb logcat -s ReaderOpen`. */
-  private suspend fun logOpening(session: ReaderSession, started: Long, parsed: Long, ready: Long) {
+  /**
+   * Logs how long each part of opening took, once the navigator has shown the book: the file opened, its positions
+   * counted, the session ready for the screen, and the first page shown. `adb logcat -s ReaderOpen`.
+   */
+  private suspend fun logOpening(session: ReaderSession, started: Long, parsed: Long, positioned: Long, ready: Long) {
     val shown = if (session.awaitShown(SHOWN_LOG_TIMEOUT_MS)) System.nanoTime() else null
     fun ms(from: Long, to: Long) = (to - from) / 1_000_000
-    Log.i(TAG, "book $bookId: parsed in ${ms(started, parsed)} ms, ready at ${ms(started, ready)} ms, " +
-      (shown?.let { "shown at ${ms(started, it)} ms" } ?: "not shown within ${SHOWN_LOG_TIMEOUT_MS / 1000} s"))
+    Log.i(TAG, "book $bookId: file opened in ${ms(started, parsed)} ms, positions +${ms(parsed, positioned)}, " +
+      "session +${ms(positioned, ready)} (ready at ${ms(started, ready)} ms), " +
+      (shown?.let { "first page shown +${ms(ready, it)} (at ${ms(started, it)} ms)" } ?: "not shown within ${SHOWN_LOG_TIMEOUT_MS / 1000} s"))
   }
 
   private fun fail(message: String) {
