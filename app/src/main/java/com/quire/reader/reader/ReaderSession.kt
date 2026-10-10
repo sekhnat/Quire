@@ -63,6 +63,9 @@ class ReaderSession(
   private val _current = MutableStateFlow(initialLocator ?: positions.firstOrNull())
   val current: StateFlow<Locator?> = _current
 
+  /** Where each file first appears in [positions] (0-based), so each table-of-contents entry finds its place by lookup. */
+  private val firstPositionIndex = firstIndexByName(positions.map { it.href.removeFragment().toString() })
+
   private val _toc = MutableStateFlow(flatten(publication.tableOfContents))
   val toc: List<TocEntry> get() = _toc.value
   val tocFlow: StateFlow<List<TocEntry>> = _toc
@@ -110,17 +113,18 @@ class ReaderSession(
   /** The table-of-contents entry for the chapter being read: the last one whose file is at or before here. */
   fun chapterIndex(locator: Locator? = _current.value): Int {
     locator ?: return -1
-    val order = publication.readingOrder.map { it.url().removeFragment().toString() }
-    val here = order.indexOf(locator.href.removeFragment().toString())
-    val inFile = locator.locations.progression ?: 0.0
-    var found = -1
-    toc.forEachIndexed { i, e ->
-      val at = order.indexOf(e.file)
-      // Earlier files always count; in the same file, only chapters that start at or before this point.
-      if (at in 0 until here || (at == here && e.progression <= inFile + PROGRESSION_SLACK)) found = i
-    }
-    return found
+    val entries = toc
+    return lastChapterBefore(
+      count = entries.size, fileAt = { entries[it].file }, progressionAt = { entries[it].progression },
+      orderIndex = orderIndex, hereFile = locator.href.removeFragment().toString(), inFile = locator.locations.progression ?: 0.0,
+    )
   }
+
+  /**
+   * The reading order's files by their place in it. The footer asks for the chapter on every position change, and
+   * rebuilding the order each time cost a pass over every file for each table-of-contents entry.
+   */
+  private val orderIndex: Map<String, Int> by lazy { firstIndexByName(publication.readingOrder.map { it.url().removeFragment().toString() }) }
 
   /**
    * Looks up where each anchored chapter starts inside its file, so a book with every chapter in one
@@ -268,7 +272,7 @@ class ReaderSession(
 
   private fun flatten(links: List<Link>, depth: Int = 0): List<TocEntry> = links.flatMap { link ->
     val file = link.url().removeFragment().toString()
-    val position = positions.indexOfFirst { it.href.removeFragment().toString() == file } + 1
+    val position = (firstPositionIndex[file] ?: -1) + 1
     val fragment = link.url().fragment?.takeIf { it.isNotEmpty() }
     listOf(TocEntry(link.title?.trim().orEmpty().ifEmpty { "Untitled" }, depth, link, file, position, fragment)) + flatten(link.children, depth + 1)
   }
@@ -282,9 +286,35 @@ class ReaderSession(
     private const val POLL_MS = 100L
     private const val UNDERLINE_COUNT_JS = "(function(){try{return window.readium.getDecorations('$SEARCH').items.length}catch(e){return 0}})()"
     const val MINUTES_PER_POSITION = Book.MINUTES_PER_PAGE
-    private const val PROGRESSION_SLACK = 0.0005
+    const val PROGRESSION_SLACK = 0.0005
     private const val CONTEXT_BEFORE = 60
     private const val CONTEXT_AFTER = 80
+
+    /** Where each name first appears in [names], by index; later repeats are ignored. */
+    fun firstIndexByName(names: List<String>): Map<String, Int> {
+      val first = HashMap<String, Int>(names.size * 2)
+      names.forEachIndexed { i, name -> first.putIfAbsent(name, i) }
+      return first
+    }
+
+    /**
+     * The last of [count] table-of-contents entries that starts at or before the place being read: [hereFile] at
+     * [inFile] (0..1). Earlier files always count; in the same file, only chapters that start at or before this point.
+     * [orderIndex] says where each file sits in the reading order; a file missing from it sits at -1, as the entry
+     * that names it does.
+     */
+    inline fun lastChapterBefore(
+      count: Int, fileAt: (Int) -> String, progressionAt: (Int) -> Double,
+      orderIndex: Map<String, Int>, hereFile: String, inFile: Double,
+    ): Int {
+      val here = orderIndex[hereFile] ?: -1
+      var found = -1
+      for (i in 0 until count) {
+        val at = orderIndex[fileAt(i)] ?: -1
+        if (at in 0 until here || (at == here && progressionAt(i) <= inFile + PROGRESSION_SLACK)) found = i
+      }
+      return found
+    }
 
     /** The text before a hit, cut at a word boundary (with an ellipsis) so it never starts mid-word. */
     fun snippetBefore(text: String): String {
