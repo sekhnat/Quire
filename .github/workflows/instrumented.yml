@@ -1,0 +1,64 @@
+name: Instrumented tests
+
+# The androidTest suite (database migrations, backup round trips, the reader on a real
+# WebView) on an emulator. Kept apart from the Build workflow so an emulator hiccup never
+# holds up a release; run it on pull requests, by hand, and nightly against main.
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  connected:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: |
+            17
+            21
+
+      - name: Install Android SDK packages
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # ScrollWindowBenchmark is a manual, 20-35 minute measurement on a pushed book (see
+      # CLAUDE.md); it is skipped here. The init script installs the tests under a
+      # .dbtest application id, as on a developer's device.
+      - name: Run instrumented tests
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: ./gradlew connectedDebugAndroidTest --init-script tools/dbtest-suffix.init.gradle -Pandroid.testInstrumentationRunnerArguments.notClass=com.quire.reader.ui.ScrollWindowBenchmark --stacktrace
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: instrumented-reports
+          path: app/build/reports/androidTests/
+          if-no-files-found: ignore
