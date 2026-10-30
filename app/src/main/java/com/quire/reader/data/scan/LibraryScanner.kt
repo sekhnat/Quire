@@ -2,6 +2,7 @@ package com.quire.reader.data.scan
 
 import android.util.Log
 import com.quire.reader.data.SettingsStore
+import com.quire.reader.data.runCatchingCancellable
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.KnownFile
@@ -131,7 +132,7 @@ class LibraryScanner(
         } else {
           val existing = job.existing
           if (existing != null) updated.incrementAndGet()
-          val stored = runCatching { readAndStore(file, folderById.getValue(file.folderId), existing?.id ?: 0L, existing?.addedAt, useCalibre) }
+          val stored = runCatchingCancellable { readAndStore(file, folderById.getValue(file.folderId), existing?.id ?: 0L, existing?.addedAt, useCalibre) }
             .onFailure { Log.w(TAG, "failed to read ${file.path}", it) }
             .getOrNull()
           if (stored != null && existing == null) newIds += stored.id
