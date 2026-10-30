@@ -43,18 +43,24 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # ScrollWindowBenchmark is a manual, 20-35 minute measurement on a pushed book (see
-      # CLAUDE.md); it is skipped here. The init script installs the tests under a
-      # .dbtest application id, as on a developer's device.
+      # The tests drive the reader with real touches at Pixel 7 coordinates (1080x2400) and
+      # wait on real rendering, so the emulator is the one CLAUDE.md documents: a Pixel 7
+      # with 4 cores and 4 GB. Two classes are manual and skipped: ScrollWindowBenchmark (a
+      # 20-35 minute measurement on a pushed book) and UpgradeGateTest (run by hand before
+      # and after installing an upgrade, against the real application id). The init script
+      # installs the tests under a .dbtest application id, as on a developer's device.
       - name: Run instrumented tests
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 36
           arch: x86_64
           target: google_apis
+          profile: pixel_7
+          cores: 4
+          ram-size: 4096M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: ./gradlew connectedDebugAndroidTest --init-script tools/dbtest-suffix.init.gradle -Pandroid.testInstrumentationRunnerArguments.notClass=com.quire.reader.ui.ScrollWindowBenchmark --stacktrace
+          script: ./gradlew connectedDebugAndroidTest --init-script tools/dbtest-suffix.init.gradle -Pandroid.testInstrumentationRunnerArguments.notClass=com.quire.reader.ui.ScrollWindowBenchmark,com.quire.reader.ui.UpgradeGateTest --stacktrace
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
