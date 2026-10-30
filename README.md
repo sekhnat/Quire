@@ -152,4 +152,9 @@ The interface follows the Quire Reader design from Claude Design, built on the *
 
 ## Credits
 
-[Readium](https://readium.org) for EPUB parsing and rendering · [Phosphor Icons](https://phosphoricons.com) · the reading fonts above (open fonts under the SIL OFL; licenses in `app/src/main/assets/licenses/fonts`, OpenDyslexic via Readium) · sample books from [Project Gutenberg](https://www.gutenberg.org).
+[Readium](https://readium.org) for EPUB parsing and rendering · [Phosphor Icons](https://phosphoricons.com) · the reading fonts above (open fonts under the SIL OFL; licences in `app/src/main/assets/licenses/fonts`, OpenDyslexic via Readium) · sample books from [Project Gutenberg](https://www.gutenberg.org).
+
+## Licence
+
+Quire is licensed under the [Apache License 2.0](LICENSE). It includes a modified copy of Readium's EPUB navigator (`app/src/main/java/com/quire/reader/navigator/`), which stays under Readium's [BSD 3-Clause licence](app/src/main/assets/licenses/readium-LICENSE.txt); the Phosphor icons are [MIT](app/src/main/assets/licenses/phosphor-LICENSE.txt), and the reading fonts are under the SIL Open Font License 1.1. Settings → Open-source licences shows all of these in the app.
+
