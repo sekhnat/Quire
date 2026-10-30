@@ -27,7 +27,7 @@ class MobiPublicationTest {
   private fun fixture(name: String): File =
     File(dir, name).also { f -> checkNotNull(javaClass.getResourceAsStream("/mobi/$name")) { "missing fixture $name" }.use { f.outputStream().use(it::copyTo) } }
 
-  @Test fun `Readium opens every converted fixture with its metadata, contents, cover and text`() = runBlocking {
+  @Test fun `Readium opens every converted fixture with its metadata and contents and cover and text`() = runBlocking {
     val loader = PublicationLoader(target)
     for (name in listOf("mobi6.mobi", "mobi6-uncompressed.mobi", "joint.mobi", "kf8.azw3")) {
       val pub = loader.open(fixture(name)).getOrThrow()
