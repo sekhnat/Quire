@@ -21,6 +21,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.quire.reader.navigator.epub.css.ReadiumCss
@@ -289,7 +291,7 @@ internal class WebViewServer(
             "Accept-Ranges" to "bytes"
         )
 
-        val stream = resource.asInputStream()
+        val stream = LoadFailureStream(resource.asInputStream())
         if (range == null) {
             val gated = onInterceptResource?.invoke(
                 href?.toString() ?: resource.sourceUrl.toString(),
@@ -393,4 +395,27 @@ internal class ResourceFontPathHandler(
         val id = resources["fonts/$path"] ?: return null
         return WebResourceResponse("font/ttf", null, application.resources.openRawResource(id))
     }
+}
+
+/**
+ * Quire: the stream the WebView reads a publication resource from. A book closed while the WebView is still reading one of
+ * its resources makes Readium's zip container throw IllegalStateException ("zip file closed"); thrown from a stream the
+ * WebView reads in native code, that takes the whole app down. Any failure other than an IOException is reported as one,
+ * so the WebView just fails that load.
+ */
+internal class LoadFailureStream(private val source: InputStream) : InputStream() {
+    private inline fun <T> guarded(block: () -> T): T =
+        try {
+            block()
+        } catch (e: IOException) {
+            throw e
+        } catch (e: RuntimeException) {
+            throw IOException("resource read failed", e)
+        }
+
+    override fun read(): Int = guarded { source.read() }
+    override fun read(b: ByteArray, off: Int, len: Int): Int = guarded { source.read(b, off, len) }
+    override fun skip(n: Long): Long = guarded { source.skip(n) }
+    override fun available(): Int = guarded { source.available() }
+    override fun close() = guarded { source.close() }
 }
