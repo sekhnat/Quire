@@ -5,7 +5,7 @@
 - SDK: `~/Android/Sdk`; Android 16 / API 36; build tools 36.0.0.
 - Build JDK: `/usr/lib/jvm/java-21-openjdk` (21). System Java is 27; do not use it for these builds.
 - Emulator: `Android_API_36` (Pixel 7, x86_64, KVM, 4 cores, 4 GB RAM).
-- Full guide: `~/.config/android/README.md`; local overview: `ANDROID.md`.
+- Full guide: `~/.config/android/README.md`.
 
 Activate in Zsh (new interactive terminals already do this):
 
