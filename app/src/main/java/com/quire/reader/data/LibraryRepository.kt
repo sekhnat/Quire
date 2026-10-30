@@ -3,6 +3,7 @@ package com.quire.reader.data
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.tracing.trace
 import androidx.tracing.traceAsync
 import com.quire.reader.data.db.BookTagEntity
@@ -141,7 +142,7 @@ class LibraryRepository(
     val dir = File(app.filesDir, "imported").apply { mkdirs() }
     var copied = 0
     for (uri in uris) {
-      runCatching {
+      runCatchingCancellable {
         val incoming = File(dir, ".import-${System.currentTimeMillis()}.tmp")
         try {
           app.contentResolver.openInputStream(uri)?.use { input -> incoming.outputStream().use { input.copyTo(it) } } ?: error("cannot open $uri")
@@ -154,7 +155,7 @@ class LibraryRepository(
         } finally {
           incoming.delete()
         }
-      }
+      }.onFailure { Log.w(TAG, "cannot import $uri", it) }
     }
     if (copied > 0) scanImported()
     copied
@@ -312,5 +313,8 @@ class LibraryRepository(
   val brightness: Flow<Int> = settings.brightness
   suspend fun setBrightness(v: Int) = settings.setBrightness(v)
 
-  companion object { const val FINISHED_AT = 0.985f }
+  companion object {
+    const val FINISHED_AT = 0.985f
+    private const val TAG = "LibraryRepository"
+  }
 }

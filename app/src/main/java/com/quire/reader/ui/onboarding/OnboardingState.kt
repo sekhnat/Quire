@@ -9,7 +9,7 @@ import com.quire.reader.ui.AppNavigator
 import com.quire.reader.ui.IndexerControl
 import com.quire.reader.ui.OnboardStep
 import com.quire.reader.ui.Toasts
-import com.quire.reader.ui.books
+import com.quire.reader.ui.describeImport
 import com.quire.reader.ui.describe
 import com.quire.reader.ui.noticeable
 import com.quire.reader.ui.settings.RestoreState
@@ -165,7 +165,7 @@ class OnboardingState(
     persist.launch {
       val n = store.importFiles(uris)
       if (n > 0) { store.setOnboardingDone(true); nav.openLibrary() }
-      toasts.show(if (n > 0) "Imported ${books(n)}" else "Nothing could be imported")
+      toasts.show(describeImport(n, uris.size))
     }
   }
 }
