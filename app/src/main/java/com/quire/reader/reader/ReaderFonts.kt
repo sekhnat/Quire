@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily as ComposeFontFamily
+import com.quire.reader.R
 import com.quire.reader.theme.QuireFonts
 
 /**
@@ -37,8 +38,11 @@ class ReaderFont(
   }
 }
 
-/** A bundled file of a reading font: one style, and the weight it has (a range for a variable file). */
-class FontFile(val asset: String, val italic: Boolean = false, val weights: IntRange)
+/**
+ * A bundled file of a reading font: one style, and the weight it has (a range for a variable file). [asset] is the path the
+ * reader's WebView asks for. A UI font is kept only once, in `res/font`: its [resource] is served at that path instead.
+ */
+class FontFile(val asset: String, val italic: Boolean = false, val weights: IntRange, val resource: Int? = null)
 
 /** [ReaderFont.preview] for this composition's assets. */
 @Composable
@@ -58,14 +62,29 @@ private fun static(slug: String) = listOf(
 )
 
 /**
- * Fonts live in `assets/fonts` and are served to the EPUB's WebView by Readium; their licenses are in
- * `assets/licenses/fonts`. Books store the chosen font as an index into this list, so new fonts go at the end.
+ * Fonts live in `assets/fonts` (the UI fonts in `res/font`, see [FontFile.resource]) and are served to the EPUB's WebView by
+ * Readium; their licenses are in `assets/licenses/fonts`. Books store the chosen font as an index into this list, so new
+ * fonts go at the end.
  */
 val ReaderFontList: List<ReaderFont> = listOf(
-  ReaderFont("Literata", listOf(FontFile("fonts/literata.ttf", weights = 200..900), FontFile("fonts/literata-italic.ttf", italic = true, weights = 200..900)), QuireFonts.Literata),
-  ReaderFont("Source Serif", listOf(FontFile("fonts/source-serif.ttf", weights = 200..900)), QuireFonts.SourceSerif),
-  ReaderFont("Atkinson", listOf(FontFile("fonts/atkinson-regular.ttf", weights = 400..400), FontFile("fonts/atkinson-bold.ttf", weights = 700..700)), QuireFonts.Atkinson),
-  ReaderFont("Inter", listOf(FontFile("fonts/inter.ttf", weights = 100..900)), QuireFonts.Inter),
+  ReaderFont(
+    "Literata",
+    listOf(
+      FontFile("fonts/literata.ttf", weights = 200..900, resource = R.font.literata),
+      FontFile("fonts/literata-italic.ttf", italic = true, weights = 200..900, resource = R.font.literata_italic),
+    ),
+    QuireFonts.Literata,
+  ),
+  ReaderFont("Source Serif", listOf(FontFile("fonts/source-serif.ttf", weights = 200..900, resource = R.font.source_serif)), QuireFonts.SourceSerif),
+  ReaderFont(
+    "Atkinson",
+    listOf(
+      FontFile("fonts/atkinson-regular.ttf", weights = 400..400, resource = R.font.atkinson_regular),
+      FontFile("fonts/atkinson-bold.ttf", weights = 700..700, resource = R.font.atkinson_bold),
+    ),
+    QuireFonts.Atkinson,
+  ),
+  ReaderFont("Inter", listOf(FontFile("fonts/inter.ttf", weights = 100..900, resource = R.font.inter)), QuireFonts.Inter),
   // Serifs made for long reading, on paper and on screens.
   ReaderFont("Merriweather", static("merriweather")),
   ReaderFont("Lora", variable("fonts/lora.ttf", 400..700, "fonts/lora-italic.ttf")),
@@ -85,3 +104,7 @@ val ReaderFontList: List<ReaderFont> = listOf(
   // Readium bundles and declares OpenDyslexic itself.
   ReaderFont("OpenDyslexic", emptyList(), previewAsset = "readium/fonts/OpenDyslexic-Regular.otf"),
 )
+
+/** The reading-font paths the WebView server answers from `res/font` rather than `assets`, by asset path. */
+val ReaderFontResources: Map<String, Int> =
+  ReaderFontList.flatMap { it.files }.mapNotNull { file -> file.resource?.let { file.asset to it } }.toMap()

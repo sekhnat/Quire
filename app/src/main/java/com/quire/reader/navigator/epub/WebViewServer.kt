@@ -24,6 +24,7 @@ import java.io.ByteArrayInputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.quire.reader.navigator.epub.css.ReadiumCss
+import com.quire.reader.reader.ReaderFontResources
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Href
@@ -373,6 +374,23 @@ internal class WebViewServer(
     private val assetsLoader =
         WebViewAssetLoader.Builder()
             .setDomain(ASSETS_HOSTNAME)
+            // Quire: the UI fonts are kept once, in res/font, and answered at their reading-font
+            // paths; any other path falls through to the assets.
+            .addPathHandler("/fonts/", ResourceFontPathHandler(application, ReaderFontResources))
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(application))
             .build()
+}
+
+/**
+ * Answers `fonts/<name>` from `res/font` for the reading fonts listed in [resources] (keyed by asset path), and nothing
+ * else, so the next handler serves the rest from the assets.
+ */
+internal class ResourceFontPathHandler(
+    private val application: Application,
+    private val resources: Map<String, Int>,
+) : WebViewAssetLoader.PathHandler {
+    override fun handle(path: String): WebResourceResponse? {
+        val id = resources["fonts/$path"] ?: return null
+        return WebResourceResponse("font/ttf", null, application.resources.openRawResource(id))
+    }
 }
