@@ -12,7 +12,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
   ],
   version = QuireDatabase.VERSION,
-  exportSchema = false,
+  // Exported to app/schemas so a schema change shows up in review; commit the new file with every VERSION bump.
+  exportSchema = true,
 )
 abstract class QuireDatabase : RoomDatabase() {
   abstract fun folders(): FolderDao
