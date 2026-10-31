@@ -120,8 +120,8 @@ class LibraryStateTest {
 
   @Test fun `browsing actions go through the navigator`() = runTest {
     val library = library()
-    library.openBook(2); library.read(1); library.openSettings()
-    assertEquals(listOf(Visit.Detail(2), ReaderRequest(1), Visit.Settings), nav.visits)
+    library.openBook(2); library.read(1); library.openSettings(); library.openStats()
+    assertEquals(listOf(Visit.Detail(2), ReaderRequest(1), Visit.Settings, Visit.Stats), nav.visits)
   }
 
   @Test fun `the inside-books search runs with the library filter`() = runTest {

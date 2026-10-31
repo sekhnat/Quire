@@ -64,6 +64,15 @@ object SnapshotMerge {
     }.filter { it.isNotEmpty() }.distinct()
 
   /**
+   * The incoming sessions that are not already there. A session is identified by when it started and ended, so
+   * importing the same file again, or two files that share history, adds nothing twice.
+   */
+  fun newSessions(present: Set<Pair<Long, Long>>, incoming: List<SnapshotSession>): List<SnapshotSession> {
+    val seen = present.toMutableSet()
+    return incoming.filter { seen.add(it.startedAt to it.endedAt) }
+  }
+
+  /**
    * The colour a highlight keeps after merging. Local-first, like ratings: the incoming colour only fills in a
    * highlight still in the default violet (0), which is also what an absent colour means.
    */

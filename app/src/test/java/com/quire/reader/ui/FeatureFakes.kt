@@ -16,6 +16,7 @@ import com.quire.reader.data.scan.ScanResult
 import com.quire.reader.ui.library.LibraryPrefs
 import com.quire.reader.ui.library.LibraryStore
 import com.quire.reader.ui.reader.ReaderStore
+import com.quire.reader.ui.reader.ReadingSpan
 import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
@@ -34,6 +35,7 @@ sealed interface Visit {
   data object Library : Visit
   data class Detail(val bookId: Long) : Visit
   data object Settings : Visit
+  data object Stats : Visit
 }
 
 /** Records where the feature asked to go. */
@@ -44,6 +46,7 @@ class RecordingNavigator : AppNavigator {
   override fun openDetail(bookId: Long) { visits += Visit.Detail(bookId) }
   override fun openReader(request: ReaderRequest) { visits += request }
   override fun openSettings() { visits += Visit.Settings }
+  override fun openStats() { visits += Visit.Stats }
 }
 
 /** Records every toast. */
@@ -120,6 +123,8 @@ class FakeReaderStore(var paths: Map<Long, String> = emptyMap()) : ReaderStore {
   override suspend fun markOpened(bookId: Long) { writes += "opened $bookId" }
   override suspend fun updatePageCount(bookId: Long, pages: Int) { writes += "pages $bookId $pages" }
   override suspend fun savePosition(bookId: Long, locatorJson: String, progress: Float) { writes += "position $bookId" }
+  val sessions = mutableListOf<Pair<Long, ReadingSpan>>()
+  override suspend fun addReadingSession(bookId: Long, span: ReadingSpan) { sessions += bookId to span; writes += "session $bookId" }
   override fun readerPrefs(bookId: Long): Flow<ReaderPrefs> = prefs
   override fun hasBookOverride(bookId: Long) = flowOf(false)
   override fun hasBookAdvancedOverride(bookId: Long) = flowOf(false)

@@ -25,6 +25,7 @@ import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
+import com.quire.reader.data.db.ReadingSessionEntity
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.IndexActivity
 import com.quire.reader.data.index.IndexTarget
@@ -46,6 +47,9 @@ import com.quire.reader.data.scan.FolderDiscovery
 import kotlinx.coroutines.ensureActive
 import com.quire.reader.ui.reader.ReaderState
 import com.quire.reader.ui.reader.ReaderStore
+import com.quire.reader.ui.reader.ReadingSpan
+import com.quire.reader.ui.stats.StatsState
+import com.quire.reader.ui.stats.StatsStore
 import com.quire.reader.ui.settings.BackupService
 import com.quire.reader.ui.settings.BackupState
 import com.quire.reader.ui.settings.LibrarySettings
@@ -112,6 +116,12 @@ class Features(private val app: QuireApplication) {
     override suspend fun markOpened(bookId: Long) = repo.markOpened(bookId)
     override suspend fun updatePageCount(bookId: Long, pages: Int) = repo.updatePageCount(bookId, pages)
     override suspend fun savePosition(bookId: Long, locatorJson: String, progress: Float) = repo.savePosition(bookId, locatorJson, progress)
+    override suspend fun addReadingSession(bookId: Long, span: ReadingSpan) = repo.addReadingSession(
+      ReadingSessionEntity(
+        bookId = bookId, startedAt = span.startedAt, endedAt = span.endedAt, activeMs = span.activeMs,
+        startProgress = span.startProgress, endProgress = span.endProgress, readProgress = span.readProgress,
+      ),
+    )
     override fun readerPrefs(bookId: Long) = repo.readerPrefs(bookId)
     override fun hasBookOverride(bookId: Long) = repo.hasBookOverride(bookId)
     override fun hasBookAdvancedOverride(bookId: Long) = repo.hasBookAdvancedOverride(bookId)
@@ -160,6 +170,13 @@ class Features(private val app: QuireApplication) {
   /** A reader for [request]; it starts opening the book at once. */
   fun reader(request: ReaderRequest, library: StateFlow<LibraryData>, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
     ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, ::shareText, lookUp(), scope, persist, app.appScope)
+
+  private val statsStore = object : StatsStore {
+    override val sessions get() = repo.readingSessions
+    override val finishedAt get() = repo.finishedAt
+  }
+
+  fun stats(library: StateFlow<LibraryData>, nav: AppNavigator, scope: CoroutineScope) = StatsState(statsStore, library, nav, scope)
 
   private val librarySettings = object : LibrarySettings {
     override val readerDefaults get() = repo.readerDefaults

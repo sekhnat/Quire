@@ -24,6 +24,7 @@ Quire is a quiet replacement for Librera and Moon+ Reader. It watches the folder
 - **Fast at scale.** About 100 books a second on first scan; a rescan with nothing changed takes half a second for 1,500 books. Only new or changed files are read.
 - **Browse the way you think.** Books, Authors (with an A–Z rail), Series (with the volumes you're missing), and Tags. Grid, dense list, a roomier list with each book's synopsis, or shelves; sort by recently opened, date added, publication date, file size or length; filter and search across titles, authors, series and tags.
 - **Picks up where you left off.** A "Continue reading" card with time left, and every book remembers its place.
+- **Reading stats.** The chart icon in the library's top bar shows the time you read today, this week and this month, your streak, the last 30 days as a chart, how many books you finished this year, your pace in pages an hour, and the books you read most. Time counts only while a book is open on screen: a pause of more than three minutes adds three, and a visit under thirty seconds is not counted. It is stored on the phone and included in backups.
 
 ### Search inside every book
 
@@ -49,7 +50,7 @@ If you used text search before books with self-closing `<title/>` tags were hand
 - **Contents with real page numbers**, even for books that keep every chapter in one file.
 
 ### Your data, backed up
-- **Reading data travels on its own.** Positions, ratings, tags, bookmarks, highlights and notes go with Android's own backup, and Settings → Export reading data writes them to one file you can merge into any library.
+- **Reading data travels on its own.** Positions, ratings, tags, bookmarks, highlights, notes and reading sessions go with Android's own backup, and Settings → Export reading data writes them to one file you can merge into any library.
 - **Full backups.** Settings → Back up now writes one `.zip` with the whole library: folders, reading data, settings, and if you like the search index, covers and imported books. Restore it on a new phone (also from the welcome screen) to replace everything and skip indexing again, or merge just its reading data into the library you have. Automatic backups can go to a folder daily or weekly, keeping the newest few. A copied or touched book keeps its index as long as its content is unchanged. See [docs/user-data-backup.md](docs/user-data-backup.md).
 
 ## Screenshots

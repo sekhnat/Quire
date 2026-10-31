@@ -34,6 +34,7 @@ import com.quire.reader.ui.library.LibraryScreen
 import com.quire.reader.ui.onboarding.OnboardingScreen
 import com.quire.reader.ui.reader.ReaderScreen
 import com.quire.reader.ui.settings.SettingsScreen
+import com.quire.reader.ui.stats.StatsScreen
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -60,6 +61,7 @@ fun QuireApp(
         is Destination.Detail -> DetailScreen(d.state, lib)
         is Destination.Reader -> ReaderScreen(d.state)
         is Destination.Settings -> SettingsScreen(d.state)
+        is Destination.Stats -> StatsScreen(d.state)
       }
     }
     Toast(toast, Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 120.dp))

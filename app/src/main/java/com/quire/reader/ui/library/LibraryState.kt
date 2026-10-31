@@ -219,6 +219,7 @@ class LibraryState(
   fun openBook(id: Long) = nav.openDetail(id)
   fun read(id: Long) = nav.openReader(ReaderRequest(id))
   fun openSettings() = nav.openSettings()
+  fun openStats() = nav.openStats()
 
   /**
    * Opens a library text-search result: the book at the matched passage, underlined, in place of its saved position
