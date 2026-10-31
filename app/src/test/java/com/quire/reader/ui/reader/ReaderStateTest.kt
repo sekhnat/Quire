@@ -37,6 +37,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.quire.reader.reader.ReaderSession
+import com.quire.reader.reader.SelectionAction
 import org.readium.r2.shared.publication.LocalizedString
 import org.readium.r2.shared.publication.Manifest
 import org.readium.r2.shared.publication.Metadata
@@ -54,6 +56,8 @@ class ReaderStateTest {
   private val toasts = RecordingToasts()
   private val library = flowOf(LibraryData(listOf(testBook(1, "Emma")), emptyList()))
   private val opened = mutableListOf<File>()
+  private val shared = mutableListOf<String>()
+  private val lookedUp = mutableListOf<String>()
 
   @Before fun setUp() = Dispatchers.setMain(dispatcher)
   @After fun tearDown() = Dispatchers.resetMain()
@@ -63,7 +67,10 @@ class ReaderStateTest {
   private fun TestScope.reader(
     request: ReaderRequest = ReaderRequest(1),
     open: suspend (File) -> Result<Publication> = { opened += it; Result.success(stubPublication()) },
-  ) = ReaderState(request, store, library, open, indexer, nav, toasts, {}, backgroundScope.childScope(), backgroundScope, backgroundScope)
+    lookUp: ((String) -> Unit)? = { lookedUp += it },
+  ) = ReaderState(request, store, library, open, indexer, nav, toasts, {}, { shared += it }, lookUp, backgroundScope.childScope(), backgroundScope, backgroundScope)
+
+  private fun session() = ReaderSession(testBook(1, "Emma", author = "Jane Austen"), stubPublication(), emptyList(), null)
 
   /** Waits in real time: opening reads the publication's positions on the IO dispatcher. */
   private suspend fun ReaderState.awaitSettled() =
@@ -173,5 +180,29 @@ class ReaderStateTest {
     reader.openBookSearchHit(testTarget(1)); runCurrent()
     assertEquals(listOf(STALE_TARGET_MESSAGE), toasts.shown)
     assertEquals(1, indexer.requests)
+  }
+
+  @Test fun `sharing a selection sends it as a quote with its book`() = runTest(dispatcher) {
+    reader().onSelectedText(session(), SelectionAction.Share, "It is a truth universally acknowledged")
+    assertEquals(listOf("“It is a truth universally acknowledged”\n— Emma, Jane Austen"), shared)
+    assertTrue(lookedUp.isEmpty())
+  }
+
+  @Test fun `looking up a selection hands over the bare text`() = runTest(dispatcher) {
+    reader().onSelectedText(session(), SelectionAction.LookUp, "truth")
+    assertEquals(listOf("truth"), lookedUp)
+    assertTrue(shared.isEmpty())
+  }
+
+  @Test fun `highlighting and noting are left to the book, not handled as text`() = runTest(dispatcher) {
+    assertFalse(reader().onSelectedText(session(), SelectionAction.Highlight, "x"))
+    assertFalse(reader().onSelectedText(session(), SelectionAction.Note, "x"))
+    assertTrue(shared.isEmpty() && lookedUp.isEmpty())
+  }
+
+  @Test fun `the menu offers look up only when an app can take the text`() = runTest(dispatcher) {
+    assertTrue(SelectionAction.LookUp in reader().selectionActions)
+    assertFalse(SelectionAction.LookUp in reader(lookUp = null).selectionActions)
+    assertTrue(SelectionAction.Share in reader(lookUp = null).selectionActions)
   }
 }
