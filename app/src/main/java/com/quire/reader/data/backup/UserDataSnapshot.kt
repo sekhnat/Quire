@@ -1,5 +1,6 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import kotlinx.serialization.Serializable
 import java.security.MessageDigest
@@ -35,6 +36,8 @@ data class SnapshotSettings(
   val textSearchOrder: String? = null,
   /** Whether the advanced reading controls are shown; absent in older snapshots. */
   val advancedReadingEnabled: Boolean? = null,
+  /** Volume keys, screen-on and orientation in the reader; absent in older snapshots. */
+  val readerControls: ReaderControls? = null,
 )
 
 /** A book's identity keys, mirroring what a scan can read again from the file (see `BookIdentity`). */

@@ -1,8 +1,11 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.ReaderControls
+import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.theme.ReaderTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -57,9 +60,16 @@ class SnapshotCodecTest {
         useCalibre = true, watchNewBooks = false, indexingEnabled = true, indexChargingOnly = true, brightness = 64,
         readerDefaults = ReaderPrefs(fontSize = 21, theme = ReaderTheme.Sepia),
         textSearchOrder = "Library",
+        readerControls = ReaderControls(volumeKeys = true, keepScreenOn = true, orientation = ReaderOrientation.Landscape),
       ),
     )
     assertEquals(original, (decode(SnapshotCodec.encode(original)) as SnapshotCodec.Decoded.Ok).snapshot)
+  }
+
+  @Test fun `a snapshot written before reader controls existed still decodes, with none`() {
+    val text = SnapshotCodec.encode(snapshot(settings = SnapshotSettings(brightness = 70)))
+    assertFalse("readerControls" in text)
+    assertNull(((decode(text)) as SnapshotCodec.Decoded.Ok).snapshot.settings.readerControls)
   }
 
   @Test fun `boundary values are valid`() {
