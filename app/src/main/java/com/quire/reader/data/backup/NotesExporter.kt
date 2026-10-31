@@ -1,6 +1,7 @@
 package com.quire.reader.data.backup
 
 import com.quire.reader.data.db.BookEntity
+import com.quire.reader.data.runCatchingCancellable
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.PublicationLoader
 import kotlinx.serialization.json.Json
@@ -55,7 +56,7 @@ object NotesExporter {
    * chapters is labelled by its first one; a book that cannot be read yields an empty map, and the
    * export falls back to the resource name.
    */
-  suspend fun chapterTitles(loader: PublicationLoader, path: String): Map<String, String> = runCatching {
+  suspend fun chapterTitles(loader: PublicationLoader, path: String): Map<String, String> = runCatchingCancellable {
     val publication = loader.open(File(path)).getOrElse { return emptyMap() }
     try {
       val order = publication.readingOrder.map { link -> link.url().removeFragment().toString() }

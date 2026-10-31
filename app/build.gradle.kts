@@ -158,6 +158,11 @@ kotlin {
     jvmToolchain(17)
 }
 
+// Room writes the library database's schema here (QuireDatabase exports it; the rebuildable index does not).
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
   coreLibraryDesugaring(libs.desugar.jdk.libs)
 

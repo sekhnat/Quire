@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.quire.reader.BuildConfig
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
@@ -88,6 +89,10 @@ fun SettingsScreen(settings: SettingsState) {
   /** Missing books the user asked to forget, waiting for confirmation; null when nothing is being confirmed. */
   var forgetting by remember { mutableStateOf<List<MissingBookRow>?>(null) }
   BackHandler(enabled = forgetting != null) { forgetting = null }
+  var showingLicences by remember { mutableStateOf(false) }
+  /** The notice open in the licences sheet; null shows the list. */
+  var openLicence by remember { mutableStateOf<String?>(null) }
+  BackHandler(enabled = showingLicences) { if (openLicence != null) openLicence = null else showingLicences = false }
   // The database grows as books are indexed, so measure again whenever the searchable count changes.
   LaunchedEffect(coverage?.searchable) { settings.refreshDatabaseBytes() }
 
@@ -221,6 +226,12 @@ fun SettingsScreen(settings: SettingsState) {
           QText("Removes the search index and stops indexing. Your books, library details and reading progress stay.", 11.5f, color = Nq.neutral500)
         }
       }
+
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Kicker("About")
+        Value("Version", BuildConfig.VERSION_NAME, null)
+        QButton("Open-source licences", { showingLicences = true }, Modifier.fillMaxWidth(), icon = Ic.BookOpenText, size = 12.5f)
+      }
     }
   }
   BackupSheets(settings, choosingBackup, onDismissChoosing = { choosingBackup = false })
@@ -230,6 +241,7 @@ fun SettingsScreen(settings: SettingsState) {
     forgetting = null
     if (rows.size == 1) settings.forgetMissing(rows.single().id) else settings.forgetAllMissing()
   }
+  LicencesSheet(showingLicences, openLicence, onOpen = { openLicence = it }, onDismiss = { showingLicences = false; openLicence = null })
   }
 }
 
