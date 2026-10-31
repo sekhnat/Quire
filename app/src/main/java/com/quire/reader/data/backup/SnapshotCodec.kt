@@ -40,6 +40,7 @@ object SnapshotCodec {
   /** The first structural problem found, or null when the snapshot is valid. */
   fun validate(snapshot: UserDataSnapshot): String? {
     snapshot.settings.brightness?.takeIf { it !in 30..100 }?.let { return "brightness $it outside 30..100" }
+    snapshot.settings.readAloud?.speed?.takeIf { it !in 0.1..4.0 }?.let { return "read-aloud speed $it outside 0.1..4" }
     snapshot.settings.textSearchOrder?.takeIf { order ->
       com.quire.reader.data.index.SearchOrder.entries.none { it.name == order }
     }?.let { return "unknown text search order $it" }

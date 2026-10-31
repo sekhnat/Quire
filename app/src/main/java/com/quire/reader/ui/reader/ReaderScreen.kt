@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -59,6 +60,9 @@ import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.EpubHost
+import com.quire.reader.reader.ReadAloudStatus
+import com.quire.reader.reader.ReadAloudUi
+import com.quire.reader.reader.speedLabel
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.toEpubPreferences
 import com.quire.reader.theme.Nq
@@ -75,6 +79,9 @@ import com.quire.reader.ui.Sheet
 import com.quire.reader.ui.TocTab
 import com.quire.reader.ui.dashedBorder
 import kotlin.math.roundToInt
+
+/** The room the read-aloud controls take from the bottom of the page. */
+private val READ_ALOUD_BAR_SPACE = 56.dp
 
 /** Fractions of the screen width at which a tap means "back", "menu" or "next". */
 private const val ZONE_BACK = 1f / 3.3f
@@ -118,7 +125,9 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
   val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
   val controls by reader.controls.collectAsStateWithLifecycle()
-  ReaderControlsEffects(session, controls, s.overlaysOpen, reader)
+  val listening by reader.readAloud.collectAsStateWithLifecycle()
+  // While it reads aloud the volume keys are the phone's own, so the volume can be set.
+  ReaderControlsEffects(session, controls, s.overlaysOpen || listening.active, reader)
   LifecycleResumeEffect(session) {
     reader.resumeReading()
     onPauseOrDispose { reader.pauseReading() }
@@ -151,7 +160,7 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
   Box(Modifier.fillMaxSize().background(bgColor)) {
     QText(book.title, 11f, Modifier.padding(top = statusTop + 6.dp, start = 24.dp, end = 24.dp).fillMaxWidth(), color = theme.muted, ls = 0.04f, maxLines = 1, align = TextAlign.Center)
 
-    Box(Modifier.fillMaxSize().padding(top = statusTop + 32.dp, bottom = navBottom + 46.dp)) {
+    Box(Modifier.fillMaxSize().padding(top = statusTop + 32.dp, bottom = navBottom + 46.dp + if (listening.active) READ_ALOUD_BAR_SPACE else 0.dp)) {
       EpubHost(
         session = session, preferences = epubPrefs, selectionActions = reader.selectionActions, onTap = onTap,
         onSelectionAction = reader::onSelectionAction, onHighlightTapped = { reader.setActiveHighlight(it) },
@@ -167,6 +176,8 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
       QText(timeLabel(left), 11f, color = theme.muted, tabular = true)
     }
 
+    ReadAloudBar(listening, reader, Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 40.dp))
+
     // in-app brightness dimmer (never intercepts touches)
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = (1 - s.brightness / 100f) * 0.8f)))
 
@@ -178,6 +189,7 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
     ContentsSheet(s, session, bookmarks, highlights, reader)
     SearchOverlay(s, search, bookSearch, reader)
     NoteSheet(s, highlights, reader)
+    VoiceSheet(s, reader)
   }
 }
 
@@ -284,6 +296,7 @@ private fun ReaderChrome(s: ReaderUiState, session: ReaderSession, reader: Reade
             Triple(Ic.ListBullets, "Contents") { reader.openSheet(Sheet.Contents, TocTab.Contents) },
             Triple(Ic.TextAa, "Display") { reader.openSheet(Sheet.Display) },
             Triple(Ic.Highlighter, "Highlights") { reader.openSheet(Sheet.Contents, TocTab.Highlights) },
+            Triple(Ic.Headphones, "Listen") { reader.setChrome(false); reader.startReadAloud() },
             Triple(Ic.Search, "Search") { reader.setTextSearch(true) },
           ).forEach { (icon, label, act) ->
             Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = act).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -324,6 +337,28 @@ private fun HighlightActions(s: ReaderUiState, highlights: List<HighlightEntity>
           }
         }
       }
+    }
+  }
+}
+
+/** Play and pause, sentence by sentence, speed, voice and stop for read aloud, over the foot of the page. */
+@Composable
+private fun ReadAloudBar(ui: ReadAloudUi, reader: ReaderState, modifier: Modifier) {
+  AnimatedVisibility(ui.active, modifier, enter = fadeIn(tween(150)) + slideInVertically(tween(200)) { it / 2 }, exit = fadeOut(tween(150))) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+      Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(READ_ALOUD_BAR_SPACE - 4.dp).shadow(8.dp, shape).background(Nq.surface, shape).padding(horizontal = 6.dp),
+      verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+      IconBtn(Ic.SkipBack, reader::readAloudPrevious)
+      IconBtn(if (ui.status == ReadAloudStatus.Paused) Ic.Play else Ic.Pause, reader::toggleReadAloud, size = 44.dp, iconSize = 24.dp, tint = Nq.accent)
+      IconBtn(Ic.SkipForward, reader::readAloudNext)
+      QText(
+        speedLabel(ui.speed), 12.5f, Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = reader::cycleReadAloudSpeed).padding(horizontal = 10.dp, vertical = 8.dp),
+        color = Nq.neutral200, tabular = true,
+      )
+      IconBtn(Ic.Speaker, { reader.openSheet(Sheet.Voices) })
+      IconBtn(Ic.X, { reader.stopReadAloud() })
     }
   }
 }

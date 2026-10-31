@@ -1218,6 +1218,18 @@ public class EpubNavigatorFragment internal constructor(
         )
     }
 
+    /**
+     * Where read aloud should start for the current selection: the block the selection begins in. It is not made from
+     * [currentSelection], whose locators are what highlights are saved from and carry no selector.
+     */
+    public suspend fun selectionSpeechStart(): Locator? {
+        val book = continuousBook
+        val href = book?.activeSelectionHref() ?: currentLocator.value.href
+        val runner = book?.selectionRunner() ?: activeScriptRunner() ?: return null
+        val selector = SpeechStart.selectorFrom(runner.runJavaScriptSuspend(SpeechStart.SELECTION)) ?: return null
+        return SpeechStart.locator(href, readingOrder.firstOrNull { it.url() == href }?.mediaType, selector)
+    }
+
     override fun clearSelection() {
         // Clear in the resource the selection belongs to, not just the visible one.
         val book = continuousBook
@@ -1550,10 +1562,19 @@ public class EpubNavigatorFragment internal constructor(
         if (book != null) {
             val index = book.resourceIndexAt(book.outerScrollY()) ?: return null
             val resource = readingOrder[index]
+            val progression = book.progressionAt(book.outerScrollY())
+            // The block at the top of the screen, named so that text-to-speech can start there; without it
+            // the locator is only a progression, which that cannot start from.
+            val selector = book.captureAnchor()
+                ?.takeIf { it.href == resource.url() }
+                ?.localOffset
+                ?.let { within -> book.runnerFor(resource.url())?.runJavaScriptSuspend(SpeechStart.firstBelow(within)) }
+                ?.let(SpeechStart::selectorFrom)
+            if (selector != null) return SpeechStart.locator(resource.url(), resource.mediaType, selector, progression)
             return Locator(
                 href = resource.url(),
                 mediaType = resource.mediaType ?: MediaType.XHTML,
-                locations = Locator.Locations(progression = book.progressionAt(book.outerScrollY()))
+                locations = Locator.Locations(progression = progression)
             )
         }
 

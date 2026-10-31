@@ -3,6 +3,7 @@ package com.quire.reader.ui.reader
 import android.util.Log
 import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.ParagraphPreset
+import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
@@ -11,6 +12,12 @@ import com.quire.reader.data.index.BookTextPage
 import com.quire.reader.data.index.FtsQuery
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.reader.OpeningPosition
+import com.quire.reader.reader.ReadAloudOutcome
+import com.quire.reader.reader.ReadAloudPlayback
+import com.quire.reader.reader.ReadAloudStatus
+import com.quire.reader.reader.ReadAloudSupport
+import com.quire.reader.reader.ReadAloudUi
+import com.quire.reader.reader.VoiceOption
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.STALE_TARGET_MESSAGE
 import com.quire.reader.reader.SearchHit
@@ -43,7 +50,9 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
@@ -96,6 +105,8 @@ interface ReaderStore {
   suspend fun setLastHighlightColor(color: Int)
 
   val readerControls: Flow<ReaderControls>
+  val readAloudPrefs: Flow<ReadAloudPrefs>
+  suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs)
   val brightness: Flow<Int>
   suspend fun setBrightness(value: Int)
 
@@ -106,6 +117,10 @@ interface ReaderStore {
 private const val TAG = "ReaderOpen"
 /** How long the opening log waits for the book to show before reporting that it did not. */
 private const val SHOWN_LOG_TIMEOUT_MS = 30_000L
+/** The page follows the sentence being read aloud at most this often. */
+private const val FOLLOW_INTERVAL_MS = 1_000L
+/** With the screen off the place being read aloud is saved at most this often. */
+private const val BACKGROUND_SAVE_INTERVAL_MS = 5_000L
 /** How long chapter anchors wait for the first page before being worked out anyway. */
 private const val ANCHORS_WAIT_MS = 5_000L
 
@@ -167,11 +182,15 @@ class ReaderState(
   private val persist: CoroutineScope,
   private val appScope: CoroutineScope,
   private val now: () -> Long = System::currentTimeMillis,
+  /** What reading aloud needs; null where it is not offered. */
+  private val readAloudSupport: ReadAloudSupport? = null,
 ) {
   val bookId: Long get() = request.bookId
 
   /** What the text-selection menu offers; "Look up" only when some app can take the text. */
-  val selectionActions: List<SelectionAction> = SelectionAction.entries.filter { it != SelectionAction.LookUp || lookUp != null }
+  val selectionActions: List<SelectionAction> = SelectionAction.entries.filter {
+    (it != SelectionAction.LookUp || lookUp != null) && (it != SelectionAction.ReadAloud || readAloudSupport != null)
+  }
 
   private val _load = MutableStateFlow<ReaderLoad>(ReaderLoad.Loading)
   val load: StateFlow<ReaderLoad> = _load
@@ -215,6 +234,16 @@ class ReaderState(
   private var closed = false
   /** Measures the reading time of this opening; made once the book's pages are counted. */
   private var clock: ReadingClock? = null
+  /** Whether the reader is the screen being looked at; read aloud keeps it counting as reading when it is not. */
+  private var inFront = false
+
+  private val _readAloud = MutableStateFlow(ReadAloudUi())
+  /** Whether the book is being read aloud, and how fast. */
+  val readAloud: StateFlow<ReadAloudUi> = _readAloud
+  private var playback: ReadAloudPlayback? = null
+  private var readAloudJob: Job? = null
+  private var lastBackgroundSaveAt = 0L
+  private val readAloudPrefs: StateFlow<ReadAloudPrefs> = store.readAloudPrefs.stateIn(scope, SharingStarted.Eagerly, ReadAloudPrefs())
 
   private fun edit(block: ReaderUiState.() -> ReaderUiState) = _ui.update(block)
 
@@ -327,12 +356,20 @@ class ReaderState(
 
   /** The reader came to the front: reading time counts from now. */
   fun resumeReading() {
+    inFront = true
     val session = session() ?: return
     clock?.resume(session.totalProgress)
   }
 
   /** The reader left the front (the app went to the background, or the reader was left): the session ends and is kept. */
   fun pauseReading() {
+    inFront = false
+    // Being read to counts as reading, so while it speaks the clock runs on with the screen off.
+    if (_readAloud.value.status == ReadAloudStatus.Playing) return
+    endReadingSession()
+  }
+
+  private fun endReadingSession() {
     clock?.pause()?.let { span -> persist.launch { store.addReadingSession(bookId, span) } }
   }
 
@@ -346,6 +383,7 @@ class ReaderState(
   fun close() {
     if (closed) return
     closed = true
+    stopReadAloud(clearSentence = false)
     // Normally the screen already paused the clock; this catches a reader closed without being seen to leave.
     clock?.pause()?.let { span -> appScope.launch { store.addReadingSession(bookId, span) } }
     scope.cancel()
@@ -373,6 +411,120 @@ class ReaderState(
   private fun session(): ReaderSession? = (_load.value as? ReaderLoad.Ready)?.session
 
   fun toast(text: String) = toasts.show(text)
+
+  // ── read aloud ───────────────────────────────────────────────────────────
+
+  /**
+   * Starts reading the book aloud from [from], or from where the reader is. While it is already going, a [from] restarts it
+   * there, and no [from] just plays or pauses it.
+   */
+  fun startReadAloud(from: Locator? = null) {
+    val session = session() ?: return
+    val support = readAloudSupport ?: run { toasts.show("Read aloud isn’t available"); return }
+    if (_readAloud.value.active) {
+      if (from == null) { toggleReadAloud(); return }
+      stopReadAloud()
+    }
+    _readAloud.value = ReadAloudUi(ReadAloudStatus.Starting, readAloudPrefs.value.speed)
+    readAloudJob = scope.launch {
+      val start = from ?: session.speechStart(selection = false) ?: session.current.value
+      val opened = support.opener.open(session.publication, start, store.readAloudPrefs.first(), scope, ::stopReadAloud)
+      val reading = opened.getOrElse { error ->
+        toasts.show(error.message ?: "Read aloud couldn’t start")
+        _readAloud.value = ReadAloudUi()
+        return@launch
+      }
+      if (closed) { reading.close(); return@launch }
+      playback = reading
+      coroutineScope {
+        launch { reading.playing.collect { playing -> onReadAloudPlaying(playing) } }
+        launch { reading.outcome.filterNotNull().collect { outcome -> onReadAloudOutcome(outcome) } }
+        launch { followReadAloud(session, reading) }
+        reading.play()
+      }
+    }
+  }
+
+  private fun onReadAloudPlaying(playing: Boolean) {
+    _readAloud.update { it.copy(status = if (playing) ReadAloudStatus.Playing else ReadAloudStatus.Paused) }
+    if (!playing && !inFront) endReadingSession()
+  }
+
+  private fun onReadAloudOutcome(outcome: ReadAloudOutcome) {
+    toasts.show(when (outcome) { ReadAloudOutcome.Ended -> "Finished reading aloud"; is ReadAloudOutcome.Failed -> "Read aloud stopped: ${outcome.message}" })
+    stopReadAloud()
+  }
+
+  /**
+   * Keeps the page, the marked sentence, the reading clock and the saved place in step with the sentence being spoken.
+   * The page follows at most once a second, so a quick run of short sentences does not make it jump.
+   */
+  private suspend fun followReadAloud(session: ReaderSession, reading: ReadAloudPlayback) = coroutineScope {
+    val follow = MutableSharedFlow<Locator>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    launch {
+      follow.collect { place ->
+        session.go(place)
+        saveSpokenPlace(session, place)
+        delay(FOLLOW_INTERVAL_MS)
+      }
+    }
+    reading.utterance.filterNotNull().collect { spoken ->
+      runCatching { session.applyReadAloud(spoken.utterance) }
+      clock?.tick()
+      session.progressOf(spoken.follow)?.let { progress -> clock?.moved(progress) }
+      follow.tryEmit(spoken.follow)
+    }
+  }
+
+  /** With the screen off nothing turns the page, so the place being read is saved here, not at most every few seconds. */
+  private suspend fun saveSpokenPlace(session: ReaderSession, place: Locator) {
+    if (inFront || now() - lastBackgroundSaveAt < BACKGROUND_SAVE_INTERVAL_MS) return
+    val progress = session.progressOf(place) ?: return
+    lastBackgroundSaveAt = now()
+    store.savePosition(bookId, place.toJSON().toString(), progress)
+  }
+
+  fun toggleReadAloud() {
+    val reading = playback ?: return
+    if (reading.playing.value) reading.pause() else reading.play()
+  }
+
+  fun readAloudNext() { playback?.next() }
+  fun readAloudPrevious() { playback?.previous() }
+
+  /** Stops reading aloud, from the controls, the notification, or the book ending. [clearSentence] is false when the reader is going away. */
+  fun stopReadAloud(clearSentence: Boolean = true) {
+    readAloudJob?.cancel()
+    readAloudJob = null
+    val reading = playback
+    playback = null
+    reading?.close()
+    if (_readAloud.value.active && !inFront) endReadingSession()
+    _readAloud.value = ReadAloudUi()
+    if (clearSentence) scope.launch { session()?.applyReadAloud(null) }
+  }
+
+  /** Steps the speed up, wrapping round, and remembers it for the next book. */
+  fun cycleReadAloudSpeed() {
+    val speed = ReadAloudPrefs.nextSpeed(_readAloud.value.speed)
+    playback?.setSpeed(speed)
+    _readAloud.update { it.copy(speed = speed) }
+    persist.launch { store.setReadAloudPrefs(store.readAloudPrefs.first().copy(speed = speed)) }
+  }
+
+  /** The voices to pick from, for the language being read; empty when nothing is playing. */
+  fun readAloudVoices(): List<VoiceOption> = playback?.let { reading -> reading.voices().filter { it.language.substringBefore('-') == reading.language.substringBefore('-') } }.orEmpty()
+
+  /** The id of the voice picked for the language being read, if any was. */
+  fun readAloudVoiceId(): String? = playback?.let { readAloudPrefs.value.voices[it.language] }
+
+  fun chooseReadAloudVoice(voice: VoiceOption) {
+    playback?.setVoice(voice.language, voice.id)
+    persist.launch { store.setReadAloudPrefs(store.readAloudPrefs.first().withVoice(voice.language, voice.id)) }
+  }
+
+  /** Asks the system to install more voices. */
+  fun installVoices() { readAloudSupport?.installVoices?.invoke() }
 
   // ── overlays ─────────────────────────────────────────────────────────────
 
@@ -463,6 +615,12 @@ class ReaderState(
     val session = session() ?: return
     scope.launch {
       val locator = session.currentSelection() ?: return@launch
+      if (action == SelectionAction.ReadAloud) {
+        val start = session.speechStart(selection = true) ?: locator
+        session.clearSelection()
+        startReadAloud(start)
+        return@launch
+      }
       val text = locator.text.highlight.orEmpty()
       if (!onSelectedText(session, action, text)) saveHighlight(session, action, locator, text)
     }
@@ -474,7 +632,7 @@ class ReaderState(
       SelectionAction.Copy -> { copyText(text); toasts.show("Copied") }
       SelectionAction.Share -> shareText(shareQuote(text, session.book.title, session.book.author))
       SelectionAction.LookUp -> lookUp?.invoke(text)
-      SelectionAction.Highlight, SelectionAction.Note -> return false
+      SelectionAction.Highlight, SelectionAction.Note, SelectionAction.ReadAloud -> return false
     }
     session.clearSelection()
     return true

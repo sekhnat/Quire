@@ -1,5 +1,6 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import kotlinx.serialization.Serializable
@@ -38,6 +39,8 @@ data class SnapshotSettings(
   val advancedReadingEnabled: Boolean? = null,
   /** Volume keys, screen-on and orientation in the reader; absent in older snapshots. */
   val readerControls: ReaderControls? = null,
+  /** Read-aloud speed and voices; absent in older snapshots. */
+  val readAloud: ReadAloudPrefs? = null,
 )
 
 /** A book's identity keys, mirroring what a scan can read again from the file (see `BookIdentity`). */

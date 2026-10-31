@@ -422,3 +422,34 @@ internal fun NoteSheet(s: ReaderUiState, highlights: List<HighlightEntity>, read
     }
   }
 }
+
+/** The voices the phone's speech engine has for the language being read; picking one is remembered for that language. */
+@Composable
+internal fun VoiceSheet(s: ReaderUiState, reader: ReaderState) {
+  SheetHost(s.sheet == Sheet.Voices, { reader.openSheet(null) }, Modifier.fillMaxHeight(0.7f)) {
+    val voices = remember(s.sheet) { if (s.sheet == Sheet.Voices) reader.readAloudVoices() else emptyList() }
+    var chosen by remember(s.sheet) { mutableStateOf(reader.readAloudVoiceId()) }
+    Column(Modifier.fillMaxSize().padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      QText("Voice", 17f, Modifier.padding(horizontal = 20.dp), weight = 500)
+      QText("Voices on this phone for the language of the book. They speak without a connection.", 12.5f, Modifier.padding(horizontal = 20.dp), color = Nq.neutral400, lh = 1.5f)
+      LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp)) {
+        items(voices) { voice ->
+          Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { chosen = voice.id; reader.chooseReadAloudVoice(voice) }.padding(horizontal = 10.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+          ) {
+            QText(voice.label, 14f, Modifier.weight(1f), color = if (voice.id == chosen) Nq.accent200 else Nq.text, maxLines = 1)
+            if (voice.id == chosen) Ph(Ic.CheckBold, 16.dp, Nq.accent)
+          }
+        }
+        if (voices.isEmpty()) item {
+          QText(
+            "No voices found for this language. Install more below, or use the engine's own voice.", 13f,
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp), color = Nq.neutral500, align = TextAlign.Center,
+          )
+        }
+      }
+      QButton("Install more voices", reader::installVoices, Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp), size = 12.5f)
+    }
+  }
+}

@@ -13,7 +13,7 @@ enum class OnboardStep { Welcome, Access, Folders, Scan }
 enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Series("Series"), Tags("Tags") }
 enum class LibLayout { Grid, List, Comfortable, Shelves }
 enum class LibFilter(val label: String) { All("All"), Reading("In progress"), Unread("Unread"), Recent("Recently added"), Finished("Finished") }
-enum class Sheet { Display, Contents }
+enum class Sheet { Display, Contents, Voices }
 enum class TocTab(val label: String) { Contents("Contents"), Bookmarks("Bookmarks"), Highlights("Highlights") }
 enum class ScopeKind(val label: String) { Author("Author"), Series("Series"), Tag("Tag") }
 data class Scope(val kind: ScopeKind, val value: String) {

@@ -1,5 +1,6 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
@@ -195,6 +196,15 @@ class SnapshotMergeTest {
     assertEquals(0, SnapshotMerge.mergeHighlightColor(local = 0, incoming = null))
     assertEquals(0, SnapshotMerge.mergeHighlightColor(local = 0, incoming = 0))
     assertEquals(3, SnapshotMerge.mergeHighlightColor(local = 3, incoming = null))
+  }
+
+  @Test fun `read-aloud preferences restore with the settings and an older snapshot keeps the local ones`() {
+    val mine = ReadAloudPrefs(speed = 1.5)
+    val theirs = ReadAloudPrefs(speed = 1.25, voices = mapOf("en-US" to "x"))
+    val local = SnapshotSettings(readAloud = mine)
+    assertEquals(theirs, SnapshotMerge.mergeSettings(local, SnapshotSettings(readAloud = theirs), applyIncoming = true).readAloud)
+    assertEquals(mine, SnapshotMerge.mergeSettings(local, SnapshotSettings(), applyIncoming = true).readAloud)
+    assertEquals(mine, SnapshotMerge.mergeSettings(local, SnapshotSettings(readAloud = theirs), applyIncoming = false).readAloud)
   }
 
   @Test fun `reader controls restore with the settings and an older snapshot keeps the local ones`() {
