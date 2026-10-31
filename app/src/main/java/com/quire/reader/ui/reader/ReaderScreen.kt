@@ -137,7 +137,7 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
 
     Box(Modifier.fillMaxSize().padding(top = statusTop + 32.dp, bottom = navBottom + 46.dp)) {
       EpubHost(
-        session = session, preferences = epubPrefs, onTap = onTap,
+        session = session, preferences = epubPrefs, selectionActions = reader.selectionActions, onTap = onTap,
         onSelectionAction = reader::onSelectionAction, onHighlightTapped = { reader.setActiveHighlight(it) },
         modifier = Modifier.fillMaxSize(),
       )
@@ -256,6 +256,7 @@ private fun HighlightActions(s: ReaderUiState, reader: ReaderState, navBottom: D
         listOf(
           Triple(Ic.NotePencil, "Note", Nq.text) to { id?.let { reader.editNote(it) } },
           Triple(Ic.Copy, "Copy", Nq.text) to { id?.let { reader.copyHighlight(it) } },
+          Triple(Ic.ShareNetwork, "Share", Nq.text) to { id?.let { reader.shareHighlight(it) } },
           Triple(Ic.X, "Remove", Nq.accent) to { id?.let { reader.deleteHighlight(it) } },
         ).forEach { (spec, act) ->
           val (icon, label, color) = spec

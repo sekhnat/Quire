@@ -37,16 +37,16 @@ import org.readium.r2.shared.util.AbsoluteUrl
 import timber.log.Timber
 
 /** What the user picked from the text-selection menu. */
-enum class SelectionAction(val label: String) { Highlight("Highlight"), Note("Note"), Copy("Copy") }
+enum class SelectionAction(val label: String) { Highlight("Highlight"), Note("Note"), Copy("Copy"), LookUp("Look up"), Share("Share") }
 
-private class SelectionMenu(private val onAction: (SelectionAction) -> Unit) : BaseActionModeCallback() {
+private class SelectionMenu(private val actions: List<SelectionAction>, private val onAction: (SelectionAction) -> Unit) : BaseActionModeCallback() {
   override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-    SelectionAction.entries.forEachIndexed { i, a -> menu.add(Menu.NONE, i, i, a.label).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM) }
+    actions.forEachIndexed { i, a -> menu.add(Menu.NONE, i, i, a.label).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM) }
     return true
   }
 
   override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-    onAction(SelectionAction.entries[item.itemId])
+    onAction(actions[item.itemId])
     mode.finish()
     return true
   }
@@ -61,6 +61,7 @@ private class SelectionMenu(private val onAction: (SelectionAction) -> Unit) : B
 fun EpubHost(
   session: ReaderSession,
   preferences: EpubPreferences,
+  selectionActions: List<SelectionAction>,
   onTap: (xFraction: Float) -> Unit,
   onSelectionAction: (SelectionAction) -> Unit,
   onHighlightTapped: (id: Long) -> Unit,
@@ -107,7 +108,7 @@ fun EpubHost(
               }
             },
             configuration = EpubNavigatorFragment.Configuration {
-              selectionActionModeCallback = SelectionMenu { selection(it) }
+              selectionActionModeCallback = SelectionMenu(selectionActions) { selection(it) }
               // Chapter changes come from the vertical scroll column; sideways swipes
               // must not turn pages.
               disablePageTurnsWhileScrolling = true

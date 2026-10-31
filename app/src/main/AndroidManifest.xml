@@ -13,6 +13,14 @@
     <!-- Lets Settings ask, in one tap, for indexing to run unthrottled when it starts in the background; personal-use app, as above. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Package visibility (Android 11+): lets the reader's "Look up" find dictionary and translator apps. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>
+
     <application
         android:name=".QuireApplication"
         android:allowBackup="true"

@@ -148,11 +148,17 @@ class ReaderState(
   private val nav: AppNavigator,
   private val toasts: Toasts,
   private val copyText: (String) -> Unit,
+  private val shareText: (String) -> Unit,
+  /** Hands text to an installed dictionary or translator; null when none is installed. */
+  private val lookUp: ((String) -> Unit)?,
   private val scope: CoroutineScope,
   private val persist: CoroutineScope,
   private val appScope: CoroutineScope,
 ) {
   val bookId: Long get() = request.bookId
+
+  /** What the text-selection menu offers; "Look up" only when some app can take the text. */
+  val selectionActions: List<SelectionAction> = SelectionAction.entries.filter { it != SelectionAction.LookUp || lookUp != null }
 
   private val _load = MutableStateFlow<ReaderLoad>(ReaderLoad.Loading)
   val load: StateFlow<ReaderLoad> = _load
@@ -422,32 +428,48 @@ class ReaderState(
     val session = session() ?: return
     scope.launch {
       val locator = session.currentSelection() ?: return@launch
-      when (action) {
-        SelectionAction.Copy -> {
-          copyText(locator.text.highlight.orEmpty())
-          session.clearSelection(); toasts.show("Copied")
-        }
-        SelectionAction.Highlight, SelectionAction.Note -> {
-          // The chapter goes into the locator's display title: note exports can label this highlight
-          // forever, even once the book is gone. Canonical keys ignore the title, so merging is unaffected.
-          val stamped = locator.copy(title = session.chapterTitle(locator).ifEmpty { locator.title })
-          val id = store.addHighlight(
-            HighlightEntity(
-              bookId = bookId, locatorJson = stamped.toJSON().toString(), text = locator.text.highlight.orEmpty(),
-              progress = (locator.locations.totalProgression ?: 0.0).toFloat(), createdAt = System.currentTimeMillis(),
-            ),
-          )
-          session.clearSelection()
-          if (action == SelectionAction.Note) edit { copy(noteFor = id) } else toasts.show("Highlighted. Find it under Contents → Highlights")
-        }
-      }
+      val text = locator.text.highlight.orEmpty()
+      if (!onSelectedText(session, action, text)) saveHighlight(session, action, locator, text)
     }
+  }
+
+  /** The actions that only use the selected text; false for the ones that keep the selection in the book. */
+  internal fun onSelectedText(session: ReaderSession, action: SelectionAction, text: String): Boolean {
+    when (action) {
+      SelectionAction.Copy -> { copyText(text); toasts.show("Copied") }
+      SelectionAction.Share -> shareText(shareQuote(text, session.book.title, session.book.author))
+      SelectionAction.LookUp -> lookUp?.invoke(text)
+      SelectionAction.Highlight, SelectionAction.Note -> return false
+    }
+    session.clearSelection()
+    return true
+  }
+
+  private suspend fun saveHighlight(session: ReaderSession, action: SelectionAction, locator: Locator, text: String) {
+    // The chapter goes into the locator's display title: note exports can label this highlight
+    // forever, even once the book is gone. Canonical keys ignore the title, so merging is unaffected.
+    val stamped = locator.copy(title = session.chapterTitle(locator).ifEmpty { locator.title })
+    val id = store.addHighlight(
+      HighlightEntity(
+        bookId = bookId, locatorJson = stamped.toJSON().toString(), text = text,
+        progress = (locator.locations.totalProgression ?: 0.0).toFloat(), createdAt = System.currentTimeMillis(),
+      ),
+    )
+    session.clearSelection()
+    if (action == SelectionAction.Note) edit { copy(noteFor = id) } else toasts.show("Highlighted. Find it under Contents → Highlights")
   }
 
   fun setActiveHighlight(id: Long?) = edit { copy(activeHighlight = id, chrome = if (id != null) false else chrome) }
   fun editNote(id: Long?) = edit { copy(noteFor = id, activeHighlight = null) }
   fun saveNote(id: Long, note: String) { persist.launch { store.setHighlightNote(id, note) }; edit { copy(noteFor = null) } }
   fun deleteHighlight(id: Long) { persist.launch { store.deleteHighlight(id) }; edit { copy(activeHighlight = null, noteFor = null) } }
+
+  fun shareHighlight(id: Long) {
+    val text = _highlights.value.firstOrNull { it.id == id }?.text ?: return
+    val book = (session()?.book) ?: return
+    shareText(shareQuote(text, book.title, book.author))
+    edit { copy(activeHighlight = null) }
+  }
 
   fun copyHighlight(id: Long) {
     val text = _highlights.value.firstOrNull { it.id == id }?.text ?: return
