@@ -48,6 +48,11 @@ class ReadingClock(private val now: () -> Long, positions: Int) {
     lastProgress = progress
   }
 
+  /** The reader is still being used without turning a page, such as while it reads aloud. */
+  fun tick() {
+    if (running) accrue()
+  }
+
   /** Ends the session; null when it was too short to be one, or none was running. */
   fun pause(): ReadingSpan? {
     if (!running) return null

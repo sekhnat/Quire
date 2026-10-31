@@ -170,6 +170,9 @@ dependencies {
   implementation(libs.readium.shared)
   implementation(libs.readium.streamer)
   implementation(libs.readium.navigator)
+  implementation(libs.readium.navigator.media.tts)
+  // The same version Readium builds against; the media session service that keeps read aloud going with the screen off.
+  implementation(libs.androidx.media3.session)
   implementation(libs.androidx.fragment.ktx)
   // Compile-visible versions of runtime-scope transitive deps used by the vendored
   // Readium navigator sources (com.quire.reader.navigator).

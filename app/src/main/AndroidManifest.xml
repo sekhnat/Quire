@@ -9,6 +9,8 @@
     <!-- Full backups and library indexing run as foreground workers with a progress notification, so leaving the app does not cut them short. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Read aloud keeps speaking with the screen off, as a media-playback foreground service with a notification. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Lets Settings ask, in one tap, for indexing to run unthrottled when it starts in the background; personal-use app, as above. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -18,6 +20,10 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
+        </intent>
+        <!-- Read aloud needs to find the phone's text-to-speech engines. -->
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
 
@@ -41,6 +47,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Media session for read aloud; only the system and this app are given the session (see ReadAloudService). -->
+        <service
+            android:name=".reader.ReadAloudService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

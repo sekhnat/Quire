@@ -41,6 +41,7 @@ class SearchHit(val locator: Locator, val before: String, val hit: String, val a
 
 /** Accent tint used for highlights. */
 private val SEARCH_TINT = AndroidColor.argb(255, 233, 233, 237)
+private val READ_ALOUD_TINT = AndroidColor.argb(255, 64, 196, 180)
 
 /**
  * One open book: the parsed publication, the live navigator, and everything derived from them
@@ -241,6 +242,37 @@ class ReaderSession(
     nav.applyDecorations(decorations, HIGHLIGHTS)
   }
 
+  /**
+   * Where reading aloud should start: where the selection begins, or the top of what is on screen. Null when the navigator
+   * cannot say, and reading then starts at the top of the chapter.
+   */
+  @OptIn(ExperimentalReadiumApi::class)
+  suspend fun speechStart(selection: Boolean): Locator? {
+    val nav = navigator ?: return null
+    return runCatching { if (selection) nav.selectionSpeechStart() else nav.firstVisibleElementLocator() }.getOrNull()
+  }
+
+  /** Marks the sentence being read aloud; null clears it. */
+  suspend fun applyReadAloud(sentence: Locator?) {
+    val nav = navigator as? DecorableNavigator ?: return
+    nav.applyDecorations(listOfNotNull(sentence?.let { Decoration(id = "read-aloud", locator = it, style = Decoration.Style.Highlight(tint = READ_ALOUD_TINT)) }), READ_ALOUD)
+  }
+
+  private val positionsPerResource: Map<String, Int> by lazy { positions.groupingBy { it.href.removeFragment().toString() }.eachCount() }
+
+  /**
+   * How far through the whole book [locator] is, 0..1. A locator the speech engine makes carries only how far through
+   * its chapter it is, so the rest is worked out from where that chapter starts among the book's positions.
+   */
+  fun progressOf(locator: Locator): Float? {
+    locator.locations.totalProgression?.let { return it.toFloat().coerceIn(0f, 1f) }
+    if (positions.isEmpty()) return null
+    val href = locator.href.removeFragment().toString()
+    val first = firstPositionIndex[href] ?: return null
+    val within = (locator.locations.progression ?: 0.0) * (positionsPerResource[href] ?: 1)
+    return ((first + within) / positions.size).toFloat().coerceIn(0f, 1f)
+  }
+
   suspend fun applySearchHits(hits: List<SearchHit>) {
     val nav = navigator as? DecorableNavigator ?: return
     nav.applyDecorations(hits.mapIndexed { i, h -> Decoration(id = i.toString(), locator = h.locator, style = Decoration.Style.Underline(tint = SEARCH_TINT)) }, SEARCH)
@@ -280,6 +312,7 @@ class ReaderSession(
   companion object {
     const val HIGHLIGHTS = "highlights"
     const val SEARCH = "search"
+    const val READ_ALOUD = "read-aloud"
     const val MAX_HITS = 300
     private const val NAVIGATOR_TIMEOUT_MS = 5_000L
     private const val UNDERLINE_TIMEOUT_MS = 2_500L

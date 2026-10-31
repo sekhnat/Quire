@@ -37,7 +37,7 @@ import org.readium.r2.shared.util.AbsoluteUrl
 import timber.log.Timber
 
 /** What the user picked from the text-selection menu. */
-enum class SelectionAction(val label: String) { Highlight("Highlight"), Note("Note"), Copy("Copy"), LookUp("Look up"), Share("Share") }
+enum class SelectionAction(val label: String) { Highlight("Highlight"), Note("Note"), Copy("Copy"), LookUp("Look up"), Share("Share"), ReadAloud("Read from here") }
 
 private class SelectionMenu(private val actions: List<SelectionAction>, private val onAction: (SelectionAction) -> Unit) : BaseActionModeCallback() {
   override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
