@@ -141,3 +141,25 @@ data class HighlightEntity(
   /** Index into `HighlightColor`; 0 is the violet every highlight had before there was a choice. */
   val color: Int = 0,
 )
+
+/**
+ * One stretch of reading: from the reader coming to the front until it left it. [activeMs] is the time the reader
+ * was actually being read (idle gaps are capped, see `ReadingClock`), so it is usually shorter than [endedAt] - [startedAt].
+ */
+@Entity(
+  tableName = "reading_session",
+  indices = [Index("bookId"), Index("startedAt")],
+  foreignKeys = [ForeignKey(BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"], onDelete = ForeignKey.CASCADE)],
+)
+data class ReadingSessionEntity(
+  @PrimaryKey(autoGenerate = true) val id: Long = 0,
+  val bookId: Long,
+  val startedAt: Long,
+  val endedAt: Long,
+  val activeMs: Long,
+  /** 0..1 across the whole book, where the session started and ended. */
+  val startProgress: Float,
+  val endProgress: Float,
+  /** How much of the book was read page by page, as a fraction of it: forward steps only, jumps left out. */
+  val readProgress: Float,
+)

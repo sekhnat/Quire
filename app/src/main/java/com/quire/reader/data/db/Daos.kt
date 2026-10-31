@@ -98,6 +98,7 @@ private const val HAS_HISTORY_SQL = """(
               OR h.userRating IS NOT NULL OR h.prefsJson IS NOT NULL OR h.locatorJson IS NOT NULL))
       OR EXISTS (SELECT 1 FROM bookmark h WHERE h.bookId = b.id)
       OR EXISTS (SELECT 1 FROM highlight h WHERE h.bookId = b.id)
+      OR EXISTS (SELECT 1 FROM reading_session h WHERE h.bookId = b.id)
       OR EXISTS (SELECT 1 FROM book_tag h WHERE h.bookId = b.id AND h.origin = 'user'))"""
 
 /** The identity columns of a book `b` with its state `s`, as an [IdentityRow]. */
@@ -323,6 +324,16 @@ interface AnnotationDao {
   @Query("DELETE FROM highlight WHERE id = :id") suspend fun deleteHighlight(id: Long)
   @Query("UPDATE highlight SET note = :note WHERE id = :id") suspend fun setHighlightNote(id: Long, note: String?)
   @Query("UPDATE highlight SET color = :color WHERE id = :id") suspend fun setHighlightColor(id: Long, color: Int)
+}
+
+/** Reading sessions, for the Stats screen and the snapshot. */
+@Dao
+interface StatsDao {
+  @Insert suspend fun addSession(session: ReadingSessionEntity): Long
+  @Query("SELECT * FROM reading_session ORDER BY startedAt") fun observeSessions(): Flow<List<ReadingSessionEntity>>
+  @Query("SELECT * FROM reading_session WHERE bookId = :bookId ORDER BY startedAt, id") suspend fun sessionsOf(bookId: Long): List<ReadingSessionEntity>
+  /** When each finished book was finished (epoch millis); books finished before dates were kept have none. */
+  @Query("SELECT finishedAt FROM book_state WHERE status = 'finished' AND finishedAt > 0") fun observeFinished(): Flow<List<Long>>
 }
 
 /** A book that may need indexing, with the file signature to index against and the fingerprint of that file, when known. */

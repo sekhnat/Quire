@@ -78,6 +78,7 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
       is Destination.Onboard -> d.state.close()
       is Destination.Reader -> d.state.close()
       is Destination.Settings -> d.state.close()
+      is Destination.Stats -> d.state.close()
       Destination.Splash, Destination.Library, is Destination.Detail -> Unit
     }
   }
@@ -96,6 +97,8 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   override fun openSettings() =
     navigate { Destination.Settings(features.settings(restore, notes, this, toaster, viewModelScope.childScope(), viewModelScope)) }
+
+  override fun openStats() = navigate { Destination.Stats(features.stats(library.data, this, viewModelScope.childScope())) }
 
   // ── app lifecycle ────────────────────────────────────────────────────────
 
