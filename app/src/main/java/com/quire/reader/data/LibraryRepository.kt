@@ -310,6 +310,9 @@ class LibraryRepository(
     db.states().edit(bookId) { it.copy(prefsJson = null) }
   }
 
+  val readerControls: Flow<ReaderControls> = settings.readerControls
+  suspend fun setReaderControls(controls: ReaderControls) = settings.setReaderControls(controls)
+
   val brightness: Flow<Int> = settings.brightness
   suspend fun setBrightness(v: Int) = settings.setBrightness(v)
 

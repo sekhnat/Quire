@@ -71,6 +71,10 @@ class SettingsStore(context: Context) {
   val advancedReadingEnabled: Flow<Boolean> = flow(ADVANCED_READING_ENABLED, false)
   suspend fun setAdvancedReadingEnabled(v: Boolean) = store.edit { it[ADVANCED_READING_ENABLED] = v }
 
+  /** How the reader behaves around the page: volume keys, screen-on, orientation. */
+  val readerControls: Flow<ReaderControls> = store.data.map { ReaderControls.fromJson(it[READER_CONTROLS]) ?: ReaderControls() }
+  suspend fun setReaderControls(controls: ReaderControls) = store.edit { it[READER_CONTROLS] = controls.toJson() }
+
   /** In-app dimming over the page, 30–100. */
   val brightness: Flow<Int> = flow(BRIGHTNESS, 100)
   suspend fun setBrightness(v: Int) = store.edit { it[BRIGHTNESS] = v.coerceIn(30, 100) }
@@ -123,6 +127,7 @@ class SettingsStore(context: Context) {
       brightness = prefs[BRIGHTNESS] ?: 100,
       readerDefaults = prefs[READER_DEFAULTS]?.let(ReaderPrefs::fromJson),
       advancedReadingEnabled = prefs[ADVANCED_READING_ENABLED] ?: false,
+      readerControls = ReaderControls.fromJson(prefs[READER_CONTROLS]) ?: ReaderControls(),
       textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
     )
   }
@@ -136,6 +141,7 @@ class SettingsStore(context: Context) {
     s.brightness?.let { setBrightness(it) }
     s.readerDefaults?.let { setReaderDefaults(it) }
     s.advancedReadingEnabled?.let { setAdvancedReadingEnabled(it) }
+    s.readerControls?.let { setReaderControls(it) }
     s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
   }
 
@@ -160,6 +166,7 @@ class SettingsStore(context: Context) {
     private val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     private val ADVANCED_READING_ENABLED = booleanPreferencesKey("advanced_reading_enabled")
+    private val READER_CONTROLS = stringPreferencesKey("reader_controls")
     private val BRIGHTNESS = intPreferencesKey("brightness")
     private val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
     private val NOTIFICATIONS_ASKED = booleanPreferencesKey("notifications_asked")

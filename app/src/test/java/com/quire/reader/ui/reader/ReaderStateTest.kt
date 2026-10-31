@@ -14,6 +14,8 @@ import com.quire.reader.ui.childScope
 import com.quire.reader.ui.testBook
 import com.quire.reader.ui.testPage
 import com.quire.reader.ui.testTarget
+import com.quire.reader.data.ReaderControls
+import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -198,6 +200,24 @@ class ReaderStateTest {
     assertFalse(reader().onSelectedText(session(), SelectionAction.Highlight, "x"))
     assertFalse(reader().onSelectedText(session(), SelectionAction.Note, "x"))
     assertTrue(shared.isEmpty() && lookedUp.isEmpty())
+  }
+
+  @Test fun `the reading controls come from the store and follow it`() = runTest(dispatcher) {
+    store.controls.value = ReaderControls(keepScreenOn = true)
+    val reader = reader()
+    runCurrent()
+    assertEquals(ReaderControls(keepScreenOn = true), reader.controls.value)
+    store.controls.value = ReaderControls(volumeKeys = true, orientation = ReaderOrientation.Portrait)
+    runCurrent()
+    assertEquals(ReaderControls(volumeKeys = true, orientation = ReaderOrientation.Portrait), reader.controls.value)
+  }
+
+  @Test fun `any overlay over the page counts as open`() {
+    assertFalse(ReaderUiState().overlaysOpen)
+    listOf(
+      ReaderUiState(chrome = true), ReaderUiState(sheet = Sheet.Display), ReaderUiState(textSearchOpen = true),
+      ReaderUiState(showZones = true), ReaderUiState(activeHighlight = 3), ReaderUiState(noteFor = 3),
+    ).forEach { assertTrue("$it", it.overlaysOpen) }
   }
 
   @Test fun `the menu offers look up only when an app can take the text`() = runTest(dispatcher) {
