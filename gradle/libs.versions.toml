@@ -33,7 +33,7 @@ timber = { module = "com.jakewharton.timber:timber", version = "5.0.1" }
 jsoup = { module = "org.jsoup:jsoup", version = "1.22.2" }
 androidx-webkit = { module = "androidx.webkit:webkit", version = "1.15.0" }
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version = "2.2.1" }
-androidx-viewpager = { module = "androidx.viewpager:viewpager", version = "1.0.0" }
+androidx-viewpager = { module = "androidx.viewpager:viewpager", version = "1.1.0" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
