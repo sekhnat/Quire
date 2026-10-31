@@ -21,6 +21,7 @@ import java.io.File
 import android.net.Uri
 import com.quire.reader.QuireApplication
 import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
@@ -128,6 +129,7 @@ class Features(private val app: QuireApplication) {
     override suspend fun addHighlight(highlight: HighlightEntity) = repo.addHighlight(highlight)
     override suspend fun deleteHighlight(id: Long) = repo.deleteHighlight(id)
     override suspend fun setHighlightNote(id: Long, note: String?) = repo.setHighlightNote(id, note)
+    override val readerControls get() = repo.readerControls
     override val brightness get() = repo.brightness
     override suspend fun setBrightness(value: Int) { repo.setBrightness(value) }
     override suspend fun searchBookPage(bookId: Long, query: FtsQuery.Result.Query, afterSeq: Int) = repo.searchBookPage(bookId, query, afterSeq)
@@ -162,6 +164,8 @@ class Features(private val app: QuireApplication) {
     override val advancedDefaultsCustomized get() = repo.advancedDefaultsCustomized
     override val advancedReadingEnabled get() = repo.advancedReadingEnabled
     override suspend fun setAdvancedReadingEnabled(v: Boolean) { repo.setAdvancedReadingEnabled(v) }
+    override val readerControls get() = repo.readerControls
+    override suspend fun setReaderControls(controls: ReaderControls) { repo.setReaderControls(controls) }
     override suspend fun clearAllBookPrefs() { repo.clearAllBookPrefs() }
     override val useCalibre get() = repo.useCalibre
     override suspend fun setUseCalibre(v: Boolean) { repo.setUseCalibre(v) }

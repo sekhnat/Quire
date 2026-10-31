@@ -41,6 +41,7 @@ import com.quire.reader.BuildConfig
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
+import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
 import com.quire.reader.reader.ReaderFontList
@@ -63,6 +64,9 @@ import com.quire.reader.ui.FolderPickerSheet
 import com.quire.reader.ui.formatBytes
 import com.quire.reader.ui.indexStatusText
 import com.quire.reader.ui.reader.ReadingControls
+import com.quire.reader.ui.reader.SettingRow
+import com.quire.reader.ui.SegOption
+import com.quire.reader.ui.Segmented
 import java.text.DateFormat
 import java.util.Date
 import kotlin.math.roundToInt
@@ -163,6 +167,18 @@ fun SettingsScreen(settings: SettingsState) {
               QButton("Cancel", { confirmingAdvancedRestore = false }, Modifier.weight(1f), size = 13f, height = 42.dp)
               QButton("Restore", { confirmingAdvancedRestore = false; settings.restoreGlobalAdvanced() }, Modifier.weight(1f), size = 13f, height = 42.dp)
             }
+          }
+        }
+      }
+
+      Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        val controls by settings.readerControls.collectAsStateWithLifecycle()
+        Kicker("Reading controls")
+        Toggle("Volume keys turn pages", "Volume down for the next page, volume up for the previous one.", controls.volumeKeys) { settings.updateControls { it.copy(volumeKeys = !it.volumeKeys) } }
+        Toggle("Keep screen on", "Stops the screen from timing out while a book is open.", controls.keepScreenOn) { settings.updateControls { it.copy(keepScreenOn = !it.keepScreenOn) } }
+        Box(Modifier.padding(top = 10.dp)) {
+          SettingRow("Orientation") {
+            Segmented(ReaderOrientation.entries.map { o -> SegOption(o.name, controls.orientation == o, { settings.updateControls { it.copy(orientation = o) } }) })
           }
         }
       }

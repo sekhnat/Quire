@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import android.net.Uri
 import com.quire.reader.data.Book
+import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.index.FtsQuery
@@ -136,6 +137,8 @@ class FakeReaderStore(var paths: Map<Long, String> = emptyMap()) : ReaderStore {
   override suspend fun addHighlight(highlight: HighlightEntity): Long { writes += "highlight"; return 1 }
   override suspend fun deleteHighlight(id: Long) { writes += "delete highlight $id" }
   override suspend fun setHighlightNote(id: Long, note: String?) { writes += "note $id $note" }
+  val controls = MutableStateFlow(ReaderControls())
+  override val readerControls: Flow<ReaderControls> = controls
   override val brightness = MutableStateFlow(100)
   override suspend fun setBrightness(value: Int) { writes += "brightness $value" }
   override suspend fun searchBookPage(bookId: Long, query: FtsQuery.Result.Query, afterSeq: Int) = pages[afterSeq] ?: error("no page after $afterSeq")

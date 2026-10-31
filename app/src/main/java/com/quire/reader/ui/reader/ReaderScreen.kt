@@ -2,7 +2,10 @@ package com.quire.reader.ui.reader
 
 import android.app.Activity
 import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -48,7 +51,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.quire.reader.ReaderKeyHost
 import com.quire.reader.data.ReadMode
+import com.quire.reader.data.ReaderControls
+import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.reader.EpubHost
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.toEpubPreferences
@@ -107,6 +113,8 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
   val bgColor by animateColorAsState(theme.bg, tween(300), label = "readerBg")
   val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val controls by reader.controls.collectAsStateWithLifecycle()
+  ReaderControlsEffects(session, controls, s.overlaysOpen, reader)
   val epubPrefs = remember(prefs, session.layout) { prefs.toEpubPreferences(session.layout) }
   // The single submission path: mapped preferences go to the session, which deduplicates
   // by equality and applies them through the navigator in one serialized pass.
@@ -162,6 +170,42 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
     ContentsSheet(s, session, bookmarks, highlights, reader)
     SearchOverlay(s, search, bookSearch, reader)
     NoteSheet(s, highlights, reader)
+  }
+}
+
+/** Applies the app-wide reading controls while this reader is on screen, and puts everything back when it leaves. */
+@Composable
+private fun ReaderControlsEffects(session: ReaderSession, controls: ReaderControls, overlaysOpen: Boolean, reader: ReaderState) {
+  val view = LocalView.current
+  val activity = LocalActivity.current
+
+  DisposableEffect(view, controls.keepScreenOn) {
+    view.keepScreenOn = controls.keepScreenOn
+    onDispose { view.keepScreenOn = false }
+  }
+
+  DisposableEffect(activity, controls.orientation) {
+    activity?.requestedOrientation = when (controls.orientation) {
+      ReaderOrientation.Auto -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+      ReaderOrientation.Portrait -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+      // Either landscape, so turning the phone over still works.
+      ReaderOrientation.Landscape -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    }
+    onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+  }
+
+  val host = activity as? ReaderKeyHost
+  DisposableEffect(host, session, controls.volumeKeys, overlaysOpen) {
+    val listener: ((KeyEvent) -> Boolean)? = if (!controls.volumeKeys) null else { event ->
+      when (volumeKeyFor(event.keyCode, event.action, event.repeatCount, overlaysOpen)) {
+        VolumeKey.Ignore -> false
+        VolumeKey.Consume -> true
+        VolumeKey.Forward -> { if (!session.goForward()) reader.toast("End of book"); true }
+        VolumeKey.Backward -> { if (!session.goBackward()) reader.toast("Start of book"); true }
+      }
+    }
+    host?.readerKeys = listener
+    onDispose { if (host?.readerKeys === listener) host?.readerKeys = null }
   }
 }
 

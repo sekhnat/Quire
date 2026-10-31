@@ -3,6 +3,7 @@ package com.quire.reader.ui.reader
 import android.util.Log
 import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.ParagraphPreset
+import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
@@ -89,6 +90,7 @@ interface ReaderStore {
   suspend fun deleteHighlight(id: Long)
   suspend fun setHighlightNote(id: Long, note: String?)
 
+  val readerControls: Flow<ReaderControls>
   val brightness: Flow<Int>
   suspend fun setBrightness(value: Int)
 
@@ -128,7 +130,10 @@ data class ReaderUiState(
   val activeHighlight: Long? = null,
   /** Highlight being given a note. */
   val noteFor: Long? = null,
-)
+) {
+  /** Whether anything is drawn over the page; the volume keys stay with the system then. */
+  val overlaysOpen: Boolean get() = chrome || sheet != null || textSearchOpen || showZones || activeHighlight != null || noteFor != null
+}
 
 /**
  * One opening of one book: loads it as [request] asks, then owns the [ReaderSession], everything collected for it
@@ -174,6 +179,9 @@ class ReaderState(
   val bookmarks: StateFlow<List<BookmarkEntity>> = _bookmarks
   private val _highlights = MutableStateFlow<List<HighlightEntity>>(emptyList())
   val highlights: StateFlow<List<HighlightEntity>> = _highlights
+
+  /** How the reader behaves around the page (volume keys, screen-on, orientation); app-wide. */
+  val controls: StateFlow<ReaderControls> = store.readerControls.stateIn(scope, SharingStarted.Eagerly, ReaderControls())
 
   private val _search = MutableStateFlow(SearchUi())
   val search: StateFlow<SearchUi> = _search
