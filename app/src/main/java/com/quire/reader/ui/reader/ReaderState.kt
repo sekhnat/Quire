@@ -89,6 +89,10 @@ interface ReaderStore {
   suspend fun addHighlight(highlight: HighlightEntity): Long
   suspend fun deleteHighlight(id: Long)
   suspend fun setHighlightNote(id: Long, note: String?)
+  suspend fun setHighlightColor(id: Long, color: Int)
+  /** The colour a new highlight gets: the one last picked. */
+  val lastHighlightColor: Flow<Int>
+  suspend fun setLastHighlightColor(color: Int)
 
   val readerControls: Flow<ReaderControls>
   val brightness: Flow<Int>
@@ -130,6 +134,8 @@ data class ReaderUiState(
   val activeHighlight: Long? = null,
   /** Highlight being given a note. */
   val noteFor: Long? = null,
+  /** Colour the Highlights tab is narrowed to, as a `HighlightColor` index; null shows every highlight. */
+  val highlightColorFilter: Int? = null,
 ) {
   /** Whether anything is drawn over the page; the volume keys stay with the system then. */
   val overlaysOpen: Boolean get() = chrome || sheet != null || textSearchOpen || showZones || activeHighlight != null || noteFor != null
@@ -182,6 +188,8 @@ class ReaderState(
 
   /** How the reader behaves around the page (volume keys, screen-on, orientation); app-wide. */
   val controls: StateFlow<ReaderControls> = store.readerControls.stateIn(scope, SharingStarted.Eagerly, ReaderControls())
+
+  private val lastHighlightColor: StateFlow<Int> = store.lastHighlightColor.stateIn(scope, SharingStarted.Eagerly, 0)
 
   private val _search = MutableStateFlow(SearchUi())
   val search: StateFlow<SearchUi> = _search
@@ -461,11 +469,19 @@ class ReaderState(
       HighlightEntity(
         bookId = bookId, locatorJson = stamped.toJSON().toString(), text = text,
         progress = (locator.locations.totalProgression ?: 0.0).toFloat(), createdAt = System.currentTimeMillis(),
+        color = lastHighlightColor.value,
       ),
     )
     session.clearSelection()
     if (action == SelectionAction.Note) edit { copy(noteFor = id) } else toasts.show("Highlighted. Find it under Contents → Highlights")
   }
+
+  /** Recolours a highlight, and makes that colour the one new highlights get. */
+  fun setHighlightColor(id: Long, color: Int) {
+    persist.launch { store.setHighlightColor(id, color); store.setLastHighlightColor(color) }
+  }
+
+  fun setHighlightColorFilter(color: Int?) = edit { copy(highlightColorFilter = color) }
 
   fun setActiveHighlight(id: Long?) = edit { copy(activeHighlight = id, chrome = if (id != null) false else chrome) }
   fun editNote(id: Long?) = edit { copy(noteFor = id, activeHighlight = null) }

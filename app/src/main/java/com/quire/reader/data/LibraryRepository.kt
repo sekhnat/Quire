@@ -232,6 +232,7 @@ class LibraryRepository(
   fun highlights(bookId: Long): Flow<List<HighlightEntity>> = db.annotations().observeHighlights(bookId)
   suspend fun addHighlight(h: HighlightEntity) = db.annotations().addHighlight(h)
   suspend fun deleteHighlight(id: Long) = db.annotations().deleteHighlight(id)
+  suspend fun setHighlightColor(id: Long, color: Int) = db.annotations().setHighlightColor(id, color)
   suspend fun setHighlightNote(id: Long, note: String?) = db.annotations().setHighlightNote(id, note?.trim()?.takeIf { it.isNotEmpty() })
 
   /** Serializes preference writes: a read-reduce-write never interleaves with another. */
@@ -309,6 +310,9 @@ class LibraryRepository(
     settings.setReaderDefaults(prefs)
     db.states().edit(bookId) { it.copy(prefsJson = null) }
   }
+
+  val lastHighlightColor: Flow<Int> = settings.lastHighlightColor
+  suspend fun setLastHighlightColor(v: Int) = settings.setLastHighlightColor(v)
 
   val readerControls: Flow<ReaderControls> = settings.readerControls
   suspend fun setReaderControls(controls: ReaderControls) = settings.setReaderControls(controls)

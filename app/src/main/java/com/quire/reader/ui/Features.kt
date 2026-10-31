@@ -129,6 +129,9 @@ class Features(private val app: QuireApplication) {
     override suspend fun addHighlight(highlight: HighlightEntity) = repo.addHighlight(highlight)
     override suspend fun deleteHighlight(id: Long) = repo.deleteHighlight(id)
     override suspend fun setHighlightNote(id: Long, note: String?) = repo.setHighlightNote(id, note)
+    override suspend fun setHighlightColor(id: Long, color: Int) = repo.setHighlightColor(id, color)
+    override val lastHighlightColor get() = repo.lastHighlightColor
+    override suspend fun setLastHighlightColor(color: Int) { repo.setLastHighlightColor(color) }
     override val readerControls get() = repo.readerControls
     override val brightness get() = repo.brightness
     override suspend fun setBrightness(value: Int) { repo.setBrightness(value) }

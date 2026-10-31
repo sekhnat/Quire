@@ -181,6 +181,14 @@ class SnapshotMergeTest {
     )
   }
 
+  @Test fun `a highlight keeps its own colour, and only the default violet takes an incoming one`() {
+    assertEquals(2, SnapshotMerge.mergeHighlightColor(local = 2, incoming = 4))
+    assertEquals(4, SnapshotMerge.mergeHighlightColor(local = 0, incoming = 4))
+    assertEquals(0, SnapshotMerge.mergeHighlightColor(local = 0, incoming = null))
+    assertEquals(0, SnapshotMerge.mergeHighlightColor(local = 0, incoming = 0))
+    assertEquals(3, SnapshotMerge.mergeHighlightColor(local = 3, incoming = null))
+  }
+
   @Test fun `reader controls restore with the settings and an older snapshot keeps the local ones`() {
     val mine = ReaderControls(keepScreenOn = true)
     val theirs = ReaderControls(volumeKeys = true, orientation = ReaderOrientation.Portrait)

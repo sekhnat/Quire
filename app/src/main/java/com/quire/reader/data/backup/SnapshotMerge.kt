@@ -64,6 +64,12 @@ object SnapshotMerge {
     }.filter { it.isNotEmpty() }.distinct()
 
   /**
+   * The colour a highlight keeps after merging. Local-first, like ratings: the incoming colour only fills in a
+   * highlight still in the default violet (0), which is also what an absent colour means.
+   */
+  fun mergeHighlightColor(local: Int, incoming: Int?): Int = if (local == 0 && incoming != null && incoming > 0) incoming else local
+
+  /**
    * The settings after an import. `applyIncoming` is true only for a clean restore (an empty
    * library): an existing library keeps its settings, and absent incoming fields always keep the
    * local value, whatever the direction of the merge.
