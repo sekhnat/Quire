@@ -21,6 +21,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -39,7 +40,15 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.quire.reader.data.ReadAloudPrefs
+import com.quire.reader.reader.ReadAloudOutcome
+import com.quire.reader.reader.ReadAloudPlayback
+import com.quire.reader.reader.ReadAloudPosition
+import com.quire.reader.reader.ReadAloudStatus
+import com.quire.reader.reader.ReadAloudSupport
+import com.quire.reader.reader.ReadAloudUnavailable
 import com.quire.reader.reader.ReaderSession
+import com.quire.reader.reader.VoiceOption
 import com.quire.reader.reader.SelectionAction
 import org.readium.r2.shared.publication.LocalizedString
 import org.readium.r2.shared.publication.Manifest
@@ -70,7 +79,31 @@ class ReaderStateTest {
     request: ReaderRequest = ReaderRequest(1),
     open: suspend (File) -> Result<Publication> = { opened += it; Result.success(stubPublication()) },
     lookUp: ((String) -> Unit)? = { lookedUp += it },
-  ) = ReaderState(request, store, library, open, indexer, nav, toasts, {}, { shared += it }, lookUp, backgroundScope.childScope(), backgroundScope, backgroundScope, { time })
+    readAloud: ReadAloudSupport? = support,
+  ) = ReaderState(request, store, library, open, indexer, nav, toasts, {}, { shared += it }, lookUp, backgroundScope.childScope(), backgroundScope, backgroundScope, { time }, readAloud)
+
+  /** A playback that records what it is asked, and says what it is told to. */
+  private class FakePlayback(override val language: String = "en-US") : ReadAloudPlayback {
+    override val playing = MutableStateFlow(false)
+    override val utterance = MutableStateFlow<ReadAloudPosition?>(null)
+    override val outcome = MutableStateFlow<ReadAloudOutcome?>(null)
+    val calls = mutableListOf<String>()
+    var closed = false
+    override fun play() { calls += "play"; playing.value = true }
+    override fun pause() { calls += "pause"; playing.value = false }
+    override fun next() { calls += "next" }
+    override fun previous() { calls += "previous" }
+    override fun setSpeed(speed: Double) { calls += "speed $speed" }
+    override fun voices() = listOf(VoiceOption("en-US", "en-a", "English (United States) · High"), VoiceOption("en-GB", "en-b", "English (United Kingdom) · Normal"), VoiceOption("fr-FR", "fr-a", "French (France) · High"))
+    override fun setVoice(language: String, id: String) { calls += "voice $language $id" }
+    override fun close() { closed = true }
+  }
+
+  private val playback = FakePlayback()
+  private val speechOpens = mutableListOf<ReadAloudPrefs>()
+  private var openResult: Result<ReadAloudPlayback> = Result.success(playback)
+  private var voiceInstalls = 0
+  private val support = ReadAloudSupport({ _, _, prefs, _, _ -> speechOpens += prefs; openResult }, { voiceInstalls++ })
 
   private var time = 1_000_000L
 
@@ -201,6 +234,7 @@ class ReaderStateTest {
   @Test fun `highlighting and noting are left to the book, not handled as text`() = runTest(dispatcher) {
     assertFalse(reader().onSelectedText(session(), SelectionAction.Highlight, "x"))
     assertFalse(reader().onSelectedText(session(), SelectionAction.Note, "x"))
+    assertFalse(reader().onSelectedText(session(), SelectionAction.ReadAloud, "x"))
     assertTrue(shared.isEmpty() && lookedUp.isEmpty())
   }
 
@@ -260,6 +294,138 @@ class ReaderStateTest {
     reader.close()
     reader.pauseReading()
     runCurrent()
+    assertEquals(1, store.sessions.size)
+  }
+
+  // ── read aloud ───────────────────────────────────────────────────────────
+
+  private suspend fun TestScope.readingAloud(): ReaderState {
+    val reader = reader()
+    reader.awaitSettled(); runCurrent()
+    reader.startReadAloud(); runCurrent()
+    return reader
+  }
+
+  @Test fun `read aloud is not offered, and says so, where there is no speech support`() = runTest(dispatcher) {
+    val reader = reader(readAloud = null)
+    reader.awaitSettled(); runCurrent()
+    reader.startReadAloud()
+    assertEquals(listOf("Read aloud isn’t available"), toasts.shown)
+    assertFalse(reader.readAloud.value.active)
+    assertFalse(com.quire.reader.reader.SelectionAction.ReadAloud in reader.selectionActions)
+    assertTrue(com.quire.reader.reader.SelectionAction.ReadAloud in reader().selectionActions)
+  }
+
+  @Test fun `reading aloud opens with the saved speed and voices, then plays`() = runTest(dispatcher) {
+    store.readAloud.value = ReadAloudPrefs(speed = 1.5, voices = mapOf("en-US" to "en-a"))
+    val reader = readingAloud()
+    assertEquals(listOf(ReadAloudPrefs(speed = 1.5, voices = mapOf("en-US" to "en-a"))), speechOpens)
+    assertEquals(listOf("play"), playback.calls)
+    assertEquals(ReadAloudStatus.Playing, reader.readAloud.value.status)
+    assertEquals(1.5, reader.readAloud.value.speed, 0.0)
+  }
+
+  @Test fun `a book that cannot be read aloud says why and stays quiet`() = runTest(dispatcher) {
+    openResult = Result.failure(ReadAloudUnavailable("This book can’t be read aloud."))
+    val reader = readingAloud()
+    assertEquals(listOf("This book can’t be read aloud."), toasts.shown)
+    assertEquals(ReadAloudStatus.Off, reader.readAloud.value.status)
+    assertTrue(playback.calls.isEmpty())
+  }
+
+  @Test fun `play and pause follow the controls and the playback's own state`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    reader.toggleReadAloud(); runCurrent()
+    assertEquals(ReadAloudStatus.Paused, reader.readAloud.value.status)
+    reader.toggleReadAloud(); runCurrent()
+    assertEquals(ReadAloudStatus.Playing, reader.readAloud.value.status)
+    // Paused from the notification, not from the reader.
+    playback.pause(); runCurrent()
+    assertEquals(ReadAloudStatus.Paused, reader.readAloud.value.status)
+    reader.readAloudNext(); reader.readAloudPrevious()
+    assertEquals(listOf("play", "pause", "play", "pause", "next", "previous"), playback.calls)
+  }
+
+  @Test fun `stopping closes the playback and puts the controls away`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    reader.stopReadAloud(); runCurrent()
+    assertTrue(playback.closed)
+    assertEquals(ReadAloudStatus.Off, reader.readAloud.value.status)
+  }
+
+  @Test fun `leaving the reader stops it`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    reader.close()
+    assertTrue(playback.closed)
+  }
+
+  @Test fun `starting again while it is going plays or pauses instead of opening a second one`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    reader.startReadAloud(); runCurrent()
+    assertEquals(1, speechOpens.size)
+    assertEquals(ReadAloudStatus.Paused, reader.readAloud.value.status)
+  }
+
+  @Test fun `the speed steps up, wraps round, and is remembered`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    val seen = mutableListOf<Double>()
+    repeat(6) { reader.cycleReadAloudSpeed(); runCurrent(); seen += reader.readAloud.value.speed }
+    assertEquals(listOf(1.25, 1.5, 1.75, 2.0, 0.75, 1.0), seen)
+    assertEquals("speed 1.25", playback.calls[1])
+    assertEquals(1.0, store.readAloud.value.speed, 0.0)
+  }
+
+  @Test fun `a voice is picked from the book's language, and remembered for it`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    assertEquals(listOf("en-a", "en-b"), reader.readAloudVoices().map { it.id })
+    assertNull(reader.readAloudVoiceId())
+    reader.chooseReadAloudVoice(reader.readAloudVoices().first()); runCurrent()
+    assertEquals("voice en-US en-a", playback.calls.last())
+    assertEquals(mapOf("en-US" to "en-a"), store.readAloud.value.voices)
+    assertEquals("en-a", reader.readAloudVoiceId())
+  }
+
+  @Test fun `asking for more voices goes to the system`() = runTest(dispatcher) {
+    readingAloud().installVoices()
+    assertEquals(1, voiceInstalls)
+  }
+
+  @Test fun `reaching the end of the book stops it and says so`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    playback.outcome.value = ReadAloudOutcome.Ended; runCurrent()
+    assertEquals(listOf("Finished reading aloud"), toasts.shown)
+    assertTrue(playback.closed)
+    assertEquals(ReadAloudStatus.Off, reader.readAloud.value.status)
+  }
+
+  @Test fun `an engine failure stops it with its reason`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    playback.outcome.value = ReadAloudOutcome.Failed("engine died"); runCurrent()
+    assertEquals(listOf("Read aloud stopped: engine died"), toasts.shown)
+    assertTrue(playback.closed)
+    assertFalse(reader.readAloud.value.active)
+  }
+
+  @Test fun `being read to with the screen off still counts as reading, until it stops`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    reader.resumeReading()
+    time += 60_000
+    reader.pauseReading()           // the app goes to the background; it keeps speaking
+    runCurrent()
+    assertTrue(store.sessions.isEmpty())
+    time += 120_000
+    playback.pause(); runCurrent()  // paused from the notification
+    val (_, span) = store.sessions.single()
+    assertEquals(180_000L, span.activeMs)
+  }
+
+  @Test fun `with the screen on a pause ends nothing, the reader still being looked at`() = runTest(dispatcher) {
+    val reader = readingAloud()
+    reader.resumeReading()
+    time += 60_000
+    playback.pause(); runCurrent()
+    assertTrue(store.sessions.isEmpty())
+    reader.pauseReading(); runCurrent()
     assertEquals(1, store.sessions.size)
   }
 

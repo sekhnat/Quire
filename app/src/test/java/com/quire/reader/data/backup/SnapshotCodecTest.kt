@@ -1,5 +1,6 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
@@ -62,6 +63,7 @@ class SnapshotCodecTest {
         readerDefaults = ReaderPrefs(fontSize = 21, theme = ReaderTheme.Sepia),
         textSearchOrder = "Library",
         readerControls = ReaderControls(volumeKeys = true, keepScreenOn = true, orientation = ReaderOrientation.Landscape),
+        readAloud = ReadAloudPrefs(speed = 1.25, voices = mapOf("en-US" to "en-us-x-tpd-local")),
       ),
     )
     assertEquals(original, (decode(SnapshotCodec.encode(original)) as SnapshotCodec.Decoded.Ok).snapshot)

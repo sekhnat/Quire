@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import android.net.Uri
 import com.quire.reader.data.Book
+import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
@@ -146,6 +147,9 @@ class FakeReaderStore(var paths: Map<Long, String> = emptyMap()) : ReaderStore {
   override suspend fun setHighlightColor(id: Long, color: Int) { writes += "colour $id $color" }
   override val lastHighlightColor: Flow<Int> = lastColor
   override suspend fun setLastHighlightColor(color: Int) { lastColor.value = color }
+  val readAloud = MutableStateFlow(ReadAloudPrefs())
+  override val readAloudPrefs: Flow<ReadAloudPrefs> = readAloud
+  override suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs) { readAloud.value = prefs }
   val controls = MutableStateFlow(ReaderControls())
   override val readerControls: Flow<ReaderControls> = controls
   override val brightness = MutableStateFlow(100)

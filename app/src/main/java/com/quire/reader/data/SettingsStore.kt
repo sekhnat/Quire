@@ -75,6 +75,10 @@ class SettingsStore(context: Context) {
   val readerControls: Flow<ReaderControls> = store.data.map { ReaderControls.fromJson(it[READER_CONTROLS]) ?: ReaderControls() }
   suspend fun setReaderControls(controls: ReaderControls) = store.edit { it[READER_CONTROLS] = controls.toJson() }
 
+  /** How read aloud sounds: its speed and the voice picked for each language. */
+  val readAloudPrefs: Flow<ReadAloudPrefs> = store.data.map { ReadAloudPrefs.fromJson(it[READ_ALOUD]) ?: ReadAloudPrefs() }
+  suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs) = store.edit { it[READ_ALOUD] = prefs.toJson() }
+
   /** The colour a new highlight gets: the one last picked, as a `HighlightColor` index. */
   val lastHighlightColor: Flow<Int> = flow(LAST_HIGHLIGHT_COLOR, 0)
   suspend fun setLastHighlightColor(v: Int) = store.edit { it[LAST_HIGHLIGHT_COLOR] = v }
@@ -132,6 +136,7 @@ class SettingsStore(context: Context) {
       readerDefaults = prefs[READER_DEFAULTS]?.let(ReaderPrefs::fromJson),
       advancedReadingEnabled = prefs[ADVANCED_READING_ENABLED] ?: false,
       readerControls = ReaderControls.fromJson(prefs[READER_CONTROLS]) ?: ReaderControls(),
+      readAloud = ReadAloudPrefs.fromJson(prefs[READ_ALOUD]) ?: ReadAloudPrefs(),
       textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
     )
   }
@@ -146,6 +151,7 @@ class SettingsStore(context: Context) {
     s.readerDefaults?.let { setReaderDefaults(it) }
     s.advancedReadingEnabled?.let { setAdvancedReadingEnabled(it) }
     s.readerControls?.let { setReaderControls(it) }
+    s.readAloud?.let { setReadAloudPrefs(it) }
     s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
   }
 
@@ -171,6 +177,7 @@ class SettingsStore(context: Context) {
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     private val ADVANCED_READING_ENABLED = booleanPreferencesKey("advanced_reading_enabled")
     private val READER_CONTROLS = stringPreferencesKey("reader_controls")
+    private val READ_ALOUD = stringPreferencesKey("read_aloud")
     private val LAST_HIGHLIGHT_COLOR = intPreferencesKey("last_highlight_color")
     private val BRIGHTNESS = intPreferencesKey("brightness")
     private val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
