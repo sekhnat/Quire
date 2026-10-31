@@ -70,7 +70,9 @@ class ReaderStateTest {
     request: ReaderRequest = ReaderRequest(1),
     open: suspend (File) -> Result<Publication> = { opened += it; Result.success(stubPublication()) },
     lookUp: ((String) -> Unit)? = { lookedUp += it },
-  ) = ReaderState(request, store, library, open, indexer, nav, toasts, {}, { shared += it }, lookUp, backgroundScope.childScope(), backgroundScope, backgroundScope)
+  ) = ReaderState(request, store, library, open, indexer, nav, toasts, {}, { shared += it }, lookUp, backgroundScope.childScope(), backgroundScope, backgroundScope, { time })
+
+  private var time = 1_000_000L
 
   private fun session() = ReaderSession(testBook(1, "Emma", author = "Jane Austen"), stubPublication(), emptyList(), null)
 
@@ -226,6 +228,39 @@ class ReaderStateTest {
     assertEquals(3, reader.ui.value.highlightColorFilter)
     reader.setHighlightColorFilter(null)
     assertNull(reader.ui.value.highlightColorFilter)
+  }
+
+  @Test fun `reading time between coming to the front and leaving is kept as a session`() = runTest(dispatcher) {
+    val reader = reader()
+    reader.awaitSettled(); runCurrent()
+    reader.resumeReading()
+    time += 90_000
+    reader.pauseReading()
+    runCurrent()
+    val (book, span) = store.sessions.single()
+    assertEquals(1L, book)
+    assertEquals(90_000L, span.activeMs)
+  }
+
+  @Test fun `a short visit is not kept`() = runTest(dispatcher) {
+    val reader = reader()
+    reader.awaitSettled(); runCurrent()
+    reader.resumeReading()
+    time += 10_000
+    reader.pauseReading()
+    runCurrent()
+    assertTrue(store.sessions.isEmpty())
+  }
+
+  @Test fun `closing the reader while it is being read keeps the session once`() = runTest(dispatcher) {
+    val reader = reader()
+    reader.awaitSettled(); runCurrent()
+    reader.resumeReading()
+    time += 60_000
+    reader.close()
+    reader.pauseReading()
+    runCurrent()
+    assertEquals(1, store.sessions.size)
   }
 
   @Test fun `any overlay over the page counts as open`() {

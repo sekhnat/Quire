@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.ReaderKeyHost
 import com.quire.reader.data.HighlightColor
@@ -118,6 +119,10 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
   val controls by reader.controls.collectAsStateWithLifecycle()
   ReaderControlsEffects(session, controls, s.overlaysOpen, reader)
+  LifecycleResumeEffect(session) {
+    reader.resumeReading()
+    onPauseOrDispose { reader.pauseReading() }
+  }
   val epubPrefs = remember(prefs, session.layout) { prefs.toEpubPreferences(session.layout) }
   // The single submission path: mapped preferences go to the session, which deduplicates
   // by equality and applies them through the navigator in one serialized pass.

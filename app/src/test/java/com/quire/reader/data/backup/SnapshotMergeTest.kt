@@ -181,6 +181,14 @@ class SnapshotMergeTest {
     )
   }
 
+  @Test fun `a session already there is not added again, nor is one repeated in the file`() {
+    val a = SnapshotSession(startedAt = 10, endedAt = 20, activeMs = 5, startProgress = 0f, endProgress = 0.1f, readProgress = 0.1f)
+    val b = a.copy(startedAt = 30, endedAt = 40)
+    assertEquals(listOf(b), SnapshotMerge.newSessions(setOf(10L to 20L), listOf(a, b, b)))
+    assertEquals(listOf(a, b), SnapshotMerge.newSessions(emptySet(), listOf(a, b)))
+    assertEquals(emptyList<SnapshotSession>(), SnapshotMerge.newSessions(setOf(10L to 20L, 30L to 40L), listOf(a, b)))
+  }
+
   @Test fun `a highlight keeps its own colour, and only the default violet takes an incoming one`() {
     assertEquals(2, SnapshotMerge.mergeHighlightColor(local = 2, incoming = 4))
     assertEquals(4, SnapshotMerge.mergeHighlightColor(local = 0, incoming = 4))

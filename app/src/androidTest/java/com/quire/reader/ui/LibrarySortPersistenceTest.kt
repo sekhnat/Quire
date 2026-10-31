@@ -31,6 +31,7 @@ class LibrarySortPersistenceTest {
     override fun openDetail(bookId: Long) = Unit
     override fun openReader(request: ReaderRequest) = Unit
     override fun openSettings() = Unit
+    override fun openStats() = Unit
   }
 
   @After fun tearDown() = scope.cancel()

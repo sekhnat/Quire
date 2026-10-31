@@ -79,6 +79,19 @@ class SnapshotImporterTest : DbTestCase() {
     assertFalse(tombFolder.watched)
   }
 
+  @Test fun `sessions are added once however often the same file is imported`() = runBlocking {
+    val bookId = addBook("Emma", uuid = "u1")
+    val a = SnapshotSession(startedAt = 100, endedAt = 400, activeMs = 250, startProgress = 0.1f, endProgress = 0.2f, readProgress = 0.09f)
+    val b = a.copy(startedAt = 500, endedAt = 900)
+    fun snapshot(vararg sessions: SnapshotSession) =
+      UserDataSnapshot(1, 1, SnapshotSettings(), listOf(entry(uuid = "u1", state = state(1_000)).copy(sessions = sessions.toList())))
+
+    assertEquals(2, importer().import(snapshot(a, b), applySettings = false).sessionsAdded)
+    assertEquals(0, importer().import(snapshot(a, b), applySettings = false).sessionsAdded)
+    assertEquals(1, importer().import(snapshot(a, b.copy(startedAt = 1_000, endedAt = 1_100)), applySettings = false).sessionsAdded)
+    assertEquals(listOf(100L, 500L, 1_000L), db.stats().sessionsOf(bookId).map { it.startedAt })
+  }
+
   @Test fun `repeating the same import changes nothing`() = runBlocking {
     val bookId = addBook("Emma", uuid = "u1")
     val snapshot = UserDataSnapshot(

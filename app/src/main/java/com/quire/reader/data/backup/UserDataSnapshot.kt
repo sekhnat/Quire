@@ -70,6 +70,8 @@ data class SnapshotBook(
   val userTags: List<String> = emptyList(),
   val bookmarks: List<SnapshotBookmark> = emptyList(),
   val highlights: List<SnapshotHighlight> = emptyList(),
+  /** Reading sessions; absent in snapshots written before reading statistics existed. */
+  val sessions: List<SnapshotSession> = emptyList(),
 )
 
 /** Reading position and status; every field is optional so partial state survives schema growth. */
@@ -111,6 +113,17 @@ data class SnapshotHighlight(
   val chapter: String? = null,
   /** `HighlightColor` index; null for the default violet and in snapshots written before there was a choice. */
   val color: Int? = null,
+)
+
+/** One reading session; [startedAt] with [endedAt] identifies it across devices. */
+@Serializable
+data class SnapshotSession(
+  val startedAt: Long,
+  val endedAt: Long,
+  val activeMs: Long,
+  val startProgress: Float,
+  val endProgress: Float,
+  val readProgress: Float,
 )
 
 /** The identity keys of a book row, as the database holds them. */

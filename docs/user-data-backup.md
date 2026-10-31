@@ -1,7 +1,9 @@
 # User-data backup and restore
 
-Quire keeps positions, statuses, ratings, reader preferences, user tags, bookmarks, highlights and
-notes in an exportable snapshot. Neither database travels in Android backups.
+Quire keeps positions, statuses, ratings, reader preferences, user tags, bookmarks, highlights (with
+their colours), notes and reading sessions (when and how long each book was read, for the Stats screen)
+in an exportable snapshot. On a merge a session already there, matched by when it started and ended, is
+not added again. Neither database travels in Android backups.
 
 ## Relationship to PR #4
 

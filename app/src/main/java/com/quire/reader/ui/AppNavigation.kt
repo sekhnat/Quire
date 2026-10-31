@@ -5,6 +5,7 @@ import com.quire.reader.ui.detail.DetailState
 import com.quire.reader.ui.onboarding.OnboardingState
 import com.quire.reader.ui.reader.ReaderState
 import com.quire.reader.ui.settings.SettingsState
+import com.quire.reader.ui.stats.StatsState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +23,7 @@ sealed interface Destination {
   data class Detail(val state: DetailState) : Destination
   data class Reader(val state: ReaderState) : Destination
   data class Settings(val state: SettingsState) : Destination
+  data class Stats(val state: StatsState) : Destination
 }
 
 /** How to open a book in the reader. */
@@ -43,6 +45,7 @@ interface AppNavigator {
   fun openDetail(bookId: Long)
   fun openReader(request: ReaderRequest)
   fun openSettings()
+  fun openStats()
 }
 
 /** Shows a short message at the bottom of the screen. */
