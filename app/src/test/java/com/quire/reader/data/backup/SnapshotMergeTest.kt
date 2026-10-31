@@ -1,5 +1,7 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.ReaderControls
+import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookStateEntity
 import org.junit.Assert.assertEquals
@@ -177,6 +179,15 @@ class SnapshotMergeTest {
       SnapshotSettings(useCalibre = true, watchNewBooks = true, brightness = 64, readerDefaults = ReaderPrefs(fontSize = 25)),
       SnapshotMerge.mergeSettings(local, incoming, applyIncoming = true),
     )
+  }
+
+  @Test fun `reader controls restore with the settings and an older snapshot keeps the local ones`() {
+    val mine = ReaderControls(keepScreenOn = true)
+    val theirs = ReaderControls(volumeKeys = true, orientation = ReaderOrientation.Portrait)
+    val local = SnapshotSettings(readerControls = mine)
+    assertEquals(theirs, SnapshotMerge.mergeSettings(local, SnapshotSettings(readerControls = theirs), applyIncoming = true).readerControls)
+    assertEquals(mine, SnapshotMerge.mergeSettings(local, SnapshotSettings(), applyIncoming = true).readerControls)
+    assertEquals(mine, SnapshotMerge.mergeSettings(local, SnapshotSettings(readerControls = theirs), applyIncoming = false).readerControls)
   }
 
   // ── tombstones ───────────────────────────────────────────────────────────

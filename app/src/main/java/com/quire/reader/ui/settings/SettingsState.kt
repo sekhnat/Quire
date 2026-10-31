@@ -2,6 +2,7 @@ package com.quire.reader.ui.settings
 
 import android.net.Uri
 import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
@@ -28,6 +29,8 @@ interface LibrarySettings {
   val advancedDefaultsCustomized: Flow<Boolean>
   val advancedReadingEnabled: Flow<Boolean>
   suspend fun setAdvancedReadingEnabled(v: Boolean)
+  val readerControls: Flow<ReaderControls>
+  suspend fun setReaderControls(controls: ReaderControls)
   suspend fun clearAllBookPrefs()
   val useCalibre: Flow<Boolean>
   suspend fun setUseCalibre(v: Boolean)
@@ -107,6 +110,12 @@ class SettingsState(
   }
 
   fun setAdvancedReadingEnabled(v: Boolean) = persist.launch { store.setAdvancedReadingEnabled(v) }
+
+  val readerControls: StateFlow<ReaderControls> = store.readerControls.stateIn(scope, SharingStarted.Eagerly, ReaderControls())
+  fun updateControls(change: (ReaderControls) -> ReaderControls) {
+    val next = change(readerControls.value)
+    persist.launch { store.setReaderControls(next) }
+  }
   fun resetAllBookPrefs() = persist.launch { store.clearAllBookPrefs(); toasts.show("Every book now uses your defaults") }
   fun setUseCalibre(v: Boolean) = persist.launch { store.setUseCalibre(v); toasts.show("Takes effect on the next full rescan") }
   fun setWatch(v: Boolean) = persist.launch { store.setWatchNewBooks(v) }

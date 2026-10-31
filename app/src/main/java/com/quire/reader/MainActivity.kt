@@ -1,6 +1,7 @@
 package com.quire.reader
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.commitNow
 import androidx.activity.compose.setContent
@@ -15,7 +16,19 @@ import com.quire.reader.reader.WebViewWarmup
 import com.quire.reader.theme.QuireTheme
 import com.quire.reader.ui.QuireApp
 
-class MainActivity : FragmentActivity() {
+/** Lets the open reader see the hardware keys the page leaves unused. */
+interface ReaderKeyHost {
+  /** Returns true to consume the event; null while no reader is listening. */
+  var readerKeys: ((KeyEvent) -> Boolean)?
+}
+
+class MainActivity : FragmentActivity(), ReaderKeyHost {
+  override var readerKeys: ((KeyEvent) -> Boolean)? = null
+
+  // The volume keys reach the activity only when the page has not used them, which it never does.
+  override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = readerKeys?.invoke(event) == true || super.onKeyDown(keyCode, event)
+  override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean = readerKeys?.invoke(event) == true || super.onKeyUp(keyCode, event)
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Android restores saved fragments inside super.onCreate, instantiating them through the
     // FragmentManager's factory. The navigator's only constructor is internal and parameterized

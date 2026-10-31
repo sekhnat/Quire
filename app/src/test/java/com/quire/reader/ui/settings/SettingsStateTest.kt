@@ -3,6 +3,8 @@ package com.quire.reader.ui.settings
 import android.net.TestUri
 import android.net.Uri
 import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.ReaderControls
+import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.WidenLevel
 import com.quire.reader.data.backup.BackupContents
@@ -46,6 +48,9 @@ class SettingsStateTest {
     override val advancedDefaultsCustomized = flowOf(false)
     override val advancedReadingEnabled = flowOf(false)
     override suspend fun setAdvancedReadingEnabled(v: Boolean) = Unit
+    val controls = MutableStateFlow(ReaderControls())
+    override val readerControls: Flow<ReaderControls> = controls
+    override suspend fun setReaderControls(controls: ReaderControls) { this.controls.value = controls }
     override suspend fun clearAllBookPrefs() = Unit
     override val useCalibre = flowOf(true)
     override suspend fun setUseCalibre(v: Boolean) = Unit
@@ -118,6 +123,15 @@ class SettingsStateTest {
     settings.restoreGlobalAdvanced(); runCurrent()
     assertEquals(ReaderPrefs(fontSize = 22, advanced = AdvancedReaderPrefs()), store.defaults.value)
     assertEquals(listOf("Advanced reading settings restored"), toasts.shown)
+  }
+
+  @Test fun `a reading control changes alone and is written for the whole app`() = runTest {
+    val settings = settings()
+    runCurrent()
+    settings.updateControls { it.copy(volumeKeys = true) }; runCurrent()
+    settings.updateControls { it.copy(orientation = ReaderOrientation.Landscape) }; runCurrent()
+    assertEquals(ReaderControls(volumeKeys = true, orientation = ReaderOrientation.Landscape), store.controls.value)
+    assertEquals(store.controls.value, settings.readerControls.value)
   }
 
   @Test fun `rebuilding the index measures storage again`() = runTest {
