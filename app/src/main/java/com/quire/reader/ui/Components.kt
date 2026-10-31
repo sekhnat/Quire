@@ -131,6 +131,7 @@ object Ic {
   val AlignJustify = R.drawable.ph_text_align_justify
   val NotePencil = R.drawable.ph_note_pencil
   val Copy = R.drawable.ph_copy
+  val ShareNetwork = R.drawable.ph_share_network
   val BookBookmark = R.drawable.ph_book_bookmark
   val CheckBold = R.drawable.ph_check_bold
   val Gear = R.drawable.ph_gear_six

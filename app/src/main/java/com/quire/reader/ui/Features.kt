@@ -137,9 +137,24 @@ class Features(private val app: QuireApplication) {
   private fun copyToClipboard(text: String) =
     app.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Quire", text))
 
+  private fun launchOutside(intent: Intent) {
+    runCatching { app.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+  }
+
+  private fun shareText(text: String) =
+    launchOutside(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
+
+  private fun lookUpIntent(text: String) =
+    Intent(Intent.ACTION_PROCESS_TEXT).setType("text/plain").putExtra(Intent.EXTRA_PROCESS_TEXT, text).putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true)
+
+  /** Null when no installed app (a dictionary, a translator) handles the selection, so the menu leaves the entry out. */
+  private fun lookUp(): ((String) -> Unit)? =
+    if (app.packageManager.queryIntentActivities(lookUpIntent(""), 0).isEmpty()) null
+    else { text -> launchOutside(Intent.createChooser(lookUpIntent(text), "Look up")) }
+
   /** A reader for [request]; it starts opening the book at once. */
   fun reader(request: ReaderRequest, library: StateFlow<LibraryData>, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
-    ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, scope, persist, app.appScope)
+    ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, ::shareText, lookUp(), scope, persist, app.appScope)
 
   private val librarySettings = object : LibrarySettings {
     override val readerDefaults get() = repo.readerDefaults
