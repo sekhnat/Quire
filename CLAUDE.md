@@ -5,7 +5,7 @@
 - SDK: `~/Android/Sdk`; Android 16 / API 36; build tools 36.0.0.
 - Build JDK: `/usr/lib/jvm/java-21-openjdk` (21). System Java is 27; do not use it for these builds.
 - Emulator: `Android_API_36` (Pixel 7, x86_64, KVM, 4 cores, 4 GB RAM).
-- Full guide: `~/.config/android/README.md`; local overview: `ANDROID.md`.
+- Full guide: `~/.config/android/README.md`.
 
 Activate in Zsh (new interactive terminals already do this):
 
@@ -61,4 +61,4 @@ First builds need internet access; subsequent builds reuse cached Gradle, toolch
 - Scroll mode's live window is decided in `assets/quire/continuous-scroll.js` (`planWindow`, a pure function tested by `ShellWindowPolicyTest`): it leans into fling direction and predicted stop, evicts by estimated document weight, and shrinks with the memory-pressure tier from `navigator/epub/ScrollMemoryPressure.kt`. Its telemetry exists only in the `benchmark` build type (app id `com.quire.reader.bench`, `BuildConfig.SCROLL_TELEMETRY`). Benchmark on the emulator: `adb push ORV.epub /data/local/tmp/quire-bench/`, then `./gradlew connectedBenchmarkAndroidTest -PtestBuildType=benchmark -Pandroid.testInstrumentationRunnerArguments.class=com.quire.reader.ui.ScrollWindowBenchmark`; reports land in `/data/local/tmp/quire-bench/results`. The fling and long tests run the fixed (`static`) and `adaptive` policies side by side, about 20 and 35 minutes; nothing heavy should run on the host meanwhile.
 - The app reads books straight from shared storage and needs "All files access". On the emulator: `adb shell appops set com.quire.reader MANAGE_EXTERNAL_STORAGE allow`.
 - Testing the library on the emulator: `adb push` EPUBs into `/sdcard/Books` and Calibre-style trees (`Author/Title (id)/book.epub` + `metadata.opf` + `cover.jpg`) into `/sdcard/Calibre Library`, then relaunch; the app rescans on start. Scan results are logged under the `LibraryScanner` tag.
-- Fonts: reading fonts live in `assets/fonts` (served to Readium's WebView) and are listed in `reader/ReaderFonts.kt`; books store the font as an index into that list, so only ever append. The fonts the UI also uses (Literata, Source Serif, Atkinson, Inter) have copies in `res/font`; keep those in step. The others are previewed straight from `assets/fonts`. New fonts must be unmodified (their OFL reserves the names) and ship their license in `assets/licenses/fonts`.
+- Fonts: reading fonts live in `assets/fonts` (served to Readium's WebView) and are listed in `reader/ReaderFonts.kt`; books store the font as an index into that list, so only ever append. The fonts the UI also uses (Literata, Source Serif, Atkinson, Inter) are kept only in `res/font`: their `FontFile.resource` makes `WebViewServer` answer the same `fonts/…` paths from there (`ResourceFontPathHandler`), so do not add copies to `assets/fonts`. The others are previewed straight from `assets/fonts`. New fonts must be unmodified (their OFL reserves the names) and ship their license in `assets/licenses/fonts`.

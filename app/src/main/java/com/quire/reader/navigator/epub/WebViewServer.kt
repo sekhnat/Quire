@@ -21,9 +21,12 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.webkit.WebViewAssetLoader
 import java.io.ByteArrayInputStream
+import java.io.IOException
+import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.quire.reader.navigator.epub.css.ReadiumCss
+import com.quire.reader.reader.ReaderFontResources
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Href
@@ -288,7 +291,7 @@ internal class WebViewServer(
             "Accept-Ranges" to "bytes"
         )
 
-        val stream = resource.asInputStream()
+        val stream = LoadFailureStream(resource.asInputStream())
         if (range == null) {
             val gated = onInterceptResource?.invoke(
                 href?.toString() ?: resource.sourceUrl.toString(),
@@ -373,6 +376,46 @@ internal class WebViewServer(
     private val assetsLoader =
         WebViewAssetLoader.Builder()
             .setDomain(ASSETS_HOSTNAME)
+            // Quire: the UI fonts are kept once, in res/font, and answered at their reading-font
+            // paths; any other path falls through to the assets.
+            .addPathHandler("/fonts/", ResourceFontPathHandler(application, ReaderFontResources))
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(application))
             .build()
+}
+
+/**
+ * Answers `fonts/<name>` from `res/font` for the reading fonts listed in [resources] (keyed by asset path), and nothing
+ * else, so the next handler serves the rest from the assets.
+ */
+internal class ResourceFontPathHandler(
+    private val application: Application,
+    private val resources: Map<String, Int>,
+) : WebViewAssetLoader.PathHandler {
+    override fun handle(path: String): WebResourceResponse? {
+        val id = resources["fonts/$path"] ?: return null
+        return WebResourceResponse("font/ttf", null, application.resources.openRawResource(id))
+    }
+}
+
+/**
+ * Quire: the stream the WebView reads a publication resource from. A book closed while the WebView is still reading one of
+ * its resources makes Readium's zip container throw IllegalStateException ("zip file closed"); thrown from a stream the
+ * WebView reads in native code, that takes the whole app down. Any failure other than an IOException is reported as one,
+ * so the WebView just fails that load.
+ */
+internal class LoadFailureStream(private val source: InputStream) : InputStream() {
+    private inline fun <T> guarded(block: () -> T): T =
+        try {
+            block()
+        } catch (e: IOException) {
+            throw e
+        } catch (e: RuntimeException) {
+            throw IOException("resource read failed", e)
+        }
+
+    override fun read(): Int = guarded { source.read() }
+    override fun read(b: ByteArray, off: Int, len: Int): Int = guarded { source.read(b, off, len) }
+    override fun skip(n: Long): Long = guarded { source.skip(n) }
+    override fun available(): Int = guarded { source.available() }
+    override fun close() = guarded { source.close() }
 }

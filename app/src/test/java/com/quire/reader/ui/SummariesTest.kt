@@ -36,4 +36,11 @@ class SummariesTest {
     assertEquals("1 book added · 1 book updated", mergeSummary(MergeOutcome(imported(matched = 1), booksAdded = 1)))
     assertEquals("Nothing to import", mergeSummary(MergeOutcome(imported(), booksAdded = 0)))
   }
+
+  @Test fun `an import says how many picked files could not be read`() {
+    assertEquals("Imported 2 books", describeImport(imported = 2, picked = 2))
+    assertEquals("Imported 1 book · 1 file couldn’t be read", describeImport(imported = 1, picked = 2))
+    assertEquals("Imported 2 books · 3 files couldn’t be read", describeImport(imported = 2, picked = 5))
+    assertEquals("Nothing could be imported", describeImport(imported = 0, picked = 2))
+  }
 }

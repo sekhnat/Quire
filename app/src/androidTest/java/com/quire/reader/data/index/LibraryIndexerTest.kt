@@ -153,7 +153,7 @@ class LibraryIndexerTest : DbTestCase() {
   private fun mobi(name: String): File =
     File(epubDir, name).also { f -> checkNotNull(javaClass.getResourceAsStream("/mobi/$name")) { "missing fixture $name" }.use { f.outputStream().use(it::copyTo) } }
 
-  @Test fun `MOBI and AZW3 books are indexed with their chapters, leaving the reader's cache alone`() = runBlocking {
+  @Test fun `MOBI and AZW3 books are indexed with their chapters and leave the reader cache alone`() = runBlocking {
     val f = fixture()
     val cache = File(target.cacheDir, "converted").apply { deleteRecursively() }
     val books = listOf("mobi6.mobi", "kf8.azw3").map { f.add(it, mobi(it)) }

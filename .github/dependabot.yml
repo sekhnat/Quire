@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      # Pinned until AGP supports compileSdk 37: Readium 3.4 and Coil 3.6 need it (see CLAUDE.md).
+      - dependency-name: "org.readium.kotlin-toolkit:*"
+      - dependency-name: "io.coil-kt.coil3:*"

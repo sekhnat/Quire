@@ -7,6 +7,16 @@ import com.quire.reader.data.scan.ScanResult
 /** "1 book" or "n books". */
 fun books(n: Int) = "$n ${if (n == 1) "book" else "books"}"
 
+/** How an import of [picked] files went, for a toast: the books that came in, and how many files could not be read. */
+fun describeImport(imported: Int, picked: Int): String {
+  val failed = picked - imported
+  return when {
+    imported == 0 -> "Nothing could be imported"
+    failed > 0 -> "Imported ${books(imported)} · $failed ${if (failed == 1) "file" else "files"} couldn’t be read"
+    else -> "Imported ${books(imported)}"
+  }
+}
+
 /** What a scan changed, for a toast. */
 fun describe(r: ScanResult): String = when {
   r.added == 0 && r.removed == 0 && r.updated == 0 && r.moved == 0 -> "Library is up to date"
