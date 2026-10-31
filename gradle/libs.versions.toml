@@ -32,7 +32,7 @@ readium-navigator = { module = "org.readium.kotlin-toolkit:readium-navigator", v
 androidx-media3-session = { module = "androidx.media3:media3-session", version = "1.10.0" }
 readium-navigator-media-tts = { module = "org.readium.kotlin-toolkit:readium-navigator-media-tts", version.ref = "readium" }
 timber = { module = "com.jakewharton.timber:timber", version = "5.0.1" }
-jsoup = { module = "org.jsoup:jsoup", version = "1.22.2" }
+jsoup = { module = "org.jsoup:jsoup", version = "1.23.2" }
 androidx-webkit = { module = "androidx.webkit:webkit", version = "1.15.0" }
 androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version = "2.2.1" }
 androidx-viewpager = { module = "androidx.viewpager:viewpager", version = "1.0.0" }
