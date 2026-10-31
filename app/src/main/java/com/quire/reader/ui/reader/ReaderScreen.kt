@@ -52,15 +52,18 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.ReaderKeyHost
+import com.quire.reader.data.HighlightColor
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderOrientation
+import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.EpubHost
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.reader.toEpubPreferences
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.ReaderTheme
 import com.quire.reader.ui.BtnKind
+import com.quire.reader.ui.ColorDot
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.IconBtn
 import com.quire.reader.ui.Ph
@@ -165,7 +168,7 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
     if (s.showZones) TapZones { reader.showZones(false) }
 
     ReaderChrome(s, session, reader, bookmarked, locator?.locations?.totalProgression?.toFloat() ?: 0f)
-    HighlightActions(s, reader, navBottom)
+    HighlightActions(s, highlights, reader, navBottom)
     DisplaySheet(s, session, prefs, hasOverride, hasAdvancedOverride, reader)
     ContentsSheet(s, session, bookmarks, highlights, reader)
     SearchOverlay(s, search, bookSearch, reader)
@@ -289,24 +292,30 @@ private fun ReaderChrome(s: ReaderUiState, session: ReaderSession, reader: Reade
   }
 }
 
-/** Actions for a highlight the reader just tapped. */
+/** Actions for a highlight the reader just tapped: its colour, and what to do with it. */
 @Composable
-private fun HighlightActions(s: ReaderUiState, reader: ReaderState, navBottom: Dp) {
+private fun HighlightActions(s: ReaderUiState, highlights: List<HighlightEntity>, reader: ReaderState, navBottom: Dp) {
   val id = s.activeHighlight
+  val color = highlights.firstOrNull { it.id == id }?.color ?: 0
   Box(Modifier.fillMaxSize()) {
     AnimatedVisibility(id != null, Modifier.align(Alignment.BottomCenter).padding(start = 16.dp, end = 16.dp, bottom = navBottom + 56.dp), enter = fadeIn(tween(150)), exit = fadeOut(tween(150))) {
       val shape = RoundedCornerShape(14.dp)
-      Row(Modifier.fillMaxWidth().shadow(16.dp, shape).background(Nq.surface, shape).padding(6.dp)) {
-        listOf(
-          Triple(Ic.NotePencil, "Note", Nq.text) to { id?.let { reader.editNote(it) } },
-          Triple(Ic.Copy, "Copy", Nq.text) to { id?.let { reader.copyHighlight(it) } },
-          Triple(Ic.ShareNetwork, "Share", Nq.text) to { id?.let { reader.shareHighlight(it) } },
-          Triple(Ic.X, "Remove", Nq.accent) to { id?.let { reader.deleteHighlight(it) } },
-        ).forEach { (spec, act) ->
-          val (icon, label, color) = spec
-          Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = { act() }).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Ph(icon, 20.dp, color)
-            QText(label, 11f, color = color)
+      Column(Modifier.fillMaxWidth().shadow(16.dp, shape).background(Nq.surface, shape).padding(6.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+          HighlightColor.entries.forEach { c -> ColorDot(c, selected = c.ordinal == HighlightColor.fromIndex(color).ordinal) { id?.let { reader.setHighlightColor(it, c.ordinal) } } }
+        }
+        Row(Modifier.fillMaxWidth()) {
+          listOf(
+            Triple(Ic.NotePencil, "Note", Nq.text) to { id?.let { reader.editNote(it) } },
+            Triple(Ic.Copy, "Copy", Nq.text) to { id?.let { reader.copyHighlight(it) } },
+            Triple(Ic.ShareNetwork, "Share", Nq.text) to { id?.let { reader.shareHighlight(it) } },
+            Triple(Ic.X, "Remove", Nq.accent) to { id?.let { reader.deleteHighlight(it) } },
+          ).forEach { (spec, act) ->
+            val (icon, label, tint) = spec
+            Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable(onClick = { act() }).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+              Ph(icon, 20.dp, tint)
+              QText(label, 11f, color = tint)
+            }
           }
         }
       }

@@ -322,6 +322,7 @@ interface AnnotationDao {
   @Insert suspend fun addHighlight(h: HighlightEntity): Long
   @Query("DELETE FROM highlight WHERE id = :id") suspend fun deleteHighlight(id: Long)
   @Query("UPDATE highlight SET note = :note WHERE id = :id") suspend fun setHighlightNote(id: Long, note: String?)
+  @Query("UPDATE highlight SET color = :color WHERE id = :id") suspend fun setHighlightColor(id: Long, color: Int)
 }
 
 /** A book that may need indexing, with the file signature to index against and the fingerprint of that file, when known. */

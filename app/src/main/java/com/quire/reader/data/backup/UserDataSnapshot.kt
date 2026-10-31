@@ -109,6 +109,8 @@ data class SnapshotHighlight(
   val createdAt: Long,
   /** Chapter label where the highlight was made, best effort; null when it was never known. */
   val chapter: String? = null,
+  /** `HighlightColor` index; null for the default violet and in snapshots written before there was a choice. */
+  val color: Int? = null,
 )
 
 /** The identity keys of a book row, as the database holds them. */

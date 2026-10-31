@@ -168,16 +168,17 @@ class SnapshotImporter(
           HighlightEntity(
             bookId = bookId, locatorJson = highlight.locatorJson, text = highlight.text,
             note = NoteVariants.join(variants), progress = highlight.progress, createdAt = highlight.createdAt,
+            color = highlight.color ?: 0,
           ),
         )
         added++
         continue
       }
       val note = SnapshotMerge.unionNote(existing.note, highlight.note, highlight.noteVariants)
-      if (note != existing.note) {
-        db.annotations().setHighlightNote(existing.id, note)
-        merged++
-      }
+      val color = SnapshotMerge.mergeHighlightColor(existing.color, highlight.color)
+      if (note != existing.note) db.annotations().setHighlightNote(existing.id, note)
+      if (color != existing.color) db.annotations().setHighlightColor(existing.id, color)
+      if (note != existing.note || color != existing.color) merged++
     }
     return added + merged
   }
