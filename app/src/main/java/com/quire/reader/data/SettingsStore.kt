@@ -75,6 +75,10 @@ class SettingsStore(context: Context) {
   val readerControls: Flow<ReaderControls> = store.data.map { ReaderControls.fromJson(it[READER_CONTROLS]) ?: ReaderControls() }
   suspend fun setReaderControls(controls: ReaderControls) = store.edit { it[READER_CONTROLS] = controls.toJson() }
 
+  /** The colour a new highlight gets: the one last picked, as a `HighlightColor` index. */
+  val lastHighlightColor: Flow<Int> = flow(LAST_HIGHLIGHT_COLOR, 0)
+  suspend fun setLastHighlightColor(v: Int) = store.edit { it[LAST_HIGHLIGHT_COLOR] = v }
+
   /** In-app dimming over the page, 30–100. */
   val brightness: Flow<Int> = flow(BRIGHTNESS, 100)
   suspend fun setBrightness(v: Int) = store.edit { it[BRIGHTNESS] = v.coerceIn(30, 100) }
@@ -167,6 +171,7 @@ class SettingsStore(context: Context) {
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     private val ADVANCED_READING_ENABLED = booleanPreferencesKey("advanced_reading_enabled")
     private val READER_CONTROLS = stringPreferencesKey("reader_controls")
+    private val LAST_HIGHLIGHT_COLOR = intPreferencesKey("last_highlight_color")
     private val BRIGHTNESS = intPreferencesKey("brightness")
     private val INDEX_OPTIMIZED = booleanPreferencesKey("index_optimized")
     private val NOTIFICATIONS_ASKED = booleanPreferencesKey("notifications_asked")

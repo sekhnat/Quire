@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.sp
 import com.quire.reader.R
 import com.quire.reader.data.Book
 import com.quire.reader.data.Ground
+import com.quire.reader.data.HighlightColor
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.QuireFonts
 import kotlin.math.abs
@@ -479,4 +480,13 @@ fun QSlider(
       androidx.compose.material3.SliderDefaults.Track(st, Modifier.height(4.dp), colors = colors, enabled = enabled, drawStopIndicator = null, thumbTrackGapSize = 0.dp, trackInsideCornerSize = 0.dp)
     },
   )
+}
+
+/** A highlight colour to pick; the chosen one has a ring. */
+@Composable
+fun ColorDot(color: HighlightColor, selected: Boolean, size: Dp = 30.dp, onClick: () -> Unit) {
+  Box(
+    Modifier.size(size + 8.dp).clip(CircleShape).clickable(onClick = onClick).border(2.dp, if (selected) Nq.text else Color.Transparent, CircleShape).padding(4.dp),
+    contentAlignment = Alignment.Center,
+  ) { Box(Modifier.size(size).clip(CircleShape).background(Color(color.tint))) }
 }
