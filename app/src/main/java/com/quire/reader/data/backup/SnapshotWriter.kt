@@ -80,7 +80,7 @@ class SnapshotWriter(
     if (started) return
     started = true
     combine(
-      db.invalidationTracker.createFlow("book", "book_state", "bookmark", "highlight", "book_tag"),
+      db.invalidationTracker.createFlow("book", "book_state", "bookmark", "highlight", "book_tag", "reading_session"),
       settings.changes,
       retries.onStart { emit(Unit) },
     ) { _, _, _ -> }
@@ -148,6 +148,7 @@ class SnapshotWriter(
     val tags = ids.chunked(MAX_SQL_ARGS).flatMap { dao.userTags(it) }.groupBy({ it.bookId }, { it.tag })
     val bookmarks = ids.chunked(MAX_SQL_ARGS).flatMap { dao.bookmarks(it) }.groupBy { it.bookId }
     val highlights = ids.chunked(MAX_SQL_ARGS).flatMap { dao.highlights(it) }.groupBy { it.bookId }
+    val sessions = ids.chunked(MAX_SQL_ARGS).flatMap { dao.sessions(it) }.groupBy { it.bookId }
     return rows.map { row ->
       val identity = snapshotIdentity(row.calibreUuid, row.epubUid, row.fingerprint)
       val entryKey = tombstoneEntryKey(row.path) ?: entryKeyFor(row.id, row.path)
@@ -175,6 +176,7 @@ class SnapshotWriter(
             color = highlight.color.takeIf { it != 0 },
           )
         },
+        sessions = sessions[row.id].orEmpty().map { SnapshotSession(it.startedAt, it.endedAt, it.activeMs, it.startProgress, it.endProgress, it.readProgress) },
       )
     }
   }

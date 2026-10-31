@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
   entities = [
-    FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class,
+    FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class, ReadingSessionEntity::class,
   ],
   version = QuireDatabase.VERSION,
   // Exported to app/schemas so a schema change shows up in review; commit the new file with every VERSION bump.
@@ -22,6 +22,7 @@ abstract class QuireDatabase : RoomDatabase() {
   abstract fun annotations(): AnnotationDao
   abstract fun snapshots(): SnapshotDao
   abstract fun search(): SearchDao
+  abstract fun stats(): StatsDao
 
   companion object {
     private const val FTS_DELETE_TRIGGER_NAME = "room_fts_content_sync_text_chunk_fts_BEFORE_DELETE"
@@ -96,16 +97,27 @@ abstract class QuireDatabase : RoomDatabase() {
       }
     }
 
+    /** Adds the table that records reading sessions, as Room generates it. Nothing existing is touched. */
+    val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        listOf(
+          "CREATE TABLE IF NOT EXISTS `reading_session` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `bookId` INTEGER NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER NOT NULL, `activeMs` INTEGER NOT NULL, `startProgress` REAL NOT NULL, `endProgress` REAL NOT NULL, `readProgress` REAL NOT NULL, FOREIGN KEY(`bookId`) REFERENCES `book`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+          "CREATE INDEX IF NOT EXISTS `index_reading_session_bookId` ON `reading_session` (`bookId`)",
+          "CREATE INDEX IF NOT EXISTS `index_reading_session_startedAt` ON `reading_session` (`startedAt`)",
+        ).forEach(db::execSQL)
+      }
+    }
+
     /** The tables of the index as it was before [MIGRATION_4_5], in the order they can be dropped. */
     val LEGACY_INDEX_TABLES = listOf("text_chunk_fts_terms", "text_chunk_fts", "text_chunk", "index_state")
 
     const val FILE_NAME = "quire.db"
     /** The schema version; a full backup from a newer one cannot be restored. */
-    const val VERSION = 6
+    const val VERSION = 7
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
         .build()
   }
 }

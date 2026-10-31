@@ -69,6 +69,7 @@ interface ReaderStore {
   suspend fun markOpened(bookId: Long)
   suspend fun updatePageCount(bookId: Long, pages: Int)
   suspend fun savePosition(bookId: Long, locatorJson: String, progress: Float)
+  suspend fun addReadingSession(bookId: Long, span: ReadingSpan)
 
   fun readerPrefs(bookId: Long): Flow<ReaderPrefs>
   fun hasBookOverride(bookId: Long): Flow<Boolean>
@@ -165,6 +166,7 @@ class ReaderState(
   private val scope: CoroutineScope,
   private val persist: CoroutineScope,
   private val appScope: CoroutineScope,
+  private val now: () -> Long = System::currentTimeMillis,
 ) {
   val bookId: Long get() = request.bookId
 
@@ -211,6 +213,8 @@ class ReaderState(
   private var targetJob: Job? = null
   private var holdingIndexer = false
   private var closed = false
+  /** Measures the reading time of this opening; made once the book's pages are counted. */
+  private var clock: ReadingClock? = null
 
   private fun edit(block: ReaderUiState.() -> ReaderUiState) = _ui.update(block)
 
@@ -258,6 +262,7 @@ class ReaderState(
       val level = brightness.await()
       edit { copy(brightness = level) }
       val session = ReaderSession(book, publication, positions, initial)
+      clock = ReadingClock(now, positions.size)
       unclaimed = null
       _load.value = ReaderLoad.Ready(session)
       // Off the opening path: neither write changes what is shown.
@@ -301,6 +306,7 @@ class ReaderState(
     scope.launch { store.bookmarks(bookId).collect { _bookmarks.value = it } }
     scope.launch { store.highlights(bookId).collect { _highlights.value = it } }
     scope.launch { store.brightness.collect { b -> edit { copy(brightness = b) } } }
+    scope.launch { session.current.filterNotNull().collect { clock?.moved((it.locations.totalProgression ?: 0.0).toFloat()) } }
     // Save the position a moment after the reader stops moving.
     scope.launch { session.current.filterNotNull().drop(1).debounce(800).collect { savePosition(session, it) } }
     // Reads every chapter file with an anchored entry; it waits for the first page so it never competes with it.
@@ -319,6 +325,17 @@ class ReaderState(
     session.current.value?.let { locator -> runCatching { savePosition(session, locator) } }
   }
 
+  /** The reader came to the front: reading time counts from now. */
+  fun resumeReading() {
+    val session = session() ?: return
+    clock?.resume(session.totalProgress)
+  }
+
+  /** The reader left the front (the app went to the background, or the reader was left): the session ends and is kept. */
+  fun pauseReading() {
+    clock?.pause()?.let { span -> persist.launch { store.addReadingSession(bookId, span) } }
+  }
+
   /** Leaves the reader for the library; leaving closes this state. */
   fun leave() = nav.openLibrary()
 
@@ -329,6 +346,8 @@ class ReaderState(
   fun close() {
     if (closed) return
     closed = true
+    // Normally the screen already paused the clock; this catches a reader closed without being seen to leave.
+    clock?.pause()?.let { span -> appScope.launch { store.addReadingSession(bookId, span) } }
     scope.cancel()
     session()?.let { session ->
       val locator = session.current.value

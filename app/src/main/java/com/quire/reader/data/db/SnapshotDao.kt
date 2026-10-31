@@ -46,6 +46,7 @@ interface SnapshotDao {
             OR h.status != 'unread' OR h.userRating IS NOT NULL OR h.prefsJson IS NOT NULL OR h.locatorJson IS NOT NULL))
        OR EXISTS (SELECT 1 FROM bookmark h WHERE h.bookId = b.id)
        OR EXISTS (SELECT 1 FROM highlight h WHERE h.bookId = b.id)
+       OR EXISTS (SELECT 1 FROM reading_session h WHERE h.bookId = b.id)
        OR EXISTS (SELECT 1 FROM book_tag h WHERE h.bookId = b.id AND h.origin = 'user')
     ORDER BY b.id
     """,
@@ -60,4 +61,7 @@ interface SnapshotDao {
 
   @Query("SELECT * FROM highlight WHERE bookId IN (:ids) ORDER BY bookId, progress, id")
   suspend fun highlights(ids: List<Long>): List<HighlightEntity>
+
+  @Query("SELECT * FROM reading_session WHERE bookId IN (:ids) ORDER BY bookId, startedAt, id")
+  suspend fun sessions(ids: List<Long>): List<ReadingSessionEntity>
 }

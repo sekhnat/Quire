@@ -6,6 +6,7 @@ import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.HighlightEntity
+import com.quire.reader.data.db.ReadingSessionEntity
 import com.quire.reader.data.db.IdentityRow
 import com.quire.reader.data.db.BookTagEntity
 import com.quire.reader.data.db.QuireDatabase
@@ -19,8 +20,9 @@ data class ImportResult(
   val bookmarksAdded: Int,
   val highlightsAdded: Int,
   val tagsAdded: Int,
+  val sessionsAdded: Int = 0,
 ) {
-  val changed: Boolean get() = matched + tombstoned + statesWritten + bookmarksAdded + highlightsAdded + tagsAdded > 0
+  val changed: Boolean get() = matched + tombstoned + statesWritten + bookmarksAdded + highlightsAdded + tagsAdded + sessionsAdded > 0
 }
 
 /**
@@ -82,6 +84,7 @@ class SnapshotImporter(
     var bookmarks = 0
     var highlights = 0
     var tags = 0
+    var sessions = 0
     entries.forEachIndexed { index, entry ->
       val bookId = targets[index] ?: return@forEachIndexed
       val state = entry.state?.let { SnapshotMerge.mergeState(bookId, db.states().get(bookId), it) }
@@ -92,8 +95,9 @@ class SnapshotImporter(
       tags += mergeTags(bookId, entry.userTags)
       bookmarks += mergeBookmarks(bookId, entry.bookmarks)
       highlights += mergeHighlights(bookId, entry.highlights)
+      sessions += mergeSessions(bookId, entry.sessions)
     }
-    return ImportResult(matched, tombstoned, states, bookmarks, highlights, tags)
+    return ImportResult(matched, tombstoned, states, bookmarks, highlights, tags, sessions)
   }
 
   /** The book id that holds this unmatched entry: its earlier tombstone, or a newly created one. */
@@ -181,6 +185,16 @@ class SnapshotImporter(
       if (note != existing.note || color != existing.color) merged++
     }
     return added + merged
+  }
+
+  private suspend fun mergeSessions(bookId: Long, incoming: List<SnapshotSession>): Int {
+    if (incoming.isEmpty()) return 0
+    val present = db.stats().sessionsOf(bookId).mapTo(HashSet()) { it.startedAt to it.endedAt }
+    val added = SnapshotMerge.newSessions(present, incoming)
+    added.forEach {
+      db.stats().addSession(ReadingSessionEntity(bookId = bookId, startedAt = it.startedAt, endedAt = it.endedAt, activeMs = it.activeMs, startProgress = it.startProgress, endProgress = it.endProgress, readProgress = it.readProgress))
+    }
+    return added.size
   }
 
   /** A locator's identity: canonically keyed JSON when it parses, the raw text when it does not. */

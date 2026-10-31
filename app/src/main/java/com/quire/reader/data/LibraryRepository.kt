@@ -9,6 +9,7 @@ import androidx.tracing.traceAsync
 import com.quire.reader.data.db.BookTagEntity
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
+import com.quire.reader.data.db.ReadingSessionEntity
 import com.quire.reader.data.db.BookStateEntity
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
@@ -232,6 +233,10 @@ class LibraryRepository(
   fun highlights(bookId: Long): Flow<List<HighlightEntity>> = db.annotations().observeHighlights(bookId)
   suspend fun addHighlight(h: HighlightEntity) = db.annotations().addHighlight(h)
   suspend fun deleteHighlight(id: Long) = db.annotations().deleteHighlight(id)
+  suspend fun addReadingSession(session: ReadingSessionEntity) { db.stats().addSession(session) }
+  val readingSessions: Flow<List<ReadingSessionEntity>> = db.stats().observeSessions()
+  val finishedAt: Flow<List<Long>> = db.stats().observeFinished()
+
   suspend fun setHighlightColor(id: Long, color: Int) = db.annotations().setHighlightColor(id, color)
   suspend fun setHighlightNote(id: Long, note: String?) = db.annotations().setHighlightNote(id, note?.trim()?.takeIf { it.isNotEmpty() })
 

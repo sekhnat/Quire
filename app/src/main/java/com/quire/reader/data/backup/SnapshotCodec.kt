@@ -66,6 +66,10 @@ object SnapshotCodec {
         highlight.noteVariants?.takeIf { it.isEmpty() }?.let { return "book $index: empty noteVariants list" }
         highlight.color?.takeIf { it < 0 }?.let { return "book $index: highlight colour $it is negative" }
       }
+      for (session in book.sessions) {
+        if (session.endedAt < session.startedAt || session.activeMs < 0) return "book $index: session ends before it starts or has negative time"
+        if (listOf(session.startProgress, session.endProgress, session.readProgress).any { it !in 0f..1f }) return "book $index: session progress outside 0..1"
+      }
       book.userTags.firstOrNull { it.isBlank() }?.let { return "book $index: blank user tag" }
     }
     return null

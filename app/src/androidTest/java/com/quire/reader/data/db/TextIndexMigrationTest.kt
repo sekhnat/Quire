@@ -133,6 +133,19 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals(3L, added)
   }
 
+  @Test fun `migration to version 7 adds an empty session table that cascades with its book`() = runBlocking {
+    val db = migrated()
+    val sqlite = db.openHelper.writableDatabase
+    assertEquals(0, sqlite.count("SELECT COUNT(*) FROM reading_session"))
+
+    db.stats().addSession(ReadingSessionEntity(bookId = 1, startedAt = 10, endedAt = 20, activeMs = 5, startProgress = 0f, endProgress = 0.1f, readProgress = 0.1f))
+    db.stats().addSession(ReadingSessionEntity(bookId = 2, startedAt = 30, endedAt = 40, activeMs = 5, startProgress = 0f, endProgress = 0f, readProgress = 0f))
+    assertEquals(listOf(10L, 30L), db.stats().observeSessions().first().map { it.startedAt })
+
+    sqlite.execSQL("DELETE FROM book WHERE id = 1")
+    assertEquals(listOf(30L), db.stats().observeSessions().first().map { it.startedAt })
+  }
+
   private val legacyTriggers = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'room_fts_content_sync_text_chunk_fts%'"
   private val legacyTables = "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('text_chunk', 'text_chunk_fts', 'index_state', 'text_chunk_fts_terms')"
 

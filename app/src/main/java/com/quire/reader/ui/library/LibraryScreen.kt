@@ -188,10 +188,11 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
 @Composable
 private fun LibraryHeader(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-    Column {
+    // Takes what the icons leave, so a long count on a narrow screen is cut rather than pushed under them.
+    Column(Modifier.weight(1f).padding(end = 8.dp)) {
       QText("Library", 26f, weight = 500, ls = -0.01f)
       val folders = lib.folders.size
-      QText("${fmt(lib.books.size)} ${if (lib.books.size == 1) "book" else "books"} · $folders watched ${if (folders == 1) "folder" else "folders"}", 11.5f, color = Nq.neutral500)
+      QText("${fmt(lib.books.size)} ${if (lib.books.size == 1) "book" else "books"} · $folders watched ${if (folders == 1) "folder" else "folders"}", 11.5f, color = Nq.neutral500, maxLines = 1)
     }
     Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
       IconBtn(Ic.Search, library::toggleSearch, tint = if (s.searchOpen) Nq.accent else Nq.neutral300)
@@ -201,6 +202,7 @@ private fun LibraryHeader(s: LibraryUiState, lib: LibraryData, library: LibraryS
         library::cycleLayout, tint = Nq.neutral300,
       )
       IconBtn(Ic.Plus, { library.openImport(true) }, tint = Nq.accent)
+      IconBtn(Ic.ChartBar, library::openStats, tint = Nq.neutral300)
       IconBtn(Ic.Gear, library::openSettings, tint = Nq.neutral300)
     }
   }

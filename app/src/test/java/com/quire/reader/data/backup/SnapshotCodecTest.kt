@@ -24,11 +24,12 @@ class SnapshotCodecTest {
     userTags: List<String> = emptyList(),
     bookmarks: List<SnapshotBookmark> = emptyList(),
     highlights: List<SnapshotHighlight> = emptyList(),
+    sessions: List<SnapshotSession> = emptyList(),
     identity: SnapshotIdentity = SnapshotIdentity(calibreUuid = "u1"),
     missingSince: Long? = null,
   ) = SnapshotBook(
     identityKey = identityKeyOf(identity, entryKey), entryKey, identity, title = title, author = "Jane Austen",
-    addedAt = 10, missingSince = missingSince, state = state, userTags = userTags, bookmarks = bookmarks, highlights = highlights,
+    addedAt = 10, missingSince = missingSince, state = state, userTags = userTags, bookmarks = bookmarks, highlights = highlights, sessions = sessions,
   )
 
   private fun decode(text: String) = SnapshotCodec.decode(text)
@@ -76,6 +77,15 @@ class SnapshotCodecTest {
 
     val negative = snapshot(listOf(book(highlights = listOf(colored.copy(color = -1)))))
     assertTrue(decode(SnapshotCodec.encode(negative)) !is SnapshotCodec.Decoded.Ok)
+  }
+
+  @Test fun `sessions round trip, and an impossible one is rejected`() {
+    val session = SnapshotSession(startedAt = 100, endedAt = 400, activeMs = 250, startProgress = 0.1f, endProgress = 0.2f, readProgress = 0.09f)
+    val snap = snapshot(listOf(book(sessions = listOf(session))))
+    assertEquals(snap, (decode(SnapshotCodec.encode(snap)) as SnapshotCodec.Decoded.Ok).snapshot)
+    listOf(session.copy(endedAt = 50), session.copy(activeMs = -1), session.copy(endProgress = 1.5f)).forEach {
+      assertTrue("$it", decode(SnapshotCodec.encode(snapshot(listOf(book(sessions = listOf(it)))))) !is SnapshotCodec.Decoded.Ok)
+    }
   }
 
   @Test fun `a snapshot written before reader controls existed still decodes, with none`() {
