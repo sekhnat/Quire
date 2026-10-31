@@ -64,6 +64,7 @@ object SnapshotCodec {
         if (!isJsonObject(highlight.locatorJson)) return "book $index: highlight locator is not a JSON object"
         highlight.progress.takeIf { it !in 0f..1f }?.let { return "book $index: highlight progress ${highlight.progress} outside 0..1" }
         highlight.noteVariants?.takeIf { it.isEmpty() }?.let { return "book $index: empty noteVariants list" }
+        highlight.color?.takeIf { it < 0 }?.let { return "book $index: highlight colour $it is negative" }
       }
       book.userTags.firstOrNull { it.isBlank() }?.let { return "book $index: blank user tag" }
     }

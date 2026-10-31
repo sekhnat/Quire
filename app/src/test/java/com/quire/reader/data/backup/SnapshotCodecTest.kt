@@ -66,6 +66,18 @@ class SnapshotCodecTest {
     assertEquals(original, (decode(SnapshotCodec.encode(original)) as SnapshotCodec.Decoded.Ok).snapshot)
   }
 
+  @Test fun `a highlight colour round trips, is left out when default, and a negative one is rejected`() {
+    val colored = SnapshotHighlight("""{"href":"ch1.xhtml"}""", "x", progress = 0.1f, createdAt = 1, color = 3)
+    val plain = SnapshotHighlight("""{"href":"ch2.xhtml"}""", "y", progress = 0.2f, createdAt = 2)
+    val snap = snapshot(listOf(book(highlights = listOf(colored, plain))))
+    val text = SnapshotCodec.encode(snap)
+    assertEquals(snap, (decode(text) as SnapshotCodec.Decoded.Ok).snapshot)
+    assertEquals(1, Regex("\"color\"").findAll(text).count())
+
+    val negative = snapshot(listOf(book(highlights = listOf(colored.copy(color = -1)))))
+    assertTrue(decode(SnapshotCodec.encode(negative)) !is SnapshotCodec.Decoded.Ok)
+  }
+
   @Test fun `a snapshot written before reader controls existed still decodes, with none`() {
     val text = SnapshotCodec.encode(snapshot(settings = SnapshotSettings(brightness = 70)))
     assertFalse("readerControls" in text)

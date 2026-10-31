@@ -2,6 +2,7 @@ package com.quire.reader.reader
 
 import android.graphics.Color as AndroidColor
 import com.quire.reader.data.Book
+import com.quire.reader.data.HighlightColor
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.data.index.IndexTarget
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,6 @@ class TocEntry(val title: String, val depth: Int, val link: Link, val file: Stri
 class SearchHit(val locator: Locator, val before: String, val hit: String, val after: String, val chapter: String)
 
 /** Accent tint used for highlights. */
-private val HIGHLIGHT_TINT = AndroidColor.argb(255, 145, 132, 217)
 private val SEARCH_TINT = AndroidColor.argb(255, 233, 233, 237)
 
 /**
@@ -236,7 +236,7 @@ class ReaderSession(
     val nav = navigator as? DecorableNavigator ?: return
     val decorations = highlights.mapNotNull { h ->
       val locator = parseLocator(h.locatorJson) ?: return@mapNotNull null
-      Decoration(id = h.id.toString(), locator = locator, style = Decoration.Style.Highlight(tint = HIGHLIGHT_TINT), extras = mapOf("id" to h.id))
+      Decoration(id = h.id.toString(), locator = locator, style = Decoration.Style.Highlight(tint = HighlightColor.fromIndex(h.color).tint), extras = mapOf("id" to h.id))
     }
     nav.applyDecorations(decorations, HIGHLIGHTS)
   }

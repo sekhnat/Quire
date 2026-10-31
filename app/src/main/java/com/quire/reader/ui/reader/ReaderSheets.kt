@@ -58,6 +58,7 @@ import com.quire.reader.data.ReadMode
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
 import com.quire.reader.data.db.BookmarkEntity
+import com.quire.reader.data.HighlightColor
 import com.quire.reader.data.db.HighlightEntity
 import com.quire.reader.reader.ReaderFontList
 import com.quire.reader.reader.previewFamily
@@ -79,6 +80,7 @@ import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
 import com.quire.reader.ui.SegOption
 import com.quire.reader.ui.Segmented
+import com.quire.reader.ui.ColorDot
 import com.quire.reader.ui.Sheet
 import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.SnippetStyle
@@ -233,7 +235,7 @@ internal fun SettingRow(label: String, reason: String? = null, control: @Composa
 
 // ── contents / bookmarks / highlights ───────────────────────────────────────
 
-private class Row2(val title: String, val sub: String, val right: String, val current: Boolean, val indent: Int, val serif: Boolean, val marked: Boolean, val onDelete: (() -> Unit)?, val onClick: () -> Unit)
+private class Row2(val title: String, val sub: String, val right: String, val current: Boolean, val indent: Int, val serif: Boolean, val marked: Boolean, val onDelete: (() -> Unit)?, val accent: Color? = null, val onClick: () -> Unit)
 
 @Composable
 internal fun ContentsSheet(s: ReaderUiState, session: ReaderSession, bookmarks: List<BookmarkEntity>, highlights: List<HighlightEntity>, reader: ReaderState) {
@@ -243,6 +245,20 @@ internal fun ContentsSheet(s: ReaderUiState, session: ReaderSession, bookmarks: 
     Column(Modifier.fillMaxSize().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       TabRow2(TocTab.entries.map { it.label }, s.tocTab.ordinal, { reader.setTocTab(TocTab.entries[it]) }, Modifier.padding(horizontal = 20.dp), fill = true, horizontalPadding = 0.dp)
       val currentChapter = session.chapterIndex(locator)
+      // The colours in use, so the tab can be narrowed to one; a filter whose last highlight was deleted no longer applies.
+      val inUse = highlights.map { HighlightColor.fromIndex(it.color) }.distinct().sortedBy { it.ordinal }
+      val filter = s.highlightColorFilter?.let(HighlightColor::fromIndex)?.takeIf { it in inUse }
+      val shown = if (filter == null) highlights else highlights.filter { HighlightColor.fromIndex(it.color) == filter }
+      if (s.tocTab == TocTab.Highlights && inUse.size > 1) {
+        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+          val allShape = RoundedCornerShape(16.dp)
+          Box(
+            Modifier.clip(allShape).border(if (filter == null) 2.dp else 1.dp, if (filter == null) Nq.text else Nq.neutral800, allShape)
+              .clickable { reader.setHighlightColorFilter(null) }.padding(horizontal = 14.dp, vertical = 7.dp),
+          ) { QText("All", 12.5f, color = if (filter == null) Nq.text else Nq.neutral300) }
+          inUse.forEach { c -> ColorDot(c, selected = filter == c, size = 20.dp) { reader.setHighlightColorFilter(c.ordinal) } }
+        }
+      }
       val rows: List<Row2> = when (s.tocTab) {
         TocTab.Contents -> toc.mapIndexed { i, e ->
           Row2(e.title, "", if (e.position > 0) e.position.toString() else "", i == currentChapter, e.depth, false, false, null) { reader.goTo(e) }
@@ -250,8 +266,11 @@ internal fun ContentsSheet(s: ReaderUiState, session: ReaderSession, bookmarks: 
         TocTab.Bookmarks -> bookmarks.map { b ->
           Row2(b.label, "${(b.progress * 100).toInt()}% through the book", "", false, 0, false, true, { reader.deleteBookmark(b.id) }) { ReaderSession.parseLocator(b.locatorJson)?.let(reader::goTo) }
         }
-        TocTab.Highlights -> highlights.map { h ->
-          Row2(h.text.ifBlank { "Highlight" }, h.note ?: "${(h.progress * 100).toInt()}% through the book · highlighted", "", false, 0, true, true, { reader.deleteHighlight(h.id) }) { ReaderSession.parseLocator(h.locatorJson)?.let(reader::goTo) }
+        TocTab.Highlights -> shown.map { h ->
+          Row2(
+            h.text.ifBlank { "Highlight" }, h.note ?: "${(h.progress * 100).toInt()}% through the book · highlighted", "", false, 0, true, true, { reader.deleteHighlight(h.id) },
+            accent = Color(HighlightColor.fromIndex(h.color).tint),
+          ) { ReaderSession.parseLocator(h.locatorJson)?.let(reader::goTo) }
         }
       }
       val list = rememberLazyListState()
@@ -276,7 +295,7 @@ private fun TocItem(r: Row2) {
     Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (r.current) Nq.accentA(0.10f) else Color.Transparent).clickable(onClick = r.onClick).padding(start = 10.dp + (14 * r.indent).dp, end = 4.dp, top = 11.dp, bottom = 11.dp),
     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
   ) {
-    Box(Modifier.width(2.dp).heightIn(min = 30.dp).clip(RoundedCornerShape(2.dp)).background(if (mark) Nq.accent else Color.Transparent))
+    Box(Modifier.width(2.dp).heightIn(min = 30.dp).clip(RoundedCornerShape(2.dp)).background(if (mark) (r.accent ?: Nq.accent) else Color.Transparent))
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
       QText(r.title, 14f, color = if (r.current) Nq.accent200 else if (r.serif) Nq.neutral200 else Nq.text, family = if (r.serif) QuireFonts.Literata else QuireFonts.Inter, lh = 1.4f, maxLines = 2)
       if (r.sub.isNotEmpty()) QText(r.sub, 11f, color = Nq.neutral500, maxLines = 2)

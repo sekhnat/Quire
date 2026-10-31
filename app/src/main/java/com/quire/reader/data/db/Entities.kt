@@ -138,4 +138,6 @@ data class HighlightEntity(
   val note: String? = null,
   val progress: Float,
   val createdAt: Long,
+  /** Index into `HighlightColor`; 0 is the violet every highlight had before there was a choice. */
+  val color: Int = 0,
 )

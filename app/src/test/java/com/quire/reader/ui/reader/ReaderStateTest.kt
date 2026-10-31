@@ -212,6 +212,22 @@ class ReaderStateTest {
     assertEquals(ReaderControls(volumeKeys = true, orientation = ReaderOrientation.Portrait), reader.controls.value)
   }
 
+  @Test fun `recolouring a highlight writes it and makes that colour the next one's`() = runTest(dispatcher) {
+    val reader = reader()
+    reader.setHighlightColor(7, 2)
+    runCurrent()
+    assertTrue("colour 7 2" in store.writes)
+    assertEquals(2, store.lastColor.value)
+  }
+
+  @Test fun `the highlights list can be narrowed to a colour and widened again`() = runTest(dispatcher) {
+    val reader = reader()
+    reader.setHighlightColorFilter(3)
+    assertEquals(3, reader.ui.value.highlightColorFilter)
+    reader.setHighlightColorFilter(null)
+    assertNull(reader.ui.value.highlightColorFilter)
+  }
+
   @Test fun `any overlay over the page counts as open`() {
     assertFalse(ReaderUiState().overlaysOpen)
     listOf(
