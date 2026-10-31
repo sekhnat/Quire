@@ -172,6 +172,7 @@ class SnapshotWriter(
             progress = highlight.progress,
             createdAt = highlight.createdAt,
             chapter = chapterLabel(highlight.locatorJson),
+            color = highlight.color.takeIf { it != 0 },
           )
         },
       )

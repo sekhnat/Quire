@@ -15,7 +15,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Runs the version 1 -> 5, 2 -> 5, 3 -> 5 and 4 -> 5 migrations on the device's own SQLite, over a real file, and the
+ * Runs the version 1, 2, 3 and 4 migrations up to the current version on the device's own SQLite, over a real file, and the
  * one-off removal of the index that version 5 moved out of `quire.db`.
  */
 class TextIndexMigrationTest : DbTestCase() {
@@ -113,13 +113,24 @@ class TextIndexMigrationTest : DbTestCase() {
 
     val db = open(file)
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(5, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(QuireDatabase.VERSION, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
     // Later versions only append columns, so the v1 columns come first and must hold exactly what they held.
     val after = v1Tables.associateWith { t -> sqlite.rows("SELECT * FROM $t ORDER BY rowid").map { it.take(before.getValue(t).first().size) } }
 
     assertEquals(before, after)
     assertTrue(sqlite.rows("PRAGMA foreign_key_check").isEmpty())
     assertEquals("ok", sqlite.rows("PRAGMA integrity_check").single().single())
+  }
+
+  @Test fun `migration to version 6 gives every existing highlight the default colour and takes new ones`() = runBlocking {
+    val db = migrated()
+    val sqlite = db.openHelper.writableDatabase
+    assertEquals(listOf("0", "0"), sqlite.rows("SELECT color FROM highlight ORDER BY id").map { it[0] })
+
+    db.annotations().setHighlightColor(2, 3)
+    val added = db.annotations().addHighlight(HighlightEntity(bookId = 1, locatorJson = "{}", text = "x", progress = 0.9f, createdAt = 1, color = 4))
+    assertEquals(listOf(0, 3, 4), db.annotations().highlightsOf(1).map { it.color })
+    assertEquals(3L, added)
   }
 
   private val legacyTriggers = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'room_fts_content_sync_text_chunk_fts%'"
@@ -131,7 +142,7 @@ class TextIndexMigrationTest : DbTestCase() {
       val before = dumpV1Tables(file)
       val db = open(file)
       val sqlite = db.openHelper.writableDatabase
-      assertEquals(5, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+      assertEquals(QuireDatabase.VERSION, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
       // Nothing writes to the old tables any more, but dropping them is left to the background.
       assertEquals(0, sqlite.count(legacyTriggers))
       assertTrue(sqlite.count(legacyTables) >= 3)
@@ -170,7 +181,7 @@ class TextIndexMigrationTest : DbTestCase() {
   @Test fun `migration from version 3 keeps every book in the library with its history and identity still to be read`() = runBlocking {
     val db = open(createV2File(version = 3))
     val sqlite = db.openHelper.writableDatabase
-    assertEquals(5, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
+    assertEquals(QuireDatabase.VERSION, sqlite.rows("PRAGMA user_version").single().single()!!.toInt())
     assertEquals(
       listOf(listOf<String?>(null, null, null, null), listOf<String?>(null, null, null, null)),
       sqlite.rows("SELECT calibreUuid, epubUid, fingerprint, missingSince FROM book ORDER BY id"),
