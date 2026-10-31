@@ -319,6 +319,9 @@ class LibraryRepository(
   val lastHighlightColor: Flow<Int> = settings.lastHighlightColor
   suspend fun setLastHighlightColor(v: Int) = settings.setLastHighlightColor(v)
 
+  val readAloudPrefs: Flow<ReadAloudPrefs> = settings.readAloudPrefs
+  suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs) = settings.setReadAloudPrefs(prefs)
+
   val readerControls: Flow<ReaderControls> = settings.readerControls
   suspend fun setReaderControls(controls: ReaderControls) = settings.setReaderControls(controls)
 

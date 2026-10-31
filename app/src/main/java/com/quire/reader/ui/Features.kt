@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Intent
+import android.speech.tts.TextToSpeech
 import android.util.Log
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -21,6 +22,7 @@ import java.io.File
 import android.net.Uri
 import com.quire.reader.QuireApplication
 import com.quire.reader.data.AdvancedReaderPrefs
+import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
@@ -46,6 +48,8 @@ import com.quire.reader.data.scan.FolderCandidate
 import com.quire.reader.data.scan.FolderDiscovery
 import kotlinx.coroutines.ensureActive
 import com.quire.reader.ui.reader.ReaderState
+import com.quire.reader.reader.AndroidReadAloudOpener
+import com.quire.reader.reader.ReadAloudSupport
 import com.quire.reader.ui.reader.ReaderStore
 import com.quire.reader.ui.reader.ReadingSpan
 import com.quire.reader.ui.stats.StatsState
@@ -143,6 +147,8 @@ class Features(private val app: QuireApplication) {
     override val lastHighlightColor get() = repo.lastHighlightColor
     override suspend fun setLastHighlightColor(color: Int) { repo.setLastHighlightColor(color) }
     override val readerControls get() = repo.readerControls
+    override val readAloudPrefs get() = repo.readAloudPrefs
+    override suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs) { repo.setReadAloudPrefs(prefs) }
     override val brightness get() = repo.brightness
     override suspend fun setBrightness(value: Int) { repo.setBrightness(value) }
     override suspend fun searchBookPage(bookId: Long, query: FtsQuery.Result.Query, afterSeq: Int) = repo.searchBookPage(bookId, query, afterSeq)
@@ -167,9 +173,14 @@ class Features(private val app: QuireApplication) {
     if (app.packageManager.queryIntentActivities(lookUpIntent(""), 0).isEmpty()) null
     else { text -> launchOutside(Intent.createChooser(lookUpIntent(text), "Look up")) }
 
+  private val readAloudSupport = ReadAloudSupport(
+    AndroidReadAloudOpener(app),
+    installVoices = { launchOutside(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)) },
+  )
+
   /** A reader for [request]; it starts opening the book at once. */
   fun reader(request: ReaderRequest, library: StateFlow<LibraryData>, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
-    ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, ::shareText, lookUp(), scope, persist, app.appScope)
+    ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, ::shareText, lookUp(), scope, persist, app.appScope, readAloudSupport = readAloudSupport)
 
   private val statsStore = object : StatsStore {
     override val sessions get() = repo.readingSessions

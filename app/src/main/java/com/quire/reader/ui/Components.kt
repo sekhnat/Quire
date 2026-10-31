@@ -133,6 +133,13 @@ object Ic {
   val NotePencil = R.drawable.ph_note_pencil
   val Copy = R.drawable.ph_copy
   val ChartBar = R.drawable.ph_chart_bar
+  // Drawn for the read-aloud controls; plain shapes rather than Phosphor icons.
+  val Play = R.drawable.ic_play
+  val Pause = R.drawable.ic_pause
+  val SkipBack = R.drawable.ic_skip_back
+  val SkipForward = R.drawable.ic_skip_forward
+  val Headphones = R.drawable.ic_headphones
+  val Speaker = R.drawable.ic_speaker
   val ShareNetwork = R.drawable.ph_share_network
   val BookBookmark = R.drawable.ph_book_bookmark
   val CheckBold = R.drawable.ph_check_bold

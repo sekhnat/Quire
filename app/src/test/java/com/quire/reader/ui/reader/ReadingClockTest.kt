@@ -36,6 +36,12 @@ class ReadingClockTest {
     assertEquals(ReadingClock.IDLE_CAP_MS, clock.pause()!!.activeMs)
   }
 
+  @Test fun `signs of life without a page turn keep long listening counting`() {
+    clock.resume(0f)
+    repeat(10) { advance(2 * 60_000); clock.tick() }   // twenty minutes of being read to
+    assertEquals(20 * 60_000L, clock.pause()!!.activeMs)
+  }
+
   @Test fun `a visit under thirty seconds is not a session, and the next one starts fresh`() {
     clock.resume(0f)
     advance(29_000)

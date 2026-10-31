@@ -94,6 +94,7 @@ object SnapshotMerge {
       readerDefaults = incoming.readerDefaults ?: local.readerDefaults,
       advancedReadingEnabled = incoming.advancedReadingEnabled ?: local.advancedReadingEnabled,
       readerControls = incoming.readerControls ?: local.readerControls,
+      readAloud = incoming.readAloud ?: local.readAloud,
     )
   }
 }
