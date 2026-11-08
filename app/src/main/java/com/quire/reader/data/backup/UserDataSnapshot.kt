@@ -41,6 +41,8 @@ data class SnapshotSettings(
   val readerControls: ReaderControls? = null,
   /** Read-aloud speed and voices; absent in older snapshots. */
   val readAloud: ReadAloudPrefs? = null,
+  /** Tags whose books the library hides; absent in older snapshots. */
+  val hiddenTags: List<String>? = null,
 )
 
 /** A book's identity keys, mirroring what a scan can read again from the file (see `BookIdentity`). */

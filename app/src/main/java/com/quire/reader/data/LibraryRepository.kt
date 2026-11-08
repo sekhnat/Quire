@@ -280,6 +280,11 @@ class LibraryRepository(
   suspend fun setUseCalibre(v: Boolean) = settings.setUseCalibre(v)
   suspend fun setWatchNewBooks(v: Boolean) = settings.setWatchNewBooks(v)
 
+  /** Every tag in the library, each once, in name order; the hidden-tags picker chooses from these. */
+  val tagNames: Flow<List<String>> = db.books().observeTagNames()
+  val hiddenTags: Flow<Set<String>> = settings.hiddenTags
+  suspend fun setTagHidden(tag: String, hidden: Boolean) = settings.setTagHidden(tag, hidden)
+
   val indexingEnabled: Flow<Boolean> = settings.indexingEnabled
   val indexChargingOnly: Flow<Boolean> = settings.indexChargingOnly
   suspend fun setIndexingEnabled(v: Boolean) = settings.setIndexingEnabled(v)

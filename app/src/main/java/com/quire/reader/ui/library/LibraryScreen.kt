@@ -282,9 +282,11 @@ private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibrarySta
     if (visible.lib.loaded && list.isEmpty() && layout != LibLayout.Shelves) {
       Column(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Ph(Ic.Books, 28.dp, Nq.neutral500)
-        if (visible.lib.books.isEmpty()) {
+        if (visible.lib.all.isEmpty()) {
           QText("No books yet. Add a folder that has EPUB, AZW3 or MOBI files in it.", 13f, color = Nq.neutral500, align = androidx.compose.ui.text.style.TextAlign.Center)
           QButton("Add books", { library.openImport(true) }, kind = BtnKind.Primary, icon = Ic.Plus, size = 13f)
+        } else if (visible.lib.books.isEmpty()) {
+          QText("Every book has a hidden tag. Hidden tags are in Settings, under Library.", 13f, color = Nq.neutral500, align = androidx.compose.ui.text.style.TextAlign.Center)
         } else QText("Nothing matches that filter.", 13f, color = Nq.neutral500)
       }
     }
@@ -418,7 +420,7 @@ private fun ImportSheet(s: LibraryUiState, lib: LibraryData, library: LibrarySta
         Kicker("Watched folders")
         if (lib.folders.isEmpty()) QText("No folders yet.", 12f, Modifier.padding(vertical = 8.dp), color = Nq.neutral500)
         lib.folders.forEach { f ->
-          val count = lib.books.count { it.folderId == f.id }
+          val count = lib.all.count { it.folderId == f.id }
           Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Ph(Ic.FolderSimple, 18.dp, Nq.neutral400)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {

@@ -46,6 +46,8 @@ data class Book(
   val tags: List<String>,
   /** The subset of [tags] added inside Quire (these can be removed again). */
   val userTags: List<String>,
+  /** The one of [tags] naming the folder the file is in; null when it has none. */
+  val folderTag: String? = null,
   val language: String?,
   /** The user's rating if they set one, otherwise Calibre's (0–5). */
   val rating: Int,
@@ -107,7 +109,7 @@ private fun isNew(status: BookStatus, addedAt: Long, now: Long) = status == Book
  */
 fun CatalogRow.toBook(now: Long): Book = Book(
   id = id, path = path, folderId = folderId, title = title, sortTitle = sortTitle, author = author, primaryAuthor = primaryAuthor,
-  authorSort = authorSort, series = series, seriesNo = seriesIndex, year = pubYear, pages = pageEstimate, tags = tagList, userTags = userTagList, language = language,
+  authorSort = authorSort, series = series, seriesNo = seriesIndex, year = pubYear, pages = pageEstimate, tags = tagList, userTags = userTagList, folderTag = folderTag, language = language,
   rating = calibreRating, status = BookStatus.Unread, progress = 0f, lastOpened = 0L, addedAt = addedAt,
   sizeBytes = sizeBytes, desc = description, coverPath = coverPath, fromCalibre = source == "calibre", readable = readable,
   isNew = isNew(BookStatus.Unread, addedAt, now),

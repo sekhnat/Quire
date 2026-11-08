@@ -13,12 +13,19 @@ data class ShelfDef(val title: String, val sub: String, val coverWidthDp: Int, v
 
 /**
  * Everything the library screens derive from the book list, computed once per change rather than on every
- * recomposition. `LibraryState` builds it off the main thread. The cheap values every screen shows are worked out then;
+ * recomposition. [books] leaves out every book with one of the [hidden] tags; [byId] still has them (from [all]), so a
+ * book opened elsewhere, its page and Stats can still find it. `LibraryState` builds it off the main thread. The cheap values every screen shows are worked out then;
  * the lazy ones belong to one view each and are first read by `LibraryState`'s derived flows, also off the main
  * thread, so composition only ever reads values that are already there.
  */
-class LibraryData(val books: List<Book>, val folders: List<FolderEntity>, val loaded: Boolean = true) {
-  val byId: Map<Long, Book> = books.associateBy { it.id }
+class LibraryData(
+  val all: List<Book>,
+  val folders: List<FolderEntity>,
+  val hidden: Set<String> = emptySet(),
+  val loaded: Boolean = true,
+) {
+  val books: List<Book> = if (hidden.isEmpty()) all else all.filter { b -> b.tags.none { it in hidden } }
+  val byId: Map<Long, Book> = all.associateBy { it.id }
 
   val counts: Map<LibFilter, Int> = mapOf(
     LibFilter.All to books.size,

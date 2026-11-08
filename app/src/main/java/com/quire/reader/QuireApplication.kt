@@ -61,7 +61,7 @@ class QuireApplication : Application() {
   val settings by lazy { SettingsStore(this) }
   val covers by lazy { CoverStore(this) }
   val publicationLoader by lazy { PublicationLoader(this) }
-  val scanner by lazy { LibraryScanner(database, publicationLoader, covers, settings) }
+  val scanner by lazy { LibraryScanner(database, publicationLoader, covers, settings, importedDir = java.io.File(filesDir, "imported")) }
   val indexer by lazy { LibraryIndexer(this, database, indexDatabase, publicationLoader, settings, appScope) }
   val library by lazy { LibraryRepository(this, database, indexDatabase, scanner, covers, settings, indexer) }
 
