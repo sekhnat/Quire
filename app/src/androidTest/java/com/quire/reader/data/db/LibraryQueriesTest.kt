@@ -3,6 +3,7 @@ package com.quire.reader.data.db
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -44,5 +45,32 @@ class LibraryQueriesTest : DbTestCase() {
     assertEquals(listOf(kept), db.books().catalogByIds(listOf(kept, kept + 1)).map { it.id })
     db.states().edit(kept) { it.copy(userRating = 4) }
     assertEquals(listOf(4), db.states().readingOf(listOf(kept)).map { it.userRating })
+  }
+
+  @Test fun `a folder tag is read apart from the others and hidden tags keep books out of text search`() = runBlocking {
+    val db = open()
+    val folderId = folder(db)
+    val a = db.books().save(bookEntity(folderId, "A").copy(path = "/lib/Fiction/a.epub"), listOf("Classic"), folderTag = "Fiction")
+    val b = db.books().save(bookEntity(folderId, "B").copy(path = "/lib/b.epub"), emptyList(), folderTag = "lib")
+    db.books().insertTags(listOf(BookTagEntity(b, "Private", BookTagEntity.ORIGIN_USER)))
+
+    val rows = db.books().observeCatalog().first().associateBy { it.id }
+    assertEquals("Fiction", rows.getValue(a).folderTag)
+    assertEquals(setOf("Classic", "Fiction"), rows.getValue(a).tagList.toSet())
+    assertEquals(emptyList<String>(), rows.getValue(a).userTagList)
+    assertEquals(listOf("Classic", "Fiction", "lib", "Private"), db.books().observeTagNames().first())
+
+    fun searchable(hidden: List<String>, tag: String? = null) = runBlocking { db.search().searchableBooks(null, null, tag, null, 0, hidden).map { it.id }.toSet() }
+    assertEquals(setOf(a, b), searchable(emptyList()))
+    assertEquals(setOf(a), searchable(listOf("Private")))
+    assertEquals(setOf(b), searchable(listOf("Fiction")))
+    assertEquals(emptySet<Long>(), searchable(listOf("Classic", "lib")))
+    assertEquals(setOf(a), searchable(listOf("Private"), tag = "Classic"))
+
+    // A rescan replaces the folder tag and keeps the user's.
+    db.books().setFolderTags(listOf(b to "Other", a to null))
+    val after = db.books().observeCatalog().first().associateBy { it.id }
+    assertEquals(null, after.getValue(a).folderTag)
+    assertEquals(setOf("Other", "Private"), after.getValue(b).tagList.toSet())
   }
 }

@@ -44,6 +44,7 @@ object SnapshotCodec {
     snapshot.settings.textSearchOrder?.takeIf { order ->
       com.quire.reader.data.index.SearchOrder.entries.none { it.name == order }
     }?.let { return "unknown text search order $it" }
+    snapshot.settings.hiddenTags?.firstOrNull { it.isBlank() }?.let { return "blank hidden tag" }
     for ((index, book) in snapshot.books.withIndex()) {
       if (book.entryKey.isBlank()) return "book $index: empty entryKey"
       if (book.identityKey.isBlank()) return "book $index: empty identityKey"

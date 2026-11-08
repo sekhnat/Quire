@@ -34,12 +34,16 @@ data class CatalogRow(
   val coverPath: String?,
   val source: String,
   val readable: Boolean,
-  /** Tags separated by the ASCII unit separator (U+001F), each prefixed `c` (from the book) or `u` (added in Quire). */
+  /**
+   * Tags separated by the ASCII unit separator (U+001F), each prefixed `c` (from the book), `f` (the folder it is in) or
+   * `u` (added in Quire).
+   */
   val tags: String?,
 ) {
   private val tagEntries: List<String> get() = tags?.split('\u001F')?.filter { it.length > 1 }.orEmpty()
   val tagList: List<String> get() = tagEntries.map { it.substring(1) }
   val userTagList: List<String> get() = tagEntries.filter { it[0] == 'u' }.map { it.substring(1) }
+  val folderTag: String? get() = tagEntries.firstOrNull { it[0] == 'f' }?.substring(1)
 }
 
 /** The part of a book's reading state the library shows; a book without a `book_state` row has none yet. */
@@ -52,6 +56,8 @@ data class KnownFile(
   val missing: Boolean = false,
   /** False for books stored before identity keys existed; a scan reads their keys without re-reading the book. */
   val hasIdentity: Boolean = true,
+  /** The book's folder tag (origin `folder`), null when it has none yet; a scan corrects it without re-reading the book. */
+  val folderTag: String? = null,
 )
 
 /** A book's identity keys, for matching books whose file vanished to files found elsewhere (see `matchMoves`). */
@@ -130,7 +136,7 @@ private const val CATALOG_SQL = """
     SELECT b.id, b.path, b.folderId, b.title, b.sortTitle, b.author, b.primaryAuthor, b.authorSort, b.series, b.seriesIndex,
            b.pubYear, b.language, b.description, b.calibreRating, b.sizeBytes, b.addedAt, b.pageEstimate, b.coverPath, b.source,
            b.readable,
-           (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
+           (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' WHEN 'folder' THEN 'f' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
     FROM book b
     WHERE b.missingSince IS NULL
     """
@@ -144,7 +150,13 @@ abstract class BookDao {
   @Query("$CATALOG_SQL AND b.id IN (:ids)") abstract suspend fun catalogByIds(ids: List<Long>): List<CatalogRow>
 
   /** Every book with a path, missing ones included, so a file that comes back finds its row. */
-  @Query("SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath, missingSince IS NOT NULL AS missing, fingerprint IS NOT NULL AS hasIdentity FROM book")
+  @Query(
+    """
+    SELECT id, path, folderId, sizeBytes, mtime, addedAt, coverPath, missingSince IS NOT NULL AS missing, fingerprint IS NOT NULL AS hasIdentity,
+           (SELECT t.tag FROM book_tag t WHERE t.bookId = book.id AND t.origin = 'folder' LIMIT 1) AS folderTag
+    FROM book
+    """,
+  )
   abstract suspend fun knownFiles(): List<KnownFile>
   @Query("SELECT * FROM book WHERE id = :id") abstract suspend fun byId(id: Long): BookEntity?
   @Query("SELECT * FROM book WHERE path = :path") abstract suspend fun byPath(path: String): BookEntity?
@@ -171,16 +183,42 @@ abstract class BookDao {
   @Query("DELETE FROM book_tag WHERE bookId = :bookId AND tag = :tag AND origin = 'user'") abstract suspend fun deleteUserTag(bookId: Long, tag: String)
 
   @Query("SELECT tag FROM book_tag WHERE bookId = :bookId AND origin = 'user'") abstract suspend fun userTags(bookId: Long): List<String>
+  /** Every tag of the books in the library (not missing ones), each once, in name order ignoring case. */
+  @Query(
+    """
+    SELECT DISTINCT t.tag FROM book_tag t JOIN book b ON b.id = t.bookId
+    WHERE b.missingSince IS NULL
+    ORDER BY t.tag COLLATE NOCASE, t.tag
+    """,
+  )
+  abstract fun observeTagNames(): Flow<List<String>>
+
   /**
-   * Writes a scanned book and replaces its Calibre tags in one transaction. The row id is kept when the
-   * file was already known so reading state, bookmarks and highlights stay attached.
+   * Writes a scanned book and replaces its Calibre tags and its folder tag in one transaction. The row id is kept when
+   * the file was already known so reading state, bookmarks and highlights stay attached.
    */
   @Transaction
-  open suspend fun save(book: BookEntity, tags: List<String>): Long {
+  open suspend fun save(book: BookEntity, tags: List<String>, folderTag: String? = null): Long {
     val id = upsertKeepingId(book)
     deleteTags(id, BookTagEntity.ORIGIN_CALIBRE)
     insertTags(tags.distinct().map { BookTagEntity(id, it, BookTagEntity.ORIGIN_CALIBRE) })
+    replaceFolderTag(id, folderTag)
     return id
+  }
+
+  /**
+   * Gives a book the folder tag [tag] in place of the one it had (none for null). A book that already has that tag from
+   * its metadata or from the user keeps that one; the folder's is then not stored (the tag is shown either way).
+   */
+  private suspend fun replaceFolderTag(bookId: Long, tag: String?) {
+    deleteTags(bookId, BookTagEntity.ORIGIN_FOLDER)
+    if (tag != null) insertTags(listOf(BookTagEntity(bookId, tag, BookTagEntity.ORIGIN_FOLDER)))
+  }
+
+  /** Sets the folder tags of several books in one transaction (book id to its new tag, null for none). */
+  @Transaction
+  open suspend fun setFolderTags(changes: List<Pair<Long, String?>>) {
+    for ((id, tag) in changes) replaceFolderTag(id, tag)
   }
 
   @Update abstract suspend fun update(book: BookEntity)
@@ -213,11 +251,11 @@ abstract class BookDao {
   @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NOT NULL") abstract suspend fun missingIdentities(): List<IdentityRow>
   @Query("$IDENTITY_ROWS_SQL AND b.missingSince IS NULL") abstract suspend fun liveIdentities(): List<IdentityRow>
 
-  @Query("SELECT tag FROM book_tag WHERE bookId = :bookId AND origin = 'calibre'") protected abstract suspend fun calibreTags(bookId: Long): List<String>
+  @Query("SELECT * FROM book_tag WHERE bookId = :bookId AND origin IN ('calibre', 'folder')") protected abstract suspend fun scannedTags(bookId: Long): List<BookTagEntity>
 
   /**
    * Moves the missing book [missingId] onto the file of the live book [liveId], which must have no history of its own
-   * (the caller checks): the missing row takes the live row's file, metadata, identity and Calibre tags and keeps its id,
+   * (the caller checks): the missing row takes the live row's file, metadata, identity, Calibre tags and folder tag and keeps its id,
    * `addedAt` and everything attached to it, and the live row is deleted. The text index stays when the file is the same
    * (the signature still matches); otherwise the book is indexed again. Null, changing nothing, when either side has
    * changed state in the meantime.
@@ -226,13 +264,14 @@ abstract class BookDao {
   open suspend fun adopt(missingId: Long, liveId: Long): Adoption? {
     val old = byId(missingId)?.takeIf { it.missingSince != null } ?: return null
     val new = byId(liveId)?.takeIf { it.missingSince == null } ?: return null
-    val tags = calibreTags(liveId)
+    val tags = scannedTags(liveId)
     delete(listOf(liveId))
     // Readium's real page count replaced the estimate on the old row; it still holds for the same file.
     val sameFile = old.fingerprint != null && old.fingerprint == new.fingerprint
     update(new.copy(id = old.id, addedAt = old.addedAt, pageEstimate = if (sameFile) old.pageEstimate else new.pageEstimate))
     deleteTags(old.id, BookTagEntity.ORIGIN_CALIBRE)
-    insertTags(tags.map { BookTagEntity(old.id, it, BookTagEntity.ORIGIN_CALIBRE) })
+    deleteTags(old.id, BookTagEntity.ORIGIN_FOLDER)
+    insertTags(tags.map { it.copy(bookId = old.id) })
     return Adoption(staleCover = old.coverPath?.takeIf { it != new.coverPath })
   }
 

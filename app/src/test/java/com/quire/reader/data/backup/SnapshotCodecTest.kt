@@ -64,6 +64,7 @@ class SnapshotCodecTest {
         textSearchOrder = "Library",
         readerControls = ReaderControls(volumeKeys = true, keepScreenOn = true, orientation = ReaderOrientation.Landscape),
         readAloud = ReadAloudPrefs(speed = 1.25, voices = mapOf("en-US" to "en-us-x-tpd-local")),
+        hiddenTags = listOf("Private", "Textbooks"),
       ),
     )
     assertEquals(original, (decode(SnapshotCodec.encode(original)) as SnapshotCodec.Decoded.Ok).snapshot)
@@ -136,6 +137,7 @@ class SnapshotCodecTest {
     rejects(snapshot(settings = SnapshotSettings(brightness = 10)))
     rejects(snapshot(settings = SnapshotSettings(brightness = 101)))
     rejects(snapshot(settings = SnapshotSettings(textSearchOrder = "Random")))
+    rejects(snapshot(settings = SnapshotSettings(hiddenTags = listOf("Private", " "))))
     rejects(snapshot(listOf(book(state = SnapshotBookState(progress = 1.5f)))))
     rejects(snapshot(listOf(book(state = SnapshotBookState(progress = -0.1f)))))
     rejects(snapshot(listOf(book(state = SnapshotBookState(status = "skimming")))))

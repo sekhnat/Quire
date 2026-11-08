@@ -94,7 +94,8 @@ class LibraryIdentityTest : DbTestCase() {
     assertEquals(id, row.id)
     assertEquals("The Title", row.title)
     assertTrue(row.path.endsWith("The Title (12)/The Title - Ann Author.epub"))
-    assertEquals(setOf("Mystery", "favourite"), row.tagList.toSet())
+    assertEquals(setOf("Mystery", "favourite", "lib"), row.tagList.toSet())
+    assertEquals("lib", row.folderTag)
     f.assertHistory(id)
     assertEquals(emptyList<Any>(), f.missing())
     assertEquals(ScanResult(added = 0, updated = 0, removed = 0, unreadable = 0, moved = 1), result)
@@ -264,5 +265,54 @@ class LibraryIdentityTest : DbTestCase() {
     assertNull(f.db.states().get(idA))
     assertEquals(emptyList<Any>(), f.missing())
     assertEquals(listOf(idB), f.live().map { it.id })
+  }
+
+  @Test fun `every book is tagged with the folder it is in and the tag follows a move`() {
+    val f = fixture()
+    val loose = book(File(lib, "Loose.epub"), "A loose book.")
+    val nested = book(File(lib, "Downloads/ABC/DEF/Nested.epub"), "A nested book.")
+    val calibreDir = File(lib, "Ann Author/A Title (3)")
+    book(File(calibreDir, "A Title - Ann Author.epub"), "A Calibre book.")
+    calibreOpf(calibreDir, "calibre-uuid-3", "A Title")
+    f.scan()
+    val tags = { f.live().associate { File(it.path).name to it.folderTag } }
+    assertEquals(mapOf("Loose.epub" to "lib", "Nested.epub" to "DEF", "A Title - Ann Author.epub" to "lib"), tags())
+
+    // Moved by the user (same file, so it is not read again): the tag follows it.
+    move(nested, File(lib, "Downloads/ABC/Nested.epub"))
+    move(loose, File(lib, "Shelf/Loose.epub"))
+    f.scan()
+    assertEquals(mapOf("Loose.epub" to "Shelf", "Nested.epub" to "ABC", "A Title - Ann Author.epub" to "lib"), tags())
+  }
+
+  @Test fun `books stored before folder tags are tagged by the next scan without being read again`() = runBlocking {
+    val f = fixture()
+    val file = book(File(lib, "Fiction/Old.epub"))
+    f.scan()
+    val id = f.live().single().id
+    f.db.books().setFolderTags(listOf(id to null))
+    f.read(id)
+    assertNull(f.live().single().folderTag)
+
+    val result = f.scan()
+    assertEquals(ScanResult(added = 0, updated = 0, removed = 0, unreadable = 0), result)
+    val row = f.live().single()
+    assertEquals("Fiction", row.folderTag)
+    assertEquals(setOf("Fiction", "favourite"), row.tagList.toSet())
+    assertEquals(file.absolutePath, row.path)
+  }
+
+  @Test fun `a book whose history moves onto a file found elsewhere takes the folder tag of that file`() = runBlocking {
+    val f = fixture()
+    val file = book(File(lib, "inbox/Novel.epub"))
+    f.scan()
+    val id = f.live().single().id
+    f.read(id)
+    move(file, File(lib, "shelf/Novel (renamed).epub"))
+    f.scan()
+    val row = f.live().single()
+    assertEquals(id, row.id)
+    assertEquals("shelf", row.folderTag)
+    assertEquals(setOf("shelf", "favourite"), row.tagList.toSet())
   }
 }

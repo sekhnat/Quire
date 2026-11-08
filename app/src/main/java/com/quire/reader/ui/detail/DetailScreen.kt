@@ -123,7 +123,10 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
         if (!book.desc.isNullOrBlank()) QText(book.desc, 14f, color = Nq.neutral300, lh = 1.6f)
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          book.tags.take(12).forEach { t -> Tag(t, { detail.showScope(Scope(ScopeKind.Tag, t)) }, size = 12f, vPad = 3.dp) }
+          // The folder tag first, marked with a folder, then the book's own and the user's.
+          (listOfNotNull(book.folderTag) + book.tags.filter { it != book.folderTag }).take(12).forEach { t ->
+            Tag(t, { detail.showScope(Scope(ScopeKind.Tag, t)) }, size = 12f, icon = if (t == book.folderTag) Ic.FolderSimple else null, vPad = 3.dp)
+          }
           Tag("Tag", { detail.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
         }
 
@@ -208,12 +211,13 @@ private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Kicker("Tags")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          book.tags.filter { it !in book.userTags }.forEach { t -> Tag(t, {}, size = 12f, vPad = 4.dp) }
+          book.folderTag?.let { t -> Tag(t, {}, size = 12f, icon = Ic.FolderSimple, vPad = 4.dp) }
+          book.tags.filter { it !in book.userTags && it != book.folderTag }.forEach { t -> Tag(t, {}, size = 12f, vPad = 4.dp) }
           book.userTags.forEach { t -> Tag(t, { detail.removeTag(t) }, size = 12f, icon = Ic.X, accent = true, vPad = 4.dp) }
         }
         QTextField(newTag, { newTag = it }, "Add a tag", leadingIcon = Ic.Plus, onSubmit = { if (newTag.isNotBlank()) { detail.addTag(newTag); newTag = "" } })
       }
-      QText("Your tags (outlined in purple) can be removed here. Tags that came with the book can only be changed in Calibre. Your changes stay in Quire.", 11.5f, color = Nq.neutral500, lh = 1.4f)
+      QText("Your tags (outlined in purple) can be removed here. Tags that came with the book can only be changed in Calibre, and the folder tag follows the folder the file is in. Your changes stay in Quire.", 11.5f, color = Nq.neutral500, lh = 1.4f)
       QButton("Export notes", { notesExport.launch("${book.title} — notes.md") }, Modifier.fillMaxWidth(), icon = Ic.FileDown, size = 12.5f)
     }
   }

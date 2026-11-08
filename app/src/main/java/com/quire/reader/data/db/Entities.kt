@@ -76,11 +76,16 @@ data class BookEntity(
 data class BookTagEntity(
   val bookId: Long,
   val tag: String,
-  /** `calibre` tags are replaced on rescan; `user` tags are Quire's own and survive. */
+  /**
+   * `calibre` tags (read from the book or its metadata.opf) are replaced on rescan; `folder` is the one tag naming the
+   * folder the file was found in (see [com.quire.reader.data.scan.FolderTags]), kept in step by every scan; `user` tags
+   * are Quire's own and survive.
+   */
   val origin: String,
 ) {
   companion object {
     const val ORIGIN_CALIBRE = "calibre"
+    const val ORIGIN_FOLDER = "folder"
     const val ORIGIN_USER = "user"
   }
 }

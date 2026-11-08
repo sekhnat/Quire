@@ -167,4 +167,21 @@ class LibraryLogicTest {
     assertEquals(2L, LibraryData(books, emptyList()).resume?.id)
     assertTrue(LibraryData(books.filter { it.status != BookStatus.Reading }, emptyList()).resume == null)
   }
+
+  @Test fun `books with a hidden tag leave the library but can still be looked up`() {
+    val lib = LibraryData(books, emptyList(), hidden = setOf("Mystery"))
+    assertEquals(listOf(1L, 2L, 5L), lib.books.map { it.id })
+    assertEquals(3, lib.counts[LibFilter.All])
+    assertEquals(listOf("Gothic"), lib.tags.map { it.first })
+    assertTrue(lib.shelves.none { shelf -> shelf.books.any { it.id == 3L || it.id == 4L } })
+    assertEquals(listOf(5L), visibleBooks(LibraryUiState(scope = Scope(ScopeKind.Author, "Mary Shelley")).bookQuery, lib).map { it.id })
+    assertEquals(emptyList<Long>(), visibleBooks(LibraryUiState(scope = Scope(ScopeKind.Series, "Holmes")).bookQuery, lib).map { it.id })
+    // The reader, a book's page and Stats still find hidden books.
+    assertEquals("Gamma", lib.byId[3L]?.title)
+    assertEquals(5, lib.all.size)
+  }
+
+  @Test fun `hiding a tag no book has changes nothing`() {
+    assertEquals(books.map { it.id }, LibraryData(books, emptyList(), hidden = setOf("Nope")).books.map { it.id })
+  }
 }
