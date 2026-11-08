@@ -42,9 +42,9 @@ data class LibraryTextSearch(
 /** What a library text search runs on: the typed text (blank when not in text mode), the active library filters and the order. */
 data class TextSearchInput(val query: String, val filters: TextSearchFilters, val order: SearchOrder = SearchOrder.Relevance)
 
-/** The text search input for a UI state; blank unless the open search field is in text mode. */
-fun textSearchInput(s: LibraryUiState): TextSearchInput =
-  if (s.searchOpen && s.searchScope == SearchScope.Text) TextSearchInput(s.textLibraryQuery, textFilters(s), s.textSearchOrder) else TextSearchInput("", TextSearchFilters.None)
+/** The text search input for a UI state, leaving out books with a [hidden] tag; blank unless the open search field is in text mode. */
+fun textSearchInput(s: LibraryUiState, hidden: Set<String> = emptySet()): TextSearchInput =
+  if (s.searchOpen && s.searchScope == SearchScope.Text) TextSearchInput(s.textLibraryQuery, textFilters(s, hidden), s.textSearchOrder) else TextSearchInput("", TextSearchFilters.None)
 
 /**
  * Turns changing inputs into the status to show. A new input cancels the previous one's search outright, so an older

@@ -56,6 +56,9 @@ class SettingsStateTest {
     override suspend fun setUseCalibre(v: Boolean) = Unit
     override val watchNewBooks = flowOf(true)
     override suspend fun setWatchNewBooks(v: Boolean) = Unit
+    override val tagNames = MutableStateFlow(listOf("Downloads", "Fiction", "Gothic"))
+    override val hiddenTags = MutableStateFlow(emptySet<String>())
+    override suspend fun setTagHidden(tag: String, hidden: Boolean) { hiddenTags.value = if (hidden) hiddenTags.value + tag else hiddenTags.value - tag }
     override val indexingEnabled = flowOf(true)
     override suspend fun setIndexingEnabled(v: Boolean) = Unit
     override val indexChargingOnly = flowOf(false)
@@ -141,6 +144,17 @@ class SettingsStateTest {
     assertEquals(1, indexer.rebuilt)
     assertEquals(2, store.measured)
     assertEquals(listOf("Rebuilding the search index"), toasts.shown)
+  }
+
+  @Test fun `hiding and showing a tag again is written to the store`() = runTest {
+    val settings = settings()
+    runCurrent()
+    settings.setTagHidden("Gothic", true); runCurrent()
+    settings.setTagHidden("Fiction", true); runCurrent()
+    assertEquals(setOf("Gothic", "Fiction"), settings.hiddenTags.value)
+    settings.setTagHidden("Gothic", false); runCurrent()
+    assertEquals(setOf("Fiction"), store.hiddenTags.value)
+    assertEquals(setOf("Fiction"), settings.hiddenTags.value)
   }
 
   @Test fun `leaving Settings goes back to the library`() = runTest {

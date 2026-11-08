@@ -89,6 +89,8 @@ interface LibraryPrefs {
   val librarySort: Flow<String?>
   val librarySortAscending: Flow<Boolean?>
   val textSearchOrder: Flow<SearchOrder>
+  /** Tags whose books the library leaves out. */
+  val hiddenTags: Flow<Set<String>>
   suspend fun setLibraryLayout(name: String)
   suspend fun setLibrarySort(name: String, ascending: Boolean)
   suspend fun setTextSearchOrder(order: SearchOrder)
@@ -112,7 +114,9 @@ class LibraryState(
   private val _state = MutableStateFlow(LibraryUiState())
   val state: StateFlow<LibraryUiState> = _state
 
-  val data: StateFlow<LibraryData> = combine(store.books, store.folders) { books, folders -> trace("LibraryData") { LibraryData(books, folders) } }
+  val data: StateFlow<LibraryData> = combine(store.books, store.folders, prefs.hiddenTags) { books, folders, hidden ->
+    trace("LibraryData") { LibraryData(books, folders, hidden) }
+  }
     .flowOn(compute)
     .stateIn(scope, SharingStarted.Eagerly, LibraryData.Empty)
 
@@ -147,7 +151,7 @@ class LibraryState(
    * indexer activity that explain partial or missing results. Only runs while something observes it.
    */
   val textSearch: StateFlow<LibraryTextSearch> = combine(
-    textSearchStatus(_state.map(::textSearchInput), search = store::searchText),
+    textSearchStatus(combine(_state, prefs.hiddenTags, ::textSearchInput), search = store::searchText),
     store.indexCoverage,
     indexer.activity,
   ) { status, coverage, activity -> LibraryTextSearch(status, coverage, activity) }

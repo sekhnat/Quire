@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.backup.BackupContents
@@ -53,6 +54,14 @@ class SettingsStore(context: Context) {
   /** How library text search orders the books it finds. */
   val textSearchOrder: Flow<SearchOrder> = store.data.map { p -> SearchOrder.entries.firstOrNull { it.name == p[TEXT_SEARCH_ORDER] } ?: SearchOrder.Relevance }
   suspend fun setTextSearchOrder(v: SearchOrder) = store.edit { it[TEXT_SEARCH_ORDER] = v.name }
+
+  /** Tags whose books the library leaves out (views, shelves, search); Stats still counts them. */
+  val hiddenTags: Flow<Set<String>> = flow(HIDDEN_TAGS, emptySet())
+  suspend fun setTagHidden(tag: String, hidden: Boolean) = store.edit {
+    val now = it[HIDDEN_TAGS].orEmpty()
+    it[HIDDEN_TAGS] = if (hidden) now + tag else now - tag
+  }
+  suspend fun setHiddenTags(tags: Set<String>) = store.edit { it[HIDDEN_TAGS] = tags }
 
   /** The library layout last picked, by name; null until one is. */
   val libraryLayout: Flow<String?> = store.data.map { it[LIBRARY_LAYOUT] }
@@ -138,6 +147,7 @@ class SettingsStore(context: Context) {
       readerControls = ReaderControls.fromJson(prefs[READER_CONTROLS]) ?: ReaderControls(),
       readAloud = ReadAloudPrefs.fromJson(prefs[READ_ALOUD]) ?: ReadAloudPrefs(),
       textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
+      hiddenTags = prefs[HIDDEN_TAGS].orEmpty().sorted(),
     )
   }
 
@@ -153,6 +163,7 @@ class SettingsStore(context: Context) {
     s.readerControls?.let { setReaderControls(it) }
     s.readAloud?.let { setReadAloudPrefs(it) }
     s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
+    s.hiddenTags?.let { setHiddenTags(it.toSet()) }
   }
 
   companion object {
@@ -170,6 +181,7 @@ class SettingsStore(context: Context) {
 
     private val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     private val USE_CALIBRE = booleanPreferencesKey("use_calibre")
+    private val HIDDEN_TAGS = stringSetPreferencesKey("hidden_tags")
     private val WATCH_NEW = booleanPreferencesKey("watch_new_books")
     private val COVERS_BACKFILLED = booleanPreferencesKey("covers_backfilled")
     private val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")

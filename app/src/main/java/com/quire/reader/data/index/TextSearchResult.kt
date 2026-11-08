@@ -10,13 +10,15 @@ enum class TextStatusFilter { Reading, Unread, Finished, Recent }
 
 /**
  * The library filters that apply to a text search: one of author, series or tag (the library scope) or a reading
- * status. The metadata substring search is deliberately not here; text search ignores it.
+ * status, and the hidden tags, whose books never appear. The metadata substring search is deliberately not here; text
+ * search ignores it.
  */
 data class TextSearchFilters(
   val author: String? = null,
   val series: String? = null,
   val tag: String? = null,
   val status: TextStatusFilter? = null,
+  val hiddenTags: Set<String> = emptySet(),
 ) {
   companion object { val None = TextSearchFilters() }
 }

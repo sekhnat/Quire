@@ -182,6 +182,13 @@ class SnapshotMergeTest {
     )
   }
 
+  @Test fun `hidden tags come with a clean restore and an older snapshot without them keeps the local ones`() {
+    val local = SnapshotSettings(hiddenTags = listOf("Private"))
+    assertEquals(listOf("Textbooks"), SnapshotMerge.mergeSettings(local, SnapshotSettings(hiddenTags = listOf("Textbooks")), applyIncoming = true).hiddenTags)
+    assertEquals(listOf("Private"), SnapshotMerge.mergeSettings(local, SnapshotSettings(), applyIncoming = true).hiddenTags)
+    assertEquals(listOf("Private"), SnapshotMerge.mergeSettings(local, SnapshotSettings(hiddenTags = listOf("Textbooks")), applyIncoming = false).hiddenTags)
+  }
+
   @Test fun `a session already there is not added again, nor is one repeated in the file`() {
     val a = SnapshotSession(startedAt = 10, endedAt = 20, activeMs = 5, startProgress = 0f, endProgress = 0.1f, readProgress = 0.1f)
     val b = a.copy(startedAt = 30, endedAt = 40)

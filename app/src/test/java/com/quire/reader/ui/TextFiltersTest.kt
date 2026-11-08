@@ -30,4 +30,14 @@ class TextFiltersTest {
     assertEquals(emptyList<Long>(), visibleBooks(state.bookQuery, LibraryData(books, emptyList())).map { it.id })
     assertEquals(TextSearchFilters(author = "Mary Shelley"), textFilters(state))
   }
+
+  @Test fun `hidden tags travel with every text filter`() {
+    val hidden = setOf("Private")
+    assertEquals(TextSearchFilters(hiddenTags = hidden), textFilters(LibraryUiState(), hidden))
+    assertEquals(TextSearchFilters(tag = "Gothic", hiddenTags = hidden), textFilters(LibraryUiState(scope = Scope(ScopeKind.Tag, "Gothic")), hidden))
+    assertEquals(
+      TextSearchFilters(hiddenTags = hidden),
+      textSearchInput(LibraryUiState(searchOpen = true, searchScope = SearchScope.Text, textLibraryQuery = "moor"), hidden).filters,
+    )
+  }
 }

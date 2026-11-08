@@ -7,7 +7,8 @@ import androidx.room.Query
 data class SearchableBook(val id: Long, val mtime: Long, val sizeBytes: Long, val lastOpenedAt: Long)
 
 /**
- * The library filters as a clause on a `book b` joined with `book_state st`: author, series and tag are exact matches and
+ * The library filters as a clause on a `book b` joined with `book_state st`. A book with any of the `:hidden` tags is left
+ * out. Author, series and tag are exact matches and
  * the status is a [com.quire.reader.data.index.TextStatusFilter] name in lower case (`reading`, `unread`, `finished`,
  * `recent`). Any of them may be null for "no restriction"; an unread book is any that is not reading or finished, and a
  * recent one is unread and added after `:newSince`.
@@ -16,6 +17,7 @@ private const val FILTERS_SQL = """
       AND (:author IS NULL OR b.primaryAuthor = :author)
       AND (:series IS NULL OR b.series = :series)
       AND (:tag IS NULL OR EXISTS (SELECT 1 FROM book_tag t WHERE t.bookId = b.id AND t.tag = :tag))
+      AND NOT EXISTS (SELECT 1 FROM book_tag h WHERE h.bookId = b.id AND h.tag IN (:hidden))
       AND (:status IS NULL
         OR (:status = 'reading' AND st.status = 'reading')
         OR (:status = 'finished' AND st.status = 'finished')
@@ -35,7 +37,9 @@ abstract class SearchDao {
     FROM book b LEFT JOIN book_state st ON st.bookId = b.id
     WHERE b.readable = 1 AND b.missingSince IS NULL""" + FILTERS_SQL,
   )
-  abstract suspend fun searchableBooks(author: String?, series: String?, tag: String?, status: String?, newSince: Long): List<SearchableBook>
+  abstract suspend fun searchableBooks(
+    author: String?, series: String?, tag: String?, status: String?, newSince: Long, hidden: List<String>,
+  ): List<SearchableBook>
 
   /** One book if it is readable and present, whatever the filters. */
   @Query(

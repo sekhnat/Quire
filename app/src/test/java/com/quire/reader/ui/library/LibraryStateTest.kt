@@ -133,6 +133,21 @@ class LibraryStateTest {
     assertEquals(listOf(TextSearchFilters(status = TextStatusFilter.Unread)), store.searches)
   }
 
+  @Test fun `hiding a tag takes its books out of the library and the inside-books search at once`() = runTest {
+    store.books.value = listOf(testBook(1, "Emma", tags = listOf("Private")), testBook(2, "Persuasion"))
+    val prefs = FakeLibraryPrefs()
+    val library = library(prefs)
+    backgroundScope.launch { library.textSearch.collect {} }
+    runCurrent()
+    assertEquals(listOf(1L, 2L), library.data.value.books.map { it.id })
+    prefs.hiddenTags.value = setOf("Private"); runCurrent()
+    assertEquals(listOf(2L), library.data.value.books.map { it.id })
+    assertEquals("Emma", library.data.value.byId[1L]?.title)
+    library.toggleSearch(); library.setSearchScope(SearchScope.Text); library.setTextLibraryQuery("pemberley")
+    runCurrent(); advanceTimeBy(300); runCurrent()
+    assertEquals(listOf(TextSearchFilters(hiddenTags = setOf("Private"))), store.searches)
+  }
+
   @Test fun `a rescan without file access only asks for it`() = runTest {
     val library = library(access = false)
     library.rescan(); runCurrent()
