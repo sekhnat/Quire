@@ -96,6 +96,7 @@ class FakeLibraryPrefs(
   sort: String? = null,
   ascending: Boolean? = null,
   override val librarySort: Flow<String?> = MutableStateFlow(sort),
+  override val hiddenTags: MutableStateFlow<Set<String>> = MutableStateFlow(emptySet()),
 ) : LibraryPrefs {
   override val libraryLayout = MutableStateFlow(layout)
   override val librarySortAscending = MutableStateFlow(ascending)

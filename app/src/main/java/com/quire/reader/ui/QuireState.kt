@@ -135,9 +135,11 @@ fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.vi
 
 /**
  * The library filters that narrow a text search: the same scope and status filter [visibleBooks] applies, without its
- * metadata query. Like there, an active scope replaces the status filter.
+ * metadata query, and never a book with one of the [hidden] tags. Like there, an active scope replaces the status filter.
  */
-fun textFilters(s: LibraryUiState): TextSearchFilters = when (val scope = s.scope) {
+fun textFilters(s: LibraryUiState, hidden: Set<String> = emptySet()): TextSearchFilters = textFiltersOf(s).copy(hiddenTags = hidden)
+
+private fun textFiltersOf(s: LibraryUiState): TextSearchFilters = when (val scope = s.scope) {
   null -> TextSearchFilters(
     status = when (s.filter) {
       LibFilter.All -> null

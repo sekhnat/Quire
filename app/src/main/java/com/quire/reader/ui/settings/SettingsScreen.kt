@@ -55,6 +55,7 @@ import com.quire.reader.ui.Kicker
 import com.quire.reader.ui.IndexStatusText
 import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
+import com.quire.reader.ui.Ph
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.SheetHost
 import com.quire.reader.ui.Toggle
@@ -79,6 +80,10 @@ fun SettingsScreen(settings: SettingsState) {
   val defaults by settings.defaults.collectAsStateWithLifecycle()
   val useCalibre by settings.useCalibre.collectAsStateWithLifecycle()
   val watch by settings.watch.collectAsStateWithLifecycle()
+  val hiddenTags by settings.hiddenTags.collectAsStateWithLifecycle()
+  val tagNames by settings.tagNames.collectAsStateWithLifecycle()
+  var choosingHiddenTags by remember { mutableStateOf(false) }
+  BackHandler(enabled = choosingHiddenTags) { choosingHiddenTags = false }
   val indexing by settings.indexingEnabled.collectAsStateWithLifecycle()
   val chargingOnly by settings.indexChargingOnly.collectAsStateWithLifecycle()
   val coverage by settings.indexCoverage.collectAsStateWithLifecycle()
@@ -187,6 +192,17 @@ fun SettingsScreen(settings: SettingsState) {
         Kicker("Library")
         Toggle("Watch for new books", "Rescan when you open Quire and every few hours", watch) { settings.setWatch(!watch) }
         Toggle("Use Calibre metadata", "Series, tags and ratings from metadata.opf (applies on a full rescan)", useCalibre) { settings.setUseCalibre(!useCalibre) }
+        Row(
+          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { choosingHiddenTags = true }.padding(vertical = 10.dp),
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            QText("Hidden tags", 14f)
+            QText("Leave books with these tags out of the library · ${hiddenTagsSummary(hiddenTags.size)}", 11.5f, color = Nq.neutral500)
+          }
+          Ph(Ic.CaretRight, 16.dp, Nq.neutral500)
+        }
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -257,6 +273,7 @@ fun SettingsScreen(settings: SettingsState) {
     forgetting = null
     if (rows.size == 1) settings.forgetMissing(rows.single().id) else settings.forgetAllMissing()
   }
+  HiddenTagsSheet(choosingHiddenTags, tagNames, hiddenTags, onSet = settings::setTagHidden, onDismiss = { choosingHiddenTags = false })
   LicencesSheet(showingLicences, openLicence, onOpen = { openLicence = it }, onDismiss = { showingLicences = false; openLicence = null })
   }
 }

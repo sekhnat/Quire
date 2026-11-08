@@ -36,6 +36,11 @@ interface LibrarySettings {
   suspend fun setUseCalibre(v: Boolean)
   val watchNewBooks: Flow<Boolean>
   suspend fun setWatchNewBooks(v: Boolean)
+  /** Every tag in the library, each once, in name order. */
+  val tagNames: Flow<List<String>>
+  /** Tags whose books the library leaves out. */
+  val hiddenTags: Flow<Set<String>>
+  suspend fun setTagHidden(tag: String, hidden: Boolean)
   val indexingEnabled: Flow<Boolean>
   suspend fun setIndexingEnabled(v: Boolean)
   val indexChargingOnly: Flow<Boolean>
@@ -69,6 +74,9 @@ class SettingsState(
   val defaults: StateFlow<ReaderPrefs> = store.readerDefaults.stateIn(scope, SharingStarted.Eagerly, ReaderPrefs())
   val useCalibre: StateFlow<Boolean> = store.useCalibre.stateIn(scope, SharingStarted.Eagerly, true)
   val watch: StateFlow<Boolean> = store.watchNewBooks.stateIn(scope, SharingStarted.Eagerly, true)
+  /** Tags whose books the library hides, and every tag the picker can offer. */
+  val hiddenTags: StateFlow<Set<String>> = store.hiddenTags.stateIn(scope, SharingStarted.Eagerly, emptySet())
+  val tagNames: StateFlow<List<String>> = store.tagNames.stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyList())
   val indexingEnabled: StateFlow<Boolean> = store.indexingEnabled.stateIn(scope, SharingStarted.Eagerly, true)
   val indexChargingOnly: StateFlow<Boolean> = store.indexChargingOnly.stateIn(scope, SharingStarted.Eagerly, false)
   /** Whether the global defaults carry non-factory advanced values (the global restore action). */
@@ -119,6 +127,7 @@ class SettingsState(
   fun resetAllBookPrefs() = persist.launch { store.clearAllBookPrefs(); toasts.show("Every book now uses your defaults") }
   fun setUseCalibre(v: Boolean) = persist.launch { store.setUseCalibre(v); toasts.show("Takes effect on the next full rescan") }
   fun setWatch(v: Boolean) = persist.launch { store.setWatchNewBooks(v) }
+  fun setTagHidden(tag: String, hidden: Boolean) = persist.launch { store.setTagHidden(tag, hidden) }
   fun setIndexingEnabled(v: Boolean) = persist.launch { store.setIndexingEnabled(v) }
   fun setIndexChargingOnly(v: Boolean) = persist.launch { store.setIndexChargingOnly(v) }
 
