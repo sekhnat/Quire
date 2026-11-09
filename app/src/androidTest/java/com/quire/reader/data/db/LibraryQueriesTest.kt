@@ -73,4 +73,27 @@ class LibraryQueriesTest : DbTestCase() {
     assertEquals(null, after.getValue(a).folderTag)
     assertEquals(setOf("Other", "Private"), after.getValue(b).tagList.toSet())
   }
+
+  @Test fun `removing books keeps those with history as missing, and forgetting them deletes it all`() = runBlocking {
+    val db = open()
+    val folderId = folder(db)
+    val read = db.books().upsert(bookEntity(folderId, "Read").copy(path = "/lib/read.epub"))
+    val unread = db.books().upsert(bookEntity(folderId, "Unread").copy(path = "/lib/unread.epub"))
+    val other = db.books().upsert(bookEntity(folderId, "Other").copy(path = "/lib/other.epub"))
+    db.states().edit(read) { it.copy(progress = .5f, status = BookStateEntity.STATUS_READING, lastOpenedAt = 5) }
+    db.books().insertTags(listOf(read, unread).map { BookTagEntity(it, "Austen", BookTagEntity.ORIGIN_USER) })
+    db.books().deleteUserTag(unread, "Austen")
+
+    assertEquals(setOf("/lib/read.epub", "/lib/unread.epub"), db.books().files(listOf(read, unread, 999)).map { it.path }.toSet())
+    val removal = db.books().removeBooks(listOf(read, unread), at = 7)
+    assertEquals(1, removal.keptWithHistory)
+    assertEquals(listOf(read), db.books().observeMissing().first().map { it.id })
+    assertEquals("/lib/read.epub", db.books().observeMissing().first().single().path)
+    assertEquals(listOf(other), db.books().observeCatalog().first().map { it.id })
+
+    db.books().forgetBooks(listOf(read, other))
+    assertEquals(0, db.books().totalCount())
+    assertEquals(null, db.states().get(read))
+  }
 }
+

@@ -1,5 +1,6 @@
 package com.quire.reader.ui
 
+import com.quire.reader.data.FileOpResult
 import com.quire.reader.data.backup.ImportResult
 import com.quire.reader.data.backup.MergeOutcome
 import com.quire.reader.data.scan.ScanResult
@@ -47,4 +48,14 @@ fun importSummary(r: ImportResult): String = when {
 fun mergeSummary(o: MergeOutcome): String {
   val added = if (o.booksAdded > 0) "${books(o.booksAdded)} added" else null
   return if (added == null) importSummary(o.result) else if (!o.result.changed) added else "$added · ${importSummary(o.result)}"
+}
+
+/**
+ * How an action on several books' files went, for a toast: "Copied 3 books to Download · 1 couldn’t be copied".
+ * [past] and [verb] name the action ("Copied", "copy"); [tail] follows the count when something was done.
+ */
+fun describeFileOp(r: FileOpResult, past: String, verb: String, tail: String = ""): String = when {
+  r.done == 0 && r.failed == 0 -> "Nothing to $verb"
+  r.done == 0 -> "Couldn’t $verb ${if (r.failed == 1) "the book" else "the books"}"
+  else -> "$past ${books(r.done)}$tail" + if (r.failed > 0) " · ${r.failed} couldn’t be ${past.lowercase()}" else ""
 }

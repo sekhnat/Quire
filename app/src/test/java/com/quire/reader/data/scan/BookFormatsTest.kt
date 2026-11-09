@@ -30,4 +30,11 @@ class BookFormatsTest {
     assertEquals("MOBI", BookFormats.label("/a/b.mobi"))
     assertEquals("EPUB", BookFormats.label("/a/b.epub"))
   }
+
+  @Test fun `books are sent with their format's MIME type`() {
+    assertEquals("application/epub+zip", BookFormats.mimeType("/b/Emma.EPUB"))
+    assertEquals("application/vnd.amazon.mobi8-ebook", BookFormats.mimeType("/b/Emma.azw3"))
+    assertEquals("application/x-mobipocket-ebook", BookFormats.mimeType("/b/Emma.mobi"))
+  }
 }
+

@@ -14,6 +14,8 @@ enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Seri
 enum class LibLayout { Grid, List, Comfortable, Shelves }
 enum class LibFilter(val label: String) { All("All"), Reading("In progress"), Unread("Unread"), Recent("Recently added"), Finished("Finished") }
 enum class Sheet { Display, Contents, Voices }
+/** The library's sheets for the selected books: add a tag, file info, the copy folder picker, and the two confirmations. */
+enum class BulkSheet { Tag, Info, Copy, ConfirmRemove, ConfirmDelete }
 enum class TocTab(val label: String) { Contents("Contents"), Bookmarks("Bookmarks"), Highlights("Highlights") }
 enum class ScopeKind(val label: String) { Author("Author"), Series("Series"), Tag("Tag") }
 data class Scope(val kind: ScopeKind, val value: String) {
@@ -60,7 +62,13 @@ data class LibraryUiState(
   val textSearchOrder: SearchOrder = SearchOrder.Relevance,
   val layout: LibLayout = LibLayout.Grid,
   val importOpen: Boolean = false,
-)
+  /** The books picked for an action; a long press starts picking, and the library is in selection mode while any are. */
+  val selected: Set<Long> = emptySet(),
+  /** The sheet open for the selected books, if any. */
+  val bulkSheet: BulkSheet? = null,
+) {
+  val selecting: Boolean get() = selected.isNotEmpty()
+}
 
 fun statusLabel(b: Book) = when {
   !b.readable -> "Can't open"

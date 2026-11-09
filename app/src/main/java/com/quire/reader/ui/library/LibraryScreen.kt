@@ -2,6 +2,10 @@ package com.quire.reader.ui.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -62,6 +66,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.BtnKind
+import com.quire.reader.ui.BulkSheet
 import com.quire.reader.ui.FolderPickerSheet
 import com.quire.reader.ui.GridCover
 import com.quire.reader.ui.HeroCover
@@ -129,6 +134,9 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   var pickingFolder by remember { mutableStateOf(false) }
   val textMode = s.searchOpen && s.searchScope == SearchScope.Text
   BackHandler(enabled = s.scope != null) { library.setScope(null) }
+  // Later handlers win: back closes a selection sheet first, then ends selection, then leaves a scope.
+  BackHandler(enabled = s.selecting) { library.clearSelection() }
+  BackHandler(enabled = s.bulkSheet != null && s.bulkSheet != BulkSheet.Copy) { library.openBulk(null) }
   // The views sit side by side so a swipe moves between them. The pager follows the view model (tab taps, picking an
   // author…), and a swipe that lands tells it. `steering` keeps the in-between page of a scroll cut short by another
   // (two quick tab taps) from being reported as a swipe.
@@ -149,7 +157,7 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
       Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        LibraryHeader(s, lib, library)
+        if (s.selecting) SelectionHeader(s, lib, library) else LibraryHeader(s, lib, library)
         ScanStatusCard(library)
         AnimatedVisibility(s.searchOpen) {
           val focus = remember { FocusRequester() }
@@ -168,7 +176,8 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
         }
         TabRow2(LibView.entries.map { it.label }, pager.targetPage, { library.setView(LibView.entries[it]) })
       }
-      HorizontalPager(pager, Modifier.weight(1f)) { page ->
+      // Selecting belongs to the Books view, so a swipe can't carry it to another.
+      HorizontalPager(pager, Modifier.weight(1f), userScrollEnabled = !s.selecting) { page ->
         when (LibView.entries[page]) {
           LibView.Books -> if (textMode) {
             // Only observed while the text search is on screen, so the library does no search work otherwise.
@@ -181,9 +190,13 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
         }
       }
     }
+    AnimatedVisibility(s.selecting, Modifier.align(Alignment.BottomCenter), enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+      SelectionBar(library)
+    }
     ImportSheet(s, lib, library, onAddFolder = { pickingFolder = true })
     SortSheet(s, lib.showWords, library)
     FolderPickerSheet(pickingFolder, { pickingFolder = false }, library::addFolder)
+    SelectionSheets(s, lib, library)
   }
 }
 
@@ -230,8 +243,9 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
   val list = visible.books
   val filtered = s.scope != null || s.query.isNotBlank() || s.filter != LibFilter.All
   val layout = if (s.layout == LibLayout.Shelves && filtered) LibLayout.Grid else s.layout
-  val bottom = 32.dp + navBottomPadding()
+  val bottom = 32.dp + navBottomPadding() + if (s.selecting) SelectionBarSpace else 0.dp
   val hPad = 20.dp
+  val taps = rememberBookTaps(s.selected, library)
   when (layout) {
     LibLayout.Grid -> LazyVerticalGrid(
       GridCells.Fixed(3), Modifier.fillMaxSize(),
@@ -239,17 +253,17 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
       horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
       item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, visible, layout) }
-      items(list, key = { it.id }) { b -> GridCard(b, s.sort, lib.showWords) { library.openBook(b.id) } }
+      items(list, key = { it.id }) { b -> GridCard(b, s.sort, lib.showWords, taps) }
     }
     LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
       item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, visible, layout) } }
-      items(list, key = { it.id }) { b -> ListRow(b, s.sort, lib.showWords) { library.openBook(b.id) } }
+      items(list, key = { it.id }) { b -> ListRow(b, s.sort, lib.showWords, taps) }
     }
     LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
       item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, visible, layout) } }
       items(list, key = { it.id }) { b ->
         Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
-        ComfortableRow(b, s.sort, lib.showWords) { library.openBook(b.id) }
+        ComfortableRow(b, s.sort, lib.showWords, taps)
       }
     }
     LibLayout.Shelves -> {
@@ -257,7 +271,7 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
       val shelves = library.shelves.collectAsStateWithLifecycle().value?.value.orEmpty()
       LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item { BooksHeader(s, lib, library, visible, layout) }
-        items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, lib.showWords, library) }
+        items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, lib.showWords, library, taps) }
       }
     }
   }
@@ -349,9 +363,13 @@ private fun Hero(book: Book, showWords: Boolean, library: LibraryState) {
 }
 
 @Composable
-private fun GridCard(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> Unit) {
-  Column(Modifier.clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-    GridCover(b)
+private fun GridCard(b: Book, sort: SortKey, showWords: Boolean, taps: BookTaps) {
+  val on = taps.isSelected(b)
+  Column(Modifier.bookTaps(b, taps), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    Box {
+      GridCover(b, Modifier.selectedRing(on))
+      if (taps.selecting) SelectMark(on, Modifier.align(Alignment.TopEnd).padding(6.dp))
+    }
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
       QText(b.title, 12f, weight = 500, maxLines = 1)
       QText(cardStatus(b, sort), 11f, color = Nq.neutral500, maxLines = 1)
@@ -362,8 +380,13 @@ private fun GridCard(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> 
 }
 
 @Composable
-private fun ListRow(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> Unit) {
-  Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ListRow(b: Book, sort: SortKey, showWords: Boolean, taps: BookTaps) {
+  val on = taps.isSelected(b)
+  Row(
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) Nq.accentA(0.10f) else Color.Transparent).bookTaps(b, taps).padding(8.dp),
+    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+  ) {
+    if (taps.selecting) SelectMark(on)
     ListCover(b)
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
       QText(b.title, 14f, weight = 500, maxLines = 1)
@@ -378,9 +401,14 @@ private fun ListRow(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> U
 
 /** The roomy list row: a larger cover with the title, author and the start of the synopsis beside it. */
 @Composable
-private fun ComfortableRow(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> Unit) {
+private fun ComfortableRow(b: Book, sort: SortKey, showWords: Boolean, taps: BookTaps) {
   val synopsis = remember(b.desc) { synopsisPreview(b.desc) }
-  Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+  val on = taps.isSelected(b)
+  Row(
+    Modifier.fillMaxWidth().background(if (on) Nq.accentA(0.10f) else Color.Transparent).bookTaps(b, taps).padding(vertical = 14.dp),
+    horizontalArrangement = Arrangement.spacedBy(14.dp),
+  ) {
+    if (taps.selecting) SelectMark(on, Modifier.align(Alignment.CenterVertically))
     HeroCover(b)
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
       QText(b.title, 15f, weight = 500, lh = 1.2f, maxLines = 2)
@@ -395,7 +423,7 @@ private fun ComfortableRow(b: Book, sort: SortKey, showWords: Boolean, onClick: 
 }
 
 @Composable
-private fun ShelfRow(shelf: ShelfDef, sort: SortKey, showWords: Boolean, library: LibraryState) {
+private fun ShelfRow(shelf: ShelfDef, sort: SortKey, showWords: Boolean, library: LibraryState, taps: BookTaps) {
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
       QText(shelf.title, 15f, weight = 500)
@@ -403,8 +431,12 @@ private fun ShelfRow(shelf: ShelfDef, sort: SortKey, showWords: Boolean, library
     }
     LazyRow(Modifier.bleed(20.dp).nestedScroll(KeepSidewaysScroll), contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       items(shelf.books, key = { it.id }) { b ->
-        Column(Modifier.width(shelf.coverWidthDp.dp).clickable { library.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          ShelfCover(b)
+        val on = taps.isSelected(b)
+        Column(Modifier.width(shelf.coverWidthDp.dp).bookTaps(b, taps), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Box {
+            ShelfCover(b, Modifier.selectedRing(on))
+            if (taps.selecting) SelectMark(on, Modifier.align(Alignment.TopEnd).padding(5.dp), size = 20.dp)
+          }
           Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             QText(cardStatus(b, sort), 11f, color = Nq.neutral500, maxLines = 1)
             wordsLabel(b, showWords, sort)?.let { QText(it, 11f, color = Nq.neutral600, maxLines = 1, tabular = true) }

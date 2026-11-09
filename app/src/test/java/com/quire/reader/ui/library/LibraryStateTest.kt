@@ -1,8 +1,11 @@
 package com.quire.reader.ui.library
 
+import com.quire.reader.data.Book
+import com.quire.reader.data.FileOpResult
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextStatusFilter
 import com.quire.reader.reader.STALE_TARGET_MESSAGE
+import com.quire.reader.ui.BulkSheet
 import com.quire.reader.ui.FakeIndexer
 import com.quire.reader.ui.FakeLibraryPrefs
 import com.quire.reader.ui.FakeLibraryStore
@@ -41,8 +44,21 @@ class LibraryStateTest {
   private val nav = RecordingNavigator()
   private val toasts = RecordingToasts()
 
+  /** The books handed to the share sheet; [shareable] is whether an app takes them. */
+  private val shared = mutableListOf<List<Long>>()
+  private var shareable = true
+
   private fun TestScope.library(prefs: FakeLibraryPrefs = FakeLibraryPrefs(), access: Boolean = true, scope: CoroutineScope = backgroundScope) =
-    LibraryState(store, prefs, indexer, nav, toasts, { access }, scope, compute = EmptyCoroutineContext)
+    LibraryState(store, prefs, indexer, nav, toasts, { access }, scope, compute = EmptyCoroutineContext, shareFiles = { shared += it.map(Book::id); shareable })
+
+  /** A library with [ids] selected, the first by a long press. */
+  private fun TestScope.selecting(vararg ids: Long, access: Boolean = true): LibraryState {
+    val library = library(access = access)
+    runCurrent()
+    library.startSelection(ids.first())
+    ids.drop(1).forEach(library::toggleSelected)
+    return library
+  }
 
   @Test fun `the saved sort and layout are applied at start`() = runTest {
     val library = library(FakeLibraryPrefs(layout = "List", sort = "Added", ascending = true))
@@ -187,5 +203,116 @@ class LibraryStateTest {
     library.rescan(); runCurrent()
     assertEquals(listOf("Scanning…", "Library is up to date"), toasts.shown)
     assertEquals(false, library.state.value.importOpen)
+  }
+
+  // ── selecting books ────────────────────────────────────────────────────────
+
+  @Test fun `a long press starts selecting, taps pick and unpick, and unpicking the last ends it`() = runTest {
+    val library = selecting(1)
+    assertEquals(setOf(1L), library.state.value.selected)
+    library.toggleSelected(2)
+    assertEquals(setOf(1L, 2L), library.state.value.selected)
+    library.toggleSelected(1); library.toggleSelected(2)
+    assertEquals(false, library.state.value.selecting)
+    assertTrue(nav.visits.isEmpty())
+  }
+
+  @Test fun `select all picks the books shown, and then none`() = runTest {
+    val library = selecting(1)
+    backgroundScope.launch { library.visible.collect {} }
+    library.setQuery("persuasion"); runCurrent()
+    library.toggleSelectAll()
+    assertEquals(setOf(1L, 2L), library.state.value.selected)
+    library.setQuery(""); runCurrent()
+    library.toggleSelectAll()
+    assertEquals(false, library.state.value.selecting)
+  }
+
+  @Test fun `another view ends selecting, and a sheet needs a selection`() = runTest {
+    val library = selecting(1, 2)
+    library.openBulk(BulkSheet.Info)
+    library.setView(LibView.Authors)
+    assertEquals(false, library.state.value.selecting)
+    assertNull(library.state.value.bulkSheet)
+    library.openBulk(BulkSheet.Tag)
+    assertNull(library.state.value.bulkSheet)
+  }
+
+  @Test fun `a selected book that leaves the library leaves the selection`() = runTest {
+    val library = selecting(1, 2)
+    store.books.value = listOf(testBook(2, "Persuasion")); runCurrent()
+    assertEquals(setOf(2L), library.state.value.selected)
+    store.books.value = emptyList(); runCurrent()
+    assertEquals(false, library.state.value.selecting)
+  }
+
+  @Test fun `tagging adds the tag to every selected book and ends selecting`() = runTest {
+    val library = selecting(1, 2)
+    library.openBulk(BulkSheet.Tag)
+    library.tagSelected("  "); runCurrent()
+    assertTrue(store.bulk.isEmpty())
+    library.tagSelected(" Austen "); runCurrent()
+    assertEquals(listOf("tag [1, 2] Austen"), store.bulk)
+    assertEquals(listOf("Tagged 2 books “Austen”"), toasts.shown)
+    assertEquals(false, library.state.value.selecting)
+    assertNull(library.state.value.bulkSheet)
+  }
+
+  @Test fun `sending hands the selected books to the share sheet`() = runTest {
+    val library = selecting(2, 1)
+    library.sendSelected()
+    assertEquals(listOf(listOf(1L, 2L)), shared)
+    assertEquals(false, library.state.value.selecting)
+  }
+
+  @Test fun `sending with no app to take the files says so and keeps the selection`() = runTest {
+    shareable = false
+    val library = selecting(1)
+    library.sendSelected()
+    assertEquals(listOf("No app can receive these files"), toasts.shown)
+    assertEquals(setOf(1L), library.state.value.selected)
+  }
+
+  @Test fun `copying reports how many books went to the folder`() = runTest {
+    store.fileResult = FileOpResult(done = 1, failed = 1)
+    val library = selecting(1, 2)
+    library.openBulk(BulkSheet.Copy)
+    library.copySelected("/storage/emulated/0/Download/"); runCurrent()
+    assertEquals(listOf("copy [1, 2] /storage/emulated/0/Download/"), store.bulk)
+    assertEquals(listOf("Copying 2 books…", "Copied 1 book to Download · 1 couldn’t be copied"), toasts.shown)
+    assertEquals(false, library.state.value.selecting)
+  }
+
+  @Test fun `closing the copy folder picker keeps the selection`() = runTest {
+    val library = selecting(1)
+    library.openBulk(BulkSheet.Copy)
+    library.copySelected(null); runCurrent()
+    assertTrue(store.bulk.isEmpty())
+    assertEquals(setOf(1L), library.state.value.selected)
+    assertNull(library.state.value.bulkSheet)
+  }
+
+  @Test fun `removing takes the selected books out of the library`() = runTest {
+    val library = selecting(1)
+    library.openBulk(BulkSheet.ConfirmRemove)
+    library.removeSelected(); runCurrent()
+    assertEquals(listOf("remove [1]"), store.bulk)
+    assertEquals(listOf("Removed 1 book from the library · bring it back in Settings"), toasts.shown)
+    assertEquals(false, library.state.value.selecting)
+  }
+
+  @Test fun `deleting reports the files deleted`() = runTest {
+    store.fileResult = FileOpResult(done = 2, failed = 0)
+    val library = selecting(1, 2)
+    library.deleteSelected(); runCurrent()
+    assertEquals(listOf("delete [1, 2]"), store.bulk)
+    assertEquals(listOf("Deleted 2 books"), toasts.shown)
+  }
+
+  @Test fun `files that could not be deleted without file access ask for it`() = runTest {
+    store.fileResult = FileOpResult(done = 0, failed = 1)
+    val library = selecting(1, access = false)
+    library.deleteSelected(); runCurrent()
+    assertEquals(listOf("Allow access to your files first"), toasts.shown)
   }
 }

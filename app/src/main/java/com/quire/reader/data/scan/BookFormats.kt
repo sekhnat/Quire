@@ -26,6 +26,13 @@ object BookFormats {
   /** The format's display name: "EPUB", "AZW3" or "MOBI". */
   fun label(path: String): String = path.substringAfterLast('.', "").uppercase().takeIf { isBook(path) } ?: "EPUB"
 
+  /** The MIME type a book file is sent to other apps as. */
+  fun mimeType(path: String): String = when (path.substringAfterLast('.', "").lowercase()) {
+    "azw3" -> "application/vnd.amazon.mobi8-ebook"
+    "mobi" -> "application/x-mobipocket-ebook"
+    else -> "application/epub+zip"
+  }
+
   /** The book files among [files] (files, not folders), one per name: the best format when a book is there in several. */
   fun preferred(files: List<File>): List<File> =
     files.filter { !it.name.startsWith(".") && isBook(it.name) }

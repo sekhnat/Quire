@@ -34,18 +34,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
-import com.quire.reader.data.scan.BookFormats
 import com.quire.reader.theme.Nq
-import com.quire.reader.theme.QuireFonts
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.DetailCover
+import com.quire.reader.ui.FileFactRows
+import com.quire.reader.ui.fileFacts
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.IconBtn
 import com.quire.reader.ui.Kicker
@@ -150,24 +147,9 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
           }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-          Kicker("File", Modifier.padding(bottom = 6.dp))
-          listOfNotNull(
-            Triple("Format", "${BookFormats.label(book.path)} · ${book.sizeLabel}", false),
-            book.wordsLong?.takeIf { lib.showWords }?.let { Triple("Length", it, false) },
-            Triple("Language", book.languageLabel, false),
-            Triple("Added", book.addedLabel, false),
-            Triple("Source", if (book.fromCalibre) "Calibre · metadata.opf" else "Folder scan", false),
-            Triple("Location", book.path.removePrefix("/storage/emulated/0"), true),
-          ).forEach { (k, v, mono) ->
-            Row(
-              Modifier.fillMaxWidth().drawBehind { drawRect(Nq.neutral900, Offset(0f, size.height - 1.dp.toPx()), Size(size.width, 1.dp.toPx())) }.padding(vertical = 7.dp),
-              horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-              QText(k, 12.5f, Modifier.width(72.dp), color = Nq.neutral500)
-              QText(v, if (mono) 11f else 12.5f, Modifier.weight(1f), color = Nq.neutral200, family = if (mono) QuireFonts.Mono else QuireFonts.Inter)
-            }
-          }
+        Column {
+          Kicker("File", Modifier.padding(bottom = 8.dp))
+          FileFactRows(fileFacts(book, lib.showWords))
         }
 
         if (more.isNotEmpty()) {

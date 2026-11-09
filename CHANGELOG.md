@@ -6,6 +6,18 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Select several books.** Long-press a book in the library (grid, either list or shelves) to start selecting; taps then pick or unpick books, *Select all* takes every book shown, and Back ends it. The bar along the bottom acts on them all at once:
+  - *Send* hands the book files to another app through the share sheet.
+  - *Tag* adds one of your tags to every selected book, typed or picked from the library's tags.
+  - *Copy* copies the files into a folder you pick; a copy into a watched folder joins the library.
+  - *Info* shows their files: count, total size and formats, and each book's format, size, date added and location.
+  - *Remove* takes the books out of the library and leaves the files on your device. Scans skip them until you bring them back from Settings → Library → *Removed books*, with any reading history they had.
+  - *Delete* deletes the book files from your device, with their reading history. Only the book file goes: a Calibre folder's `metadata.opf` and `cover.jpg` stay.
+
 ## [1.11.0] - 2026-11-09
 
 Every book's word count, in the library, on its page and in the reader.

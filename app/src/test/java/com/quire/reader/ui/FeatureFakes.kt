@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import android.net.Uri
 import com.quire.reader.data.Book
+import com.quire.reader.data.FileOpResult
 import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.db.FolderEntity
@@ -88,6 +89,13 @@ class FakeLibraryStore(books: List<Book> = emptyList()) : LibraryStore {
   override suspend fun addFolder(path: String) = true
   override suspend fun removeFolder(id: Long) = 0
   override suspend fun importFiles(uris: List<Uri>) = uris.size
+  /** Every call to the actions on several books, as "action ids [argument]". */
+  val bulk = mutableListOf<String>()
+  var fileResult = FileOpResult(0, 0)
+  override suspend fun addTag(bookIds: List<Long>, tag: String) { bulk += "tag $bookIds $tag" }
+  override suspend fun removeFromLibrary(bookIds: List<Long>): Int { bulk += "remove $bookIds"; return bookIds.size }
+  override suspend fun deleteFiles(bookIds: List<Long>): FileOpResult { bulk += "delete $bookIds"; return fileResult }
+  override suspend fun copyFiles(bookIds: List<Long>, dir: String): FileOpResult { bulk += "copy $bookIds $dir"; return fileResult }
 }
 
 /** Saved library choices; [librarySort] can be held back to model a slow first read. */

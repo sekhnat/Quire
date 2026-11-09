@@ -72,7 +72,7 @@ data class Book(
   val authorLast: String get() = if (primaryAuthor == "Unknown author") "Unknown" else primaryAuthor.lastWord()
   val ground: Ground = Ground.forTitle(title)
 
-  val sizeLabel: String get() = if (sizeBytes >= 1024 * 1024) "%.1f MB".format(Locale.US, sizeBytes / 1048576.0) else "${(sizeBytes / 1024).coerceAtLeast(1)} KB"
+  val sizeLabel: String get() = fileSizeLabel(sizeBytes)
   val addedLabel: String get() = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US).format(Instant.ofEpochMilli(addedAt).atZone(ZoneId.systemDefault()))
   val languageLabel: String get() {
     val code = language?.takeIf { it.isNotBlank() } ?: return "—"
@@ -151,4 +151,11 @@ fun Book.withReadingState(state: ReadingStateRow?, now: Long): Book {
     rating = state?.userRating ?: rating, status = status, progress = state?.progress ?: 0f, lastOpened = state?.lastOpenedAt ?: 0L,
     isNew = new,
   )
+}
+
+/** "2.4 MB", "380 KB" or, for a gigabyte and more, "1.2 GB". */
+fun fileSizeLabel(bytes: Long): String = when {
+  bytes >= 1024L * 1024 * 1024 -> "%.1f GB".format(Locale.US, bytes / 1073741824.0)
+  bytes >= 1024 * 1024 -> "%.1f MB".format(Locale.US, bytes / 1048576.0)
+  else -> "${(bytes / 1024).coerceAtLeast(1)} KB"
 }

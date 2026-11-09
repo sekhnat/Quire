@@ -47,6 +47,8 @@ import com.quire.reader.data.TextAlignPref
 import com.quire.reader.reader.ReaderFontList
 import com.quire.reader.reader.previewFamily
 import com.quire.reader.theme.Nq
+import com.quire.reader.theme.QuireFonts
+import com.quire.reader.ui.shownPath
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.reader.AdvancedReadingControls
@@ -92,6 +94,7 @@ fun SettingsScreen(settings: SettingsState) {
   val textBytes by settings.indexedTextBytes.collectAsStateWithLifecycle()
   val storage by settings.storageBytes.collectAsStateWithLifecycle()
   val missing by settings.missingBooks.collectAsStateWithLifecycle()
+  val removed by settings.removedBooks.collectAsStateWithLifecycle()
   var confirmingDelete by remember { mutableStateOf(false) }
   BackHandler(enabled = confirmingDelete) { confirmingDelete = false }
   var choosingBackup by remember { mutableStateOf(false) }
@@ -228,6 +231,8 @@ fun SettingsScreen(settings: SettingsState) {
         onPickFolder = { pickingBackupFolder = true },
       )
 
+      if (removed.isNotEmpty()) RemovedBooks(removed, settings::restoreRemoved)
+
       if (missing.isNotEmpty()) {
         MissingBooks(
           missing,
@@ -277,6 +282,28 @@ fun SettingsScreen(settings: SettingsState) {
   }
   HiddenTagsSheet(choosingHiddenTags, tagNames, hiddenTags, onSet = settings::setTagHidden, onDismiss = { choosingHiddenTags = false })
   LicencesSheet(showingLicences, openLicence, onOpen = { openLicence = it }, onDismiss = { showingLicences = false; openLicence = null })
+  }
+}
+
+/** Book files removed from the library, which scans leave out until they are brought back. */
+@Composable
+private fun RemovedBooks(rows: List<RemovedBook>, onRestore: (List<String>) -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Kicker("Removed books")
+    QText(
+      "You removed these from the library; their files are still on your device. Bring one back and the next scan adds it again, with any reading history it had.",
+      12.5f, color = Nq.neutral400, lh = 1.5f,
+    )
+    rows.forEach { row ->
+      Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          QText(row.title ?: row.fileName, 14f, maxLines = 1)
+          QText(shownPath(row.path), 11f, color = Nq.neutral500, family = QuireFonts.Mono, maxLines = 2)
+        }
+        QButton("Add back", { onRestore(listOf(row.path)) }, kind = BtnKind.Ghost, size = 12f, height = 30.dp)
+      }
+    }
+    if (rows.size > 1) QButton("Add all back", { onRestore(rows.map { it.path }) }, Modifier.fillMaxWidth().padding(top = 6.dp), icon = Ic.Refresh, size = 12.5f)
   }
 }
 

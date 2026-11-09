@@ -33,7 +33,10 @@ import com.quire.reader.data.index.IndexActivity
 import com.quire.reader.data.index.IndexTarget
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearchFilters
+import com.quire.reader.data.Book
+import com.quire.reader.data.scan.BookFormats
 import com.quire.reader.data.scan.StoragePaths
+import androidx.core.content.FileProvider
 import com.quire.reader.ui.detail.BookEditor
 import com.quire.reader.ui.detail.DetailState
 import com.quire.reader.ui.library.LibraryPrefs
@@ -91,6 +94,30 @@ class Features(private val app: QuireApplication) {
     override suspend fun addFolder(path: String) = repo.addFolder(path)
     override suspend fun removeFolder(id: Long) = repo.removeFolder(id)
     override suspend fun importFiles(uris: List<Uri>) = repo.importFiles(uris)
+    override suspend fun addTag(bookIds: List<Long>, tag: String) = repo.addTag(bookIds, tag)
+    override suspend fun removeFromLibrary(bookIds: List<Long>) = repo.removeFromLibrary(bookIds)
+    override suspend fun deleteFiles(bookIds: List<Long>) = repo.deleteFiles(bookIds)
+    override suspend fun copyFiles(bookIds: List<Long>, dir: String) = repo.copyFiles(bookIds, dir)
+  }
+
+  /**
+   * Offers the books' files to other apps through the share sheet. The files are served by the app's FileProvider
+   * (`res/xml/file_paths.xml`), which lets the receiving app read only the files granted here.
+   */
+  private fun shareBooks(books: List<Book>): Boolean {
+    val authority = app.packageName + ".files"
+    val uris = books.mapNotNull { b ->
+      runCatching { FileProvider.getUriForFile(app, authority, File(b.path)) }.onFailure { Log.w("Features", "cannot share ${b.path}", it) }.getOrNull()
+    }
+    if (uris.isEmpty()) return false
+    val send = if (uris.size == 1) Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.single())
+    else Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+    send.type = books.map { BookFormats.mimeType(it.path) }.distinct().singleOrNull() ?: "application/octet-stream"
+    // The chooser passes the grant on to the app picked; the clip data is what the grant covers.
+    send.clipData = ClipData.newRawUri(null, uris.first()).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } }
+    send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    launchOutside(Intent.createChooser(send, if (books.size == 1) "Send book" else "Send ${books.size} books"))
+    return true
   }
 
   private val libraryPrefs = object : LibraryPrefs {
@@ -218,7 +245,8 @@ class Features(private val app: QuireApplication) {
     override suspend fun storageBytes() = repo.storageBytes()
     override val missingBooks get() = repo.missingBooks
     override suspend fun forgetMissing(ids: List<Long>) { repo.forgetMissing(ids) }
-    override suspend fun forgetAllMissing() { repo.forgetAllMissing() }
+    override val removedBooks get() = repo.removedBooks
+    override suspend fun restoreRemoved(paths: List<String>) { repo.restoreRemoved(paths) }
   }
 
   private val backupService = object : BackupService {
@@ -328,5 +356,5 @@ class Features(private val app: QuireApplication) {
     OnboardingState(initial, onboardingStore, storageAccess, indexer, restore, nav, toasts, scope, persist)
 
   fun library(nav: AppNavigator, toasts: Toasts, scope: CoroutineScope) =
-    LibraryState(libraryStore, libraryPrefs, indexer, nav, toasts, StoragePaths::hasAllFilesAccess, scope)
+    LibraryState(libraryStore, libraryPrefs, indexer, nav, toasts, StoragePaths::hasAllFilesAccess, scope, shareFiles = ::shareBooks)
 }

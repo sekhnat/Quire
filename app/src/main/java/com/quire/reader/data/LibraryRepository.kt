@@ -15,6 +15,7 @@ import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
 import com.quire.reader.data.db.IndexDatabase
+import com.quire.reader.data.db.MAX_SQL_ARGS
 import com.quire.reader.data.db.QuireDatabase
 import com.quire.reader.data.index.BookTextPage
 import com.quire.reader.data.index.FtsQuery
@@ -38,6 +39,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
+
+/** What an action on several books' files did: how many files it [done] and how many [failed]. */
+data class FileOpResult(val done: Int, val failed: Int)
 
 /** The one place the UI reads and writes library data. */
 class LibraryRepository(
@@ -136,8 +140,6 @@ class LibraryRepository(
   /** Deletes missing books and their reading history for good. */
   suspend fun forgetMissing(ids: List<Long>) = withContext(Dispatchers.IO) { covers.deleteAll(db.books().forgetMissing(ids)) }
 
-  suspend fun forgetAllMissing() = forgetMissing(withContext(Dispatchers.IO) { db.books().missingIds() })
-
   /** Copies picked books (EPUB, AZW3, MOBI) into app storage (a folder that is always readable) and scans it. */
   suspend fun importFiles(uris: List<Uri>): Int = withContext(Dispatchers.IO) {
     val dir = File(app.filesDir, "imported").apply { mkdirs() }
@@ -182,6 +184,79 @@ class LibraryRepository(
   }
 
   suspend fun removeTag(bookId: Long, tag: String) = db.books().deleteUserTag(bookId, tag)
+
+  /** Adds the user tag [tag] to every book in [bookIds]; books that already carry it keep theirs. */
+  suspend fun addTag(bookIds: List<Long>, tag: String) {
+    val t = tag.trim()
+    if (t.isEmpty()) return
+    bookIds.chunked(MAX_SQL_ARGS).forEach { ids -> db.books().insertTags(ids.map { BookTagEntity(it, t, BookTagEntity.ORIGIN_USER) }) }
+  }
+
+  // ── several books at once ────────────────────────────────────────────────
+
+  /**
+   * Takes books out of the library and keeps their files: their paths are remembered so scans skip them (see
+   * [removedBooks]), and they become missing, so those with reading history get it back if they are brought back.
+   * Returns how many books were removed.
+   */
+  suspend fun removeFromLibrary(bookIds: List<Long>): Int = withContext(Dispatchers.IO) {
+    val files = db.books().files(bookIds)
+    if (files.isEmpty()) return@withContext 0
+    settings.addRemovedBooks(files.map { it.path })
+    covers.deleteAll(db.books().removeBooks(files.map { it.id }, System.currentTimeMillis()).staleCovers)
+    indexer.sweep()
+    files.size
+  }
+
+  /** Paths of the book files removed from the library, which scans skip. */
+  val removedBooks: Flow<Set<String>> = settings.removedBooks
+
+  /** Lets scans find the removed files [paths] again, and scans, so they come back with any history they kept. */
+  suspend fun restoreRemoved(paths: Collection<String>): ScanResult {
+    settings.restoreRemovedBooks(paths)
+    return rescan()
+  }
+
+  /**
+   * Deletes the books' files from the device, then forgets the books, reading history included. Only the book file goes:
+   * a Calibre folder's metadata.opf and cover.jpg stay. A book whose file is already gone is forgotten as well.
+   */
+  suspend fun deleteFiles(bookIds: List<Long>): FileOpResult = withContext(Dispatchers.IO) {
+    val files = db.books().files(bookIds)
+    val deleted = files.filter { f ->
+      val file = File(f.path)
+      runCatching { !file.exists() || file.delete() }.getOrDefault(false).also { if (!it) Log.w(TAG, "cannot delete ${f.path}") }
+    }
+    if (deleted.isNotEmpty()) {
+      covers.deleteAll(db.books().forgetBooks(deleted.map { it.id }))
+      settings.restoreRemovedBooks(deleted.map { it.path })
+      indexer.sweep()
+    }
+    FileOpResult(deleted.size, files.size - deleted.size)
+  }
+
+  /**
+   * Copies the books' files into the folder [dir], renaming a copy whose name is taken. A copy into a watched folder is
+   * then scanned in.
+   */
+  suspend fun copyFiles(bookIds: List<Long>, dir: String): FileOpResult = withContext(Dispatchers.IO) {
+    val target = File(dir)
+    val files = db.books().files(bookIds)
+    if (!target.isDirectory || !target.canWrite()) return@withContext FileOpResult(0, files.size)
+    var copied = 0
+    for (f in files) {
+      var copy: File? = null
+      runCatchingCancellable {
+        val source = File(f.path)
+        copy = uniqueFile(target, source.name)
+        source.copyTo(copy!!)
+        copied++
+      }.onFailure { e -> copy?.delete(); Log.w(TAG, "cannot copy ${f.path} to $dir", e) }
+    }
+    val path = target.absolutePath
+    if (copied > 0 && db.folders().watched().any { path == it.path || path.startsWith(it.path.trimEnd('/') + "/") }) rescan()
+    FileOpResult(copied, files.size - copied)
+  }
 
   private fun displayName(uri: Uri): String? {
     val cursor = app.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null) ?: return null
