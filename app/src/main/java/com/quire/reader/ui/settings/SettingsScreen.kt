@@ -80,6 +80,7 @@ fun SettingsScreen(settings: SettingsState) {
   val defaults by settings.defaults.collectAsStateWithLifecycle()
   val useCalibre by settings.useCalibre.collectAsStateWithLifecycle()
   val watch by settings.watch.collectAsStateWithLifecycle()
+  val showWordCount by settings.showWordCount.collectAsStateWithLifecycle()
   val hiddenTags by settings.hiddenTags.collectAsStateWithLifecycle()
   val tagNames by settings.tagNames.collectAsStateWithLifecycle()
   var choosingHiddenTags by remember { mutableStateOf(false) }
@@ -192,6 +193,7 @@ fun SettingsScreen(settings: SettingsState) {
         Kicker("Library")
         Toggle("Watch for new books", "Rescan when you open Quire and every few hours", watch) { settings.setWatch(!watch) }
         Toggle("Use Calibre metadata", "Series, tags and ratings from metadata.opf (applies on a full rescan)", useCalibre) { settings.setUseCalibre(!useCalibre) }
+        Toggle("Show word count", "Count the words in every book and show them with its details", showWordCount) { settings.setShowWordCount(!showWordCount) }
         Row(
           Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { choosingHiddenTags = true }.padding(vertical = 10.dp),
           horizontalArrangement = Arrangement.spacedBy(12.dp),

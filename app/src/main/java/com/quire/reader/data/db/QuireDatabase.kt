@@ -108,16 +108,21 @@ abstract class QuireDatabase : RoomDatabase() {
       }
     }
 
+    /** Adds the book's word count, null (not counted yet) for every existing book. */
+    val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+      override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE `book` ADD COLUMN `wordCount` INTEGER") }
+    }
+
     /** The tables of the index as it was before [MIGRATION_4_5], in the order they can be dropped. */
     val LEGACY_INDEX_TABLES = listOf("text_chunk_fts_terms", "text_chunk_fts", "text_chunk", "index_state")
 
     const val FILE_NAME = "quire.db"
     /** The schema version; a full backup from a newer one cannot be restored. */
-    const val VERSION = 7
+    const val VERSION = 8
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
         .build()
   }
 }

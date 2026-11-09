@@ -91,6 +91,8 @@ interface LibraryPrefs {
   val textSearchOrder: Flow<SearchOrder>
   /** Tags whose books the library leaves out. */
   val hiddenTags: Flow<Set<String>>
+  /** Whether books show their word count (and the library can sort by it). */
+  val showWordCount: Flow<Boolean>
   suspend fun setLibraryLayout(name: String)
   suspend fun setLibrarySort(name: String, ascending: Boolean)
   suspend fun setTextSearchOrder(order: SearchOrder)
@@ -114,8 +116,8 @@ class LibraryState(
   private val _state = MutableStateFlow(LibraryUiState())
   val state: StateFlow<LibraryUiState> = _state
 
-  val data: StateFlow<LibraryData> = combine(store.books, store.folders, prefs.hiddenTags) { books, folders, hidden ->
-    trace("LibraryData") { LibraryData(books, folders, hidden) }
+  val data: StateFlow<LibraryData> = combine(store.books, store.folders, prefs.hiddenTags, prefs.showWordCount) { books, folders, hidden, showWords ->
+    trace("LibraryData") { LibraryData(books, folders, hidden, showWords = showWords) }
   }
     .flowOn(compute)
     .stateIn(scope, SharingStarted.Eagerly, LibraryData.Empty)
@@ -166,8 +168,10 @@ class LibraryState(
     scope.launch { prefs.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
     // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
     scope.launch { prefs.libraryLayout.first().let { saved -> edit { copy(layout = libLayoutOf(saved)) } } }
+    // Sorting by words needs the word count shown; turning it off goes back to the default sort (the saved one stays).
+    scope.launch { prefs.showWordCount.collect { show -> if (!show) edit { if (sort == SortKey.Words) copy(sort = SortKey.Opened) else this } } }
     scope.launch {
-      val sort = sortKeyOf(prefs.librarySort.first())
+      val sort = sortKeyOf(prefs.librarySort.first()).let { if (it == SortKey.Words && !prefs.showWordCount.first()) SortKey.Opened else it }
       val ascending = prefs.librarySortAscending.first() ?: false
       // A sort picked while the saved one was loading is newer, and stays.
       if (!sortChosen) edit { copy(sort = sort, sortAscending = ascending) }

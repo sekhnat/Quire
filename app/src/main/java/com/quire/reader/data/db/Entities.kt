@@ -60,6 +60,11 @@ data class BookEntity(
    * keeps its reading history, which reattaches when the file is found again at its path or under its identity.
    */
   val missingSince: Long? = null,
+  /**
+   * Words in the book's text, counted in the background by [com.quire.reader.data.scan.WordCountWorker] while the word
+   * count setting is on; null until then, 0 when the text could not be read. Cleared when the file changes.
+   */
+  val wordCount: Int? = null,
 ) {
   companion object {
     const val SOURCE_CALIBRE = "calibre"

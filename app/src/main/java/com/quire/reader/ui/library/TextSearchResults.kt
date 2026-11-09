@@ -41,6 +41,7 @@ import com.quire.reader.ui.IndexStatusText
 import com.quire.reader.ui.LibraryData
 import com.quire.reader.ui.LibraryTextSearch
 import com.quire.reader.ui.ListCover
+import com.quire.reader.ui.MetaLine
 import com.quire.reader.ui.Ph
 import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
@@ -58,6 +59,7 @@ import com.quire.reader.ui.resultNotices
 import com.quire.reader.ui.shownSnippets
 import com.quire.reader.ui.snippetText
 import com.quire.reader.ui.textSearchStatusCopy
+import com.quire.reader.ui.wordsLabel
 
 /**
  * The library's "Inside books" results: the filters, what the index covers, then either a message for the state the
@@ -120,7 +122,7 @@ internal fun TextSearchResults(s: LibraryUiState, lib: LibraryData, search: Libr
         BookCard(
           result, expanded = result.book.id in expanded,
           onToggle = { expanded = if (result.book.id in expanded) expanded - result.book.id else expanded + result.book.id },
-          library = library, query = s.textLibraryQuery,
+          library = library, query = s.textLibraryQuery, showWords = lib.showWords,
         )
       }
     }
@@ -147,7 +149,7 @@ private fun IndexStatusBlock(index: IndexStatusText) {
 }
 
 @Composable
-private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> Unit, library: LibraryState, query: String) {
+private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> Unit, library: LibraryState, query: String, showWords: Boolean) {
   val book = result.book
   val shape = RoundedCornerShape(12.dp)
   val shown = shownSnippets(result.snippets, expanded)
@@ -157,7 +159,7 @@ private fun BookCard(result: BookTextResult, expanded: Boolean, onToggle: () -> 
       ListCover(book)
       Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         QText(book.title, 14f, weight = 500, maxLines = 2)
-        QText(book.author, 12f, color = Nq.neutral500, maxLines = 1)
+        MetaLine(book.author, wordsLabel(book, showWords), 12f, Nq.neutral500)
       }
       QText(passageLabel(result.passages), 11.5f, color = Nq.accent300, tabular = true, maxLines = 1)
     }

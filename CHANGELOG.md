@@ -6,6 +6,16 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Word counts.** Settings → Library → *Show word count* shows how many words every book has: under each cover in the grid and on shelves, beside the status in the list layouts, on *Continue reading*, in *Inside books* results and in the reader's top bar ("92k words"), and in full on a book's page ("92,431 words", under File). The library can also be sorted by word count while it is on. Quire counts each book once, in the background, from the book's own text (EPUB, AZW3 and MOBI alike, without converting anything); a book is counted again only when its file changes. The setting is included in backups.
+
+### Upgrading
+
+- Database version 8 adds the word count to every book, empty until the setting is first turned on.
+
 ## [1.10.0] - 2026-11-08
 
 Your folders become tags, and any tag can be hidden from the library.

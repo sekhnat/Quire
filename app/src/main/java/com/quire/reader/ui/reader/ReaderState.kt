@@ -39,6 +39,7 @@ import com.quire.reader.ui.TocTab
 import com.quire.reader.ui.bookSearchFirstPage
 import com.quire.reader.ui.planBookSearch
 import com.quire.reader.ui.withPage
+import com.quire.reader.ui.wordsLabel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -56,9 +57,11 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -226,6 +229,9 @@ class ReaderState(
   /** Whether the advanced reading controls are shown at all; independent of their values. */
   val advancedReadingEnabled: StateFlow<Boolean> = store.advancedReadingEnabled.stateIn(scope, SharingStarted.Eagerly, false)
   private val defaults: StateFlow<ReaderPrefs> = store.readerDefaults.stateIn(scope, SharingStarted.Eagerly, ReaderPrefs())
+  /** The book's word count for the top bar ("92k words"); null while word counts are off or the book is not counted yet. */
+  val wordCount: StateFlow<String?> = library.map { lib -> lib.byId[bookId]?.let { wordsLabel(it, lib.showWords) } }
+    .distinctUntilChanged().stateIn(scope, SharingStarted.Eagerly, null)
 
   private var searchJob: Job? = null
   private var bookSearchJob: Job? = null

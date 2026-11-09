@@ -29,7 +29,9 @@ enum class SortKey(val label: String, val desc: String, val asc: String, val ico
   Added("Last added", "Newest first", "Oldest first", com.quire.reader.R.drawable.ph_tray_arrow_down),
   Year("Publication date", "Newest first", "Oldest first", com.quire.reader.R.drawable.ph_calendar_blank),
   Size("File size", "Largest first", "Smallest first", com.quire.reader.R.drawable.ph_hard_drives),
-  Pages("Page count", "Longest first", "Shortest first", com.quire.reader.R.drawable.ph_files);
+  Pages("Page count", "Longest first", "Shortest first", com.quire.reader.R.drawable.ph_files),
+  /** Only offered while word counts are shown; books not counted yet come last when longest is first. */
+  Words("Word count", "Longest first", "Shortest first", com.quire.reader.R.drawable.ph_text_align_left);
 
   fun value(b: Book): Double = when (this) {
     Opened -> b.lastOpened.toDouble()
@@ -37,6 +39,7 @@ enum class SortKey(val label: String, val desc: String, val asc: String, val ico
     Year -> (b.year ?: 0).toDouble()
     Size -> b.sizeBytes.toDouble()
     Pages -> b.pages.toDouble()
+    Words -> (b.words ?: 0).toDouble()
   }
 }
 
@@ -88,8 +91,18 @@ fun cardStatus(b: Book, sort: SortKey): String = when (sort) {
   SortKey.Year -> b.year?.toString() ?: "No date"
   SortKey.Size -> b.sizeLabel
   SortKey.Pages -> "${b.pages} pages"
+  SortKey.Words -> b.wordsShort ?: "Not counted yet"
   SortKey.Opened -> statusLabel(b)
 }
+
+/**
+ * A book's word count for a metadata line ("92k words"), or null: word counts are off ([show] false), the book is not
+ * counted yet, or the caption already shows the count ([sort] is by words).
+ */
+fun wordsLabel(b: Book, show: Boolean, sort: SortKey? = null): String? = if (show && sort != SortKey.Words) b.wordsShort else null
+
+/** [base] with the book's word count after it ("Unread · 92k words") when [wordsLabel] gives one. */
+fun withWords(base: String, b: Book, show: Boolean, sort: SortKey? = null): String = wordsLabel(b, show, sort)?.let { "$base · $it" } ?: base
 
 /** What decides the library's book list. Nothing else in [LibraryUiState] changes it, so nothing else recomputes it. */
 data class BookQuery(

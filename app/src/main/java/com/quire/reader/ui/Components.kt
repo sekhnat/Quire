@@ -194,6 +194,22 @@ fun QText(
 fun Kicker(text: String, modifier: Modifier = Modifier, color: Color = Nq.neutral500) =
   QText(text, 10f, modifier, color, ls = 0.12f, upper = true)
 
+/**
+ * A one-line detail such as an author, followed by " · [tail]" (a word count) when there is one. [lead] gives way with
+ * an ellipsis when the line is short of room, so the tail always shows whole.
+ */
+@Composable
+fun MetaLine(lead: String, tail: String?, size: Float, color: Color, modifier: Modifier = Modifier) {
+  if (tail == null) {
+    QText(lead, size, modifier, color = color, maxLines = 1)
+  } else {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+      QText(lead, size, Modifier.weight(1f, fill = false), color = color, maxLines = 1)
+      QText(" · $tail", size, color = color, maxLines = 1, tabular = true)
+    }
+  }
+}
+
 // ── surfaces ────────────────────────────────────────────────────────────────
 
 /** CSS `linear-gradient(<angle>deg, ...)` — sized to the box it paints, like CSS does. */

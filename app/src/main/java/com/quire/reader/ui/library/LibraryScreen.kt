@@ -93,6 +93,8 @@ import com.quire.reader.ui.Tag
 import com.quire.reader.ui.bleed
 import com.quire.reader.ui.cardStatus
 import com.quire.reader.ui.cssGradient
+import com.quire.reader.ui.withWords
+import com.quire.reader.ui.wordsLabel
 import java.text.NumberFormat
 import java.util.Locale
 import kotlinx.coroutines.isActive
@@ -180,7 +182,7 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
       }
     }
     ImportSheet(s, lib, library, onAddFolder = { pickingFolder = true })
-    SortSheet(s, library)
+    SortSheet(s, lib.showWords, library)
     FolderPickerSheet(pickingFolder, { pickingFolder = false }, library::addFolder)
   }
 }
@@ -237,17 +239,17 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
       horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
       item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, visible, layout) }
-      items(list, key = { it.id }) { b -> GridCard(b, s.sort) { library.openBook(b.id) } }
+      items(list, key = { it.id }) { b -> GridCard(b, s.sort, lib.showWords) { library.openBook(b.id) } }
     }
     LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
       item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, visible, layout) } }
-      items(list, key = { it.id }) { b -> ListRow(b, s.sort) { library.openBook(b.id) } }
+      items(list, key = { it.id }) { b -> ListRow(b, s.sort, lib.showWords) { library.openBook(b.id) } }
     }
     LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
       item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, visible, layout) } }
       items(list, key = { it.id }) { b ->
         Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
-        ComfortableRow(b, s.sort) { library.openBook(b.id) }
+        ComfortableRow(b, s.sort, lib.showWords) { library.openBook(b.id) }
       }
     }
     LibLayout.Shelves -> {
@@ -255,7 +257,7 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
       val shelves = library.shelves.collectAsStateWithLifecycle().value?.value.orEmpty()
       LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
         item { BooksHeader(s, lib, library, visible, layout) }
-        items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, library) }
+        items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, lib.showWords, library) }
       }
     }
   }
@@ -277,7 +279,7 @@ private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibrarySta
     }
     if (showSortRow) SortRow(s, library)
     val resume = lib.resume
-    if (showHero && resume != null) Hero(resume, library)
+    if (showHero && resume != null) Hero(resume, lib.showWords, library)
     // From the same snapshot as the list, so a list still being worked out never shows as empty.
     if (visible.lib.loaded && list.isEmpty() && layout != LibLayout.Shelves) {
       Column(Modifier.fillMaxWidth().padding(vertical = 48.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -326,7 +328,7 @@ private fun SortRow(s: LibraryUiState, library: LibraryState) {
 }
 
 @Composable
-private fun Hero(book: Book, library: LibraryState) {
+private fun Hero(book: Book, showWords: Boolean, library: LibraryState) {
   val shape = RoundedCornerShape(14.dp)
   Row(
     Modifier.fillMaxWidth().clip(shape).background(cssGradient(135f, Nq.surface, Nq.neutral900)).border(1.dp, Nq.neutral800, shape).clickable { library.read(book.id) }.padding(12.dp),
@@ -340,25 +342,27 @@ private fun Hero(book: Book, library: LibraryState) {
       ProgressLine(book.progress, Modifier.padding(top = 8.dp))
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         QText(book.timeLeftLabel(), 11f, color = Nq.neutral500)
-        QText("${book.pct}%", 11f, color = Nq.neutral500)
+        QText(withWords("${book.pct}%", book, showWords), 11f, color = Nq.neutral500)
       }
     }
   }
 }
 
 @Composable
-private fun GridCard(b: Book, sort: SortKey, onClick: () -> Unit) {
+private fun GridCard(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> Unit) {
   Column(Modifier.clickable(onClick = onClick), verticalArrangement = Arrangement.spacedBy(7.dp)) {
     GridCover(b)
     Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
       QText(b.title, 12f, weight = 500, maxLines = 1)
       QText(cardStatus(b, sort), 11f, color = Nq.neutral500, maxLines = 1)
+      // A line of its own: a third of the screen is too narrow to share it with the caption.
+      wordsLabel(b, showWords, sort)?.let { QText(it, 11f, color = Nq.neutral600, maxLines = 1, tabular = true) }
     }
   }
 }
 
 @Composable
-private fun ListRow(b: Book, sort: SortKey, onClick: () -> Unit) {
+private fun ListRow(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> Unit) {
   Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
     ListCover(b)
     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -366,7 +370,7 @@ private fun ListRow(b: Book, sort: SortKey, onClick: () -> Unit) {
       QText(authorLine(b), 12f, color = Nq.neutral500, maxLines = 1)
     }
     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-      QText(cardStatus(b, sort), 11f, color = if (b.status == BookStatus.Reading) Nq.accent300 else Nq.neutral500, tabular = true)
+      QText(withWords(cardStatus(b, sort), b, showWords, sort), 11f, color = if (b.status == BookStatus.Reading) Nq.accent300 else Nq.neutral500, tabular = true)
       ProgressLine(b.progress, Modifier.width(40.dp))
     }
   }
@@ -374,7 +378,7 @@ private fun ListRow(b: Book, sort: SortKey, onClick: () -> Unit) {
 
 /** The roomy list row: a larger cover with the title, author and the start of the synopsis beside it. */
 @Composable
-private fun ComfortableRow(b: Book, sort: SortKey, onClick: () -> Unit) {
+private fun ComfortableRow(b: Book, sort: SortKey, showWords: Boolean, onClick: () -> Unit) {
   val synopsis = remember(b.desc) { synopsisPreview(b.desc) }
   Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 14.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
     HeroCover(b)
@@ -383,7 +387,7 @@ private fun ComfortableRow(b: Book, sort: SortKey, onClick: () -> Unit) {
       QText(authorLine(b), 12f, color = Nq.neutral500, maxLines = 1)
       if (synopsis != null) QText(synopsis, 12.5f, color = Nq.neutral400, lh = 1.45f, maxLines = 3)
       Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        QText(cardStatus(b, sort), 11f, color = if (b.status == BookStatus.Reading) Nq.accent300 else Nq.neutral500, tabular = true)
+        QText(withWords(cardStatus(b, sort), b, showWords, sort), 11f, color = if (b.status == BookStatus.Reading) Nq.accent300 else Nq.neutral500, tabular = true)
         ProgressLine(b.progress, Modifier.width(64.dp))
       }
     }
@@ -391,7 +395,7 @@ private fun ComfortableRow(b: Book, sort: SortKey, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ShelfRow(shelf: ShelfDef, sort: SortKey, library: LibraryState) {
+private fun ShelfRow(shelf: ShelfDef, sort: SortKey, showWords: Boolean, library: LibraryState) {
   Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
       QText(shelf.title, 15f, weight = 500)
@@ -401,7 +405,10 @@ private fun ShelfRow(shelf: ShelfDef, sort: SortKey, library: LibraryState) {
       items(shelf.books, key = { it.id }) { b ->
         Column(Modifier.width(shelf.coverWidthDp.dp).clickable { library.openBook(b.id) }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
           ShelfCover(b)
-          QText(cardStatus(b, sort), 11f, color = Nq.neutral500, maxLines = 1)
+          Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            QText(cardStatus(b, sort), 11f, color = Nq.neutral500, maxLines = 1)
+            wordsLabel(b, showWords, sort)?.let { QText(it, 11f, color = Nq.neutral600, maxLines = 1, tabular = true) }
+          }
         }
       }
     }
@@ -441,7 +448,7 @@ private fun ImportSheet(s: LibraryUiState, lib: LibraryData, library: LibrarySta
 }
 
 @Composable
-private fun SortSheet(s: LibraryUiState, library: LibraryState) {
+private fun SortSheet(s: LibraryUiState, showWords: Boolean, library: LibraryState) {
   SheetHost(s.sortOpen, { library.openSort(false) }, Modifier.padding(start = 12.dp, end = 12.dp, bottom = 30.dp)) {
     Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -454,7 +461,7 @@ private fun SortSheet(s: LibraryUiState, library: LibraryState) {
           height = 32.dp, minWidth = 0.dp, size = 12f,
         )
       }
-      SortKey.entries.forEach { k ->
+      SortKey.entries.filter { it != SortKey.Words || showWords }.forEach { k ->
         val on = s.sort == k
         Row(
           Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) Nq.accentA(0.10f) else Color.Transparent).clickable { library.pickSort(k) }.padding(horizontal = 10.dp, vertical = 11.dp),

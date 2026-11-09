@@ -39,6 +39,8 @@ data class CatalogRow(
    * `u` (added in Quire).
    */
   val tags: String?,
+  /** Words counted in the book's text; null when not counted yet, 0 when it could not be read. */
+  val wordCount: Int? = null,
 ) {
   private val tagEntries: List<String> get() = tags?.split('\u001F')?.filter { it.length > 1 }.orEmpty()
   val tagList: List<String> get() = tagEntries.map { it.substring(1) }
@@ -48,6 +50,9 @@ data class CatalogRow(
 
 /** The part of a book's reading state the library shows; a book without a `book_state` row has none yet. */
 data class ReadingStateRow(val bookId: Long, val progress: Float, val status: String, val lastOpenedAt: Long, val userRating: Int?)
+
+/** A book whose words are still to be counted, with the file signature the count is for. */
+data class UncountedBook(val id: Long, val path: String, val mtime: Long, val sizeBytes: Long)
 
 /** Identity of a file already in the database, used to skip unchanged files on rescan. */
 data class KnownFile(
@@ -135,7 +140,7 @@ interface FolderDao {
 private const val CATALOG_SQL = """
     SELECT b.id, b.path, b.folderId, b.title, b.sortTitle, b.author, b.primaryAuthor, b.authorSort, b.series, b.seriesIndex,
            b.pubYear, b.language, b.description, b.calibreRating, b.sizeBytes, b.addedAt, b.pageEstimate, b.coverPath, b.source,
-           b.readable,
+           b.readable, b.wordCount,
            (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' WHEN 'folder' THEN 'f' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
     FROM book b
     WHERE b.missingSince IS NULL
@@ -176,6 +181,24 @@ abstract class BookDao {
   @Query("DELETE FROM book WHERE id IN (:ids)") abstract suspend fun delete(ids: List<Long>)
   @Query("UPDATE book SET pageEstimate = :pages WHERE id = :id") abstract suspend fun setPages(id: Long, pages: Int)
   @Query("UPDATE book SET readable = :readable WHERE id = :id") abstract suspend fun setReadable(id: Long, readable: Boolean)
+
+  /** Readable, present books whose words are not counted yet, newest first. */
+  @Query("SELECT id, path, mtime, sizeBytes FROM book WHERE wordCount IS NULL AND readable = 1 AND missingSince IS NULL ORDER BY addedAt DESC, id DESC")
+  abstract suspend fun uncounted(): List<UncountedBook>
+
+  /** Stores a word count; nothing changes when the file is no longer the one that was counted ([mtime], [sizeBytes]). */
+  @Query("UPDATE book SET wordCount = :words WHERE id = :id AND mtime = :mtime AND sizeBytes = :sizeBytes")
+  abstract suspend fun setWordCount(id: Long, words: Int, mtime: Long, sizeBytes: Long)
+
+  /** Stores several word counts in one transaction, so the library maps its books once for them all. */
+  @Transaction
+  open suspend fun setWordCounts(counts: Map<UncountedBook, Int>) {
+    for ((book, words) in counts) setWordCount(book.id, words, book.mtime, book.sizeBytes)
+  }
+
+  /** How many books still wait for a word count; emits again whenever `book` changes. */
+  @Query("SELECT COUNT(*) FROM book WHERE wordCount IS NULL AND readable = 1 AND missingSince IS NULL")
+  abstract fun observeUncountedCount(): Flow<Int>
 
   @Insert(onConflict = OnConflictStrategy.REPLACE) abstract suspend fun upsert(book: BookEntity): Long
   @Insert(onConflict = OnConflictStrategy.IGNORE) abstract suspend fun insertTags(tags: List<BookTagEntity>)
@@ -268,7 +291,12 @@ abstract class BookDao {
     delete(listOf(liveId))
     // Readium's real page count replaced the estimate on the old row; it still holds for the same file.
     val sameFile = old.fingerprint != null && old.fingerprint == new.fingerprint
-    update(new.copy(id = old.id, addedAt = old.addedAt, pageEstimate = if (sameFile) old.pageEstimate else new.pageEstimate))
+    update(
+      new.copy(
+        id = old.id, addedAt = old.addedAt, pageEstimate = if (sameFile) old.pageEstimate else new.pageEstimate,
+        wordCount = if (sameFile) old.wordCount ?: new.wordCount else new.wordCount,
+      ),
+    )
     deleteTags(old.id, BookTagEntity.ORIGIN_CALIBRE)
     deleteTags(old.id, BookTagEntity.ORIGIN_FOLDER)
     insertTags(tags.map { it.copy(bookId = old.id) })

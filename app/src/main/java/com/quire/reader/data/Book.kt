@@ -5,6 +5,7 @@ import com.quire.reader.data.db.BookStateEntity
 import com.quire.reader.data.db.CatalogRow
 import com.quire.reader.data.db.ReadingStateRow
 import com.quire.reader.theme.Nq
+import java.text.NumberFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -64,6 +65,8 @@ data class Book(
   val readable: Boolean,
   /** Added recently and not started yet. */
   val isNew: Boolean,
+  /** Words in the book's text; null until counted, 0 when its text could not be read. */
+  val words: Int? = null,
 ) {
   val pct: Int get() = (progress * 100).roundToInt().coerceIn(0, 100)
   val authorLast: String get() = if (primaryAuthor == "Unknown author") "Unknown" else primaryAuthor.lastWord()
@@ -78,6 +81,12 @@ data class Book(
     return match?.getDisplayLanguage(Locale.ENGLISH)?.takeIf { it.isNotBlank() } ?: code
   }
   val seriesNoLabel: String? get() = seriesNo?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() }
+
+  /** "92k words", for a line shared with other details; null while the words are unknown. */
+  val wordsShort: String? get() = words?.takeIf { it > 0 }?.let { "${compactCount(it)} ${if (it == 1) "word" else "words"}" }
+
+  /** "92,431 words"; null while the words are unknown. */
+  val wordsLong: String? get() = words?.takeIf { it > 0 }?.let { "${NumberFormat.getIntegerInstance(Locale.US).format(it)} ${if (it == 1) "word" else "words"}" }
 
   /** "about 3h 20m left", from the page count at [MINUTES_PER_PAGE]. */
   fun timeLeftLabel(): String {
@@ -97,6 +106,17 @@ data class Book(
 
 fun String.lastWord() = trim().split(' ').last()
 
+/** 850, 9.4k, 92k, 1.2M: exact below a thousand, then rounded to two or three significant figures. */
+fun compactCount(n: Int): String {
+  fun oneDecimal(v: Double) = "%.1f".format(Locale.US, v).removeSuffix(".0")
+  return when {
+    n < 1_000 -> n.toString()
+    n < 9_950 -> oneDecimal(n / 1_000.0) + "k"
+    n < 999_500 -> "${(n / 1_000.0).roundToInt()}k"
+    else -> oneDecimal(n / 1_000_000.0) + "M"
+  }
+}
+
 /** Books added in the last 30 days count as "recently added". */
 const val RECENT_DAYS = 30L
 private const val DAY_MS = 24L * 60 * 60 * 1000
@@ -112,7 +132,7 @@ fun CatalogRow.toBook(now: Long): Book = Book(
   authorSort = authorSort, series = series, seriesNo = seriesIndex, year = pubYear, pages = pageEstimate, tags = tagList, userTags = userTagList, folderTag = folderTag, language = language,
   rating = calibreRating, status = BookStatus.Unread, progress = 0f, lastOpened = 0L, addedAt = addedAt,
   sizeBytes = sizeBytes, desc = description, coverPath = coverPath, fromCalibre = source == "calibre", readable = readable,
-  isNew = isNew(BookStatus.Unread, addedAt, now),
+  isNew = isNew(BookStatus.Unread, addedAt, now), words = wordCount,
 )
 
 /**

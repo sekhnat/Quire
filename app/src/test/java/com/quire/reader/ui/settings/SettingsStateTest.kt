@@ -56,6 +56,8 @@ class SettingsStateTest {
     override suspend fun setUseCalibre(v: Boolean) = Unit
     override val watchNewBooks = flowOf(true)
     override suspend fun setWatchNewBooks(v: Boolean) = Unit
+    override val showWordCount = MutableStateFlow(false)
+    override suspend fun setShowWordCount(v: Boolean) { showWordCount.value = v }
     override val tagNames = MutableStateFlow(listOf("Downloads", "Fiction", "Gothic"))
     override val hiddenTags = MutableStateFlow(emptySet<String>())
     override suspend fun setTagHidden(tag: String, hidden: Boolean) { hiddenTags.value = if (hidden) hiddenTags.value + tag else hiddenTags.value - tag }
@@ -155,6 +157,17 @@ class SettingsStateTest {
     settings.setTagHidden("Gothic", false); runCurrent()
     assertEquals(setOf("Fiction"), store.hiddenTags.value)
     assertEquals(setOf("Fiction"), settings.hiddenTags.value)
+  }
+
+  @Test fun `turning word counts on and off is written to the store`() = runTest {
+    val settings = settings()
+    runCurrent()
+    assertEquals(false, settings.showWordCount.value)
+    settings.setShowWordCount(true); runCurrent()
+    assertEquals(true, store.showWordCount.value)
+    assertEquals(true, settings.showWordCount.value)
+    settings.setShowWordCount(false); runCurrent()
+    assertEquals(false, settings.showWordCount.value)
   }
 
   @Test fun `leaving Settings goes back to the library`() = runTest {

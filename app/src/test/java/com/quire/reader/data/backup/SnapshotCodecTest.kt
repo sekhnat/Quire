@@ -184,4 +184,11 @@ class SnapshotCodecTest {
     val old = decode(oldText) as SnapshotCodec.Decoded.Ok
     assertNull(old.snapshot.settings.advancedReadingEnabled)
   }
+
+  @Test fun `the word count setting travels in a snapshot`() {
+    val decoded = decode(SnapshotCodec.encode(snapshot(settings = SnapshotSettings(showWordCount = true)))) as SnapshotCodec.Decoded.Ok
+    assertEquals(true, decoded.snapshot.settings.showWordCount)
+    val without = decode(SnapshotCodec.encode(snapshot())) as SnapshotCodec.Decoded.Ok
+    assertNull(without.snapshot.settings.showWordCount)
+  }
 }
