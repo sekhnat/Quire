@@ -90,12 +90,20 @@ data class MissingBookRow(
   val progress: Float?,
   val bookmarks: Int,
   val highlights: Int,
+  /** Where the file was; a book removed from the library is missing at the path it was removed from. */
+  val path: String = "",
 )
 
 data class BookCover(val id: Long, val coverPath: String?)
 
 /** The result of [BookDao.removeFolder]: cover files to delete, and how many books stay behind as missing for their history. */
 data class FolderRemoval(val staleCovers: List<String>, val keptWithHistory: Int)
+
+/** The result of [BookDao.removeBooks]: cover files to delete, and how many books stay behind as missing for their history. */
+data class BookRemoval(val staleCovers: List<String>, val keptWithHistory: Int)
+
+/** A book's file, for acting on several books' files at once. */
+data class BookFile(val id: Long, val path: String)
 
 /** The result of [BookDao.adopt]: the missing book's former cover file, when the book no longer uses it. */
 data class Adoption(val staleCover: String?)
@@ -330,11 +338,36 @@ abstract class BookDao {
     return gone.mapNotNull { it.coverPath }
   }
 
-  @Query("SELECT id FROM book WHERE missingSince IS NOT NULL") abstract suspend fun missingIds(): List<Long>
+  @Query("SELECT id, path FROM book WHERE id IN (:ids)") protected abstract suspend fun filesIn(ids: List<Long>): List<BookFile>
+  @Query("SELECT id, coverPath FROM book WHERE id IN (:ids)") protected abstract suspend fun coversIn(ids: List<Long>): List<BookCover>
+  @Query("SELECT COUNT(*) FROM book WHERE id IN (:ids)") protected abstract suspend fun countOf(ids: List<Long>): Int
+
+  /** The files of the books [ids], in no particular order; ids not in the library are left out. */
+  open suspend fun files(ids: List<Long>): List<BookFile> = ids.chunked(MAX_SQL_ARGS).flatMap { filesIn(it) }
+
+  /**
+   * Takes books out of the library without losing reading history, as [removeFolder] does for a folder: they become
+   * missing, and those without history are deleted. The files on disk are not touched.
+   */
+  @Transaction
+  open suspend fun removeBooks(ids: List<Long>, at: Long): BookRemoval {
+    ids.chunked(MAX_SQL_ARGS).forEach { markMissing(it, at) }
+    val covers = purgeMissing()
+    return BookRemoval(covers, keptWithHistory = ids.chunked(MAX_SQL_ARGS).sumOf { countOf(it) })
+  }
+
+  /** Deletes books for good, history included, whether or not they are missing. Returns the cover files to delete. */
+  @Transaction
+  open suspend fun forgetBooks(ids: List<Long>): List<String> {
+    val gone = ids.chunked(MAX_SQL_ARGS).flatMap { coversIn(it) }
+    gone.map { it.id }.chunked(MAX_SQL_ARGS).forEach { delete(it) }
+    deleteEmptyRemovedFolders()
+    return gone.mapNotNull { it.coverPath }
+  }
 
   @Query(
     """
-    SELECT b.id, b.title, b.author, b.coverPath, b.missingSince, s.progress AS progress,
+    SELECT b.id, b.title, b.author, b.coverPath, b.missingSince, b.path, s.progress AS progress,
            (SELECT COUNT(*) FROM bookmark x WHERE x.bookId = b.id) AS bookmarks,
            (SELECT COUNT(*) FROM highlight x WHERE x.bookId = b.id) AS highlights
     FROM book b LEFT JOIN book_state s ON s.bookId = b.id

@@ -68,9 +68,13 @@ class SettingsStateTest {
     override val indexCoverage: Flow<IndexCoverage> = emptyFlow()
     override val indexedTextBytes = flowOf(0L)
     override suspend fun storageBytes(): IndexStorageBytes { measured++; return IndexStorageBytes(1, 2) }
-    override val missingBooks = flowOf(emptyList<MissingBookRow>())
-    override suspend fun forgetMissing(ids: List<Long>) = Unit
-    override suspend fun forgetAllMissing() = Unit
+    val missing = MutableStateFlow(emptyList<MissingBookRow>())
+    override val missingBooks: Flow<List<MissingBookRow>> = missing
+    val forgotten = mutableListOf<List<Long>>()
+    override suspend fun forgetMissing(ids: List<Long>) { forgotten += ids }
+    override val removedBooks = MutableStateFlow(emptySet<String>())
+    val restored = mutableListOf<List<String>>()
+    override suspend fun restoreRemoved(paths: List<String>) { restored += paths; removedBooks.value = removedBooks.value - paths.toSet() }
   }
 
   private class FakeBackups : BackupService {
@@ -235,5 +239,33 @@ class SettingsStateTest {
     restore.merge(); runCurrent()
     assertEquals(RestoreUi.Idle, restore.ui.value)
     assertEquals(listOf("2 books added"), toasts.shown)
+  }
+
+  private fun missingRow(id: Long, title: String, path: String) =
+    MissingBookRow(id, title, "Jane Austen", coverPath = null, missingSince = 1, progress = 0.4f, bookmarks = 0, highlights = 0, path = path)
+
+  @Test fun `books removed from the library are listed apart from missing books, by title when it is known`() = runTest {
+    store.missing.value = listOf(missingRow(1, "Emma", "/b/emma.epub"), missingRow(2, "Persuasion", "/b/persuasion.epub"))
+    store.removedBooks.value = setOf("/b/emma.epub", "/b/zz-unread.epub")
+    val settings = settings()
+    backgroundScope.launch { settings.missingBooks.collect {} }
+    backgroundScope.launch { settings.removedBooks.collect {} }
+    runCurrent()
+    assertEquals(listOf(2L), settings.missingBooks.value.map { it.id })
+    assertEquals(listOf(RemovedBook("/b/emma.epub", "Emma"), RemovedBook("/b/zz-unread.epub", null)), settings.removedBooks.value)
+    // Forgetting every missing book leaves a removed book's history alone.
+    settings.forgetAllMissing(); runCurrent()
+    assertEquals(listOf(listOf(2L)), store.forgotten)
+  }
+
+  @Test fun `bringing removed books back lets scans find them again`() = runTest {
+    store.removedBooks.value = setOf("/b/emma.epub", "/b/zz-unread.epub")
+    val settings = settings()
+    backgroundScope.launch { settings.removedBooks.collect {} }
+    runCurrent()
+    settings.restoreRemoved(listOf("/b/emma.epub")); runCurrent()
+    assertEquals(listOf(listOf("/b/emma.epub")), store.restored)
+    assertEquals(listOf("Scanning…", "Book back in the library"), toasts.shown)
+    assertEquals(listOf(RemovedBook("/b/zz-unread.epub", null)), settings.removedBooks.value)
   }
 }

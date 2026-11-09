@@ -84,6 +84,8 @@ class LibraryScanner(
     val folders = db.folders().watched()
     val folderById = folders.associateBy { it.id }
     val known = db.books().knownFiles().associateBy { it.path }
+    // Files the user removed from the library: never found, so a book still held for them stays missing.
+    val removedPaths = settings.removedBooks.first()
     _progress.value = ScanProgress(ScanPhase.Finding)
 
     val foundPaths = HashSet<String>()
@@ -113,6 +115,8 @@ class LibraryScanner(
           if (!root.isDirectory || !root.canRead()) { Log.w(TAG, "folder unreachable: ${folder.path}"); continue }
           reachable += folder.id
           walk(root) { f, calibreLayout ->
+            // After the format choice, so a removed EPUB is not replaced by an AZW3 of the same name.
+            if (f.absolutePath in removedPaths) return@walk
             val file = FoundFile(f.absolutePath, folder.id, f.length(), f.lastModified())
             foundPaths += file.path
             val n = found.incrementAndGet()

@@ -3,6 +3,7 @@ package com.quire.reader.ui.library
 import android.net.Uri
 import androidx.tracing.trace
 import com.quire.reader.data.Book
+import com.quire.reader.data.FileOpResult
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.index.FtsQuery
@@ -12,9 +13,11 @@ import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextSearchResult
 import com.quire.reader.data.scan.ScanProgress
 import com.quire.reader.data.scan.ScanResult
+import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.reader.STALE_TARGET_MESSAGE
 import com.quire.reader.ui.AppNavigator
 import com.quire.reader.ui.AuthorEntry
+import com.quire.reader.ui.BulkSheet
 import com.quire.reader.ui.BookQuery
 import com.quire.reader.ui.IndexerControl
 import com.quire.reader.ui.LibFilter
@@ -34,6 +37,7 @@ import com.quire.reader.ui.bookQuery
 import com.quire.reader.ui.books
 import com.quire.reader.ui.describeImport
 import com.quire.reader.ui.describe
+import com.quire.reader.ui.describeFileOp
 import com.quire.reader.ui.libLayoutOf
 import com.quire.reader.ui.sortKeyOf
 import com.quire.reader.ui.textSearchInput
@@ -81,6 +85,14 @@ interface LibraryStore {
   suspend fun removeFolder(id: Long): Int
   /** Returns how many files were imported. */
   suspend fun importFiles(uris: List<Uri>): Int
+  /** Adds the user tag [tag] to each book. */
+  suspend fun addTag(bookIds: List<Long>, tag: String)
+  /** Takes the books out of the library, keeping their files; returns how many were removed. */
+  suspend fun removeFromLibrary(bookIds: List<Long>): Int
+  /** Deletes the books' files from the device and forgets the books. */
+  suspend fun deleteFiles(bookIds: List<Long>): FileOpResult
+  /** Copies the books' files into the folder [dir]. */
+  suspend fun copyFiles(bookIds: List<Long>, dir: String): FileOpResult
 }
 
 /** The library's saved view choices (`SettingsStore`). */
@@ -112,6 +124,8 @@ class LibraryState(
   private val scope: CoroutineScope,
   /** Where the book list and everything derived from it are worked out; never the main thread. */
   private val compute: CoroutineContext = Dispatchers.Default,
+  /** Hands the books' files to another app (the system share sheet); false when none can take them. */
+  private val shareFiles: (List<Book>) -> Boolean = { false },
 ) {
   private val _state = MutableStateFlow(LibraryUiState())
   val state: StateFlow<LibraryUiState> = _state
@@ -166,6 +180,15 @@ class LibraryState(
 
   init {
     scope.launch { prefs.textSearchOrder.collect { edit { copy(textSearchOrder = it) } } }
+    // A selected book that leaves the library (deleted, removed, gone in a rescan) leaves the selection too.
+    scope.launch {
+      data.collect { lib ->
+        if (lib.loaded) edit {
+          val kept = selected.filterTo(HashSet()) { it in lib.byId }
+          if (kept.size == selected.size) this else copy(selected = kept, bulkSheet = bulkSheet.takeIf { kept.isNotEmpty() })
+        }
+      }
+    }
     // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
     scope.launch { prefs.libraryLayout.first().let { saved -> edit { copy(layout = libLayoutOf(saved)) } } }
     // Sorting by words needs the word count shown; turning it off goes back to the default sort (the saved one stays).
@@ -180,7 +203,8 @@ class LibraryState(
 
   // ── browsing ─────────────────────────────────────────────────────────────
 
-  fun setView(v: LibView) = edit { copy(view = v) }
+  /** Selection belongs to the Books view, so another view ends it. */
+  fun setView(v: LibView) = edit { copy(view = v, selected = if (v == LibView.Books) selected else emptySet(), bulkSheet = if (v == LibView.Books) bulkSheet else null) }
   fun setFilter(f: LibFilter) = edit { copy(filter = f) }
   fun setScope(scope: Scope?, view: LibView = LibView.Books) =
     edit { copy(scope = scope, view = view, query = if (scope != null) "" else query) }
@@ -220,6 +244,88 @@ class LibraryState(
     edit { copy(layout = next, view = LibView.Books) }
     scope.launch { prefs.setLibraryLayout(next.name) }
     toasts.show(when (next) { LibLayout.Grid -> "Grid"; LibLayout.List -> "Dense list"; LibLayout.Comfortable -> "Comfortable list"; LibLayout.Shelves -> "Shelves" } + " layout")
+  }
+
+  // ── selecting books ──────────────────────────────────────────────────────
+
+  /** A long press: picks the book, starting selection mode if it was not on. */
+  fun startSelection(id: Long) = edit { copy(selected = selected + id) }
+
+  /** A tap while selecting; unpicking the last book ends selection mode. */
+  fun toggleSelected(id: Long) = edit {
+    val next = if (id in selected) selected - id else selected + id
+    copy(selected = next, bulkSheet = bulkSheet.takeIf { next.isNotEmpty() })
+  }
+
+  /** Picks every book the Books view shows now, or, when they all are already, none of them. */
+  fun toggleSelectAll() = edit {
+    val shown = visible.value.books.mapTo(HashSet()) { it.id }
+    copy(selected = if (selected.containsAll(shown)) emptySet() else selected + shown, bulkSheet = null)
+  }
+
+  fun clearSelection() = edit { copy(selected = emptySet(), bulkSheet = null) }
+
+  fun openBulk(sheet: BulkSheet?) = edit { copy(bulkSheet = sheet.takeIf { selecting }) }
+
+  /** The selected books, in library order; those no longer in the library are left out. */
+  fun selectedBooks(): List<Book> {
+    val picked = _state.value.selected
+    return data.value.all.filter { it.id in picked }
+  }
+
+  /** Ends selection mode and hands back what was selected, for an action to work on. */
+  private fun takeSelection(): List<Long> {
+    val ids = _state.value.selected.toList()
+    edit { copy(selected = emptySet(), bulkSheet = null) }
+    return ids
+  }
+
+  /** Sends the selected books' files to another app through the system share sheet. */
+  fun sendSelected() {
+    val chosen = selectedBooks()
+    if (chosen.isEmpty()) return
+    if (shareFiles(chosen)) clearSelection() else toasts.show("No app can receive these files")
+  }
+
+  fun tagSelected(tag: String) {
+    val t = tag.trim()
+    if (t.isEmpty() || !_state.value.selecting) return
+    val ids = takeSelection()
+    scope.launch {
+      store.addTag(ids, t)
+      toasts.show("Tagged ${books(ids.size)} “$t”")
+    }
+  }
+
+  /** Copies the selected books' files into [dir], the folder picked for them; null when the picker was closed. */
+  fun copySelected(dir: String?) {
+    if (dir == null) { openBulk(null); return }
+    if (!_state.value.selecting) return
+    val ids = takeSelection()
+    scope.launch {
+      toasts.show("Copying ${books(ids.size)}…")
+      report(store.copyFiles(ids, dir), "Copied", "copy", " to ${StoragePaths.displayName(dir)}")
+    }
+  }
+
+  fun removeSelected() {
+    if (!_state.value.selecting) return
+    val ids = takeSelection()
+    scope.launch {
+      val n = store.removeFromLibrary(ids)
+      toasts.show(if (n == 0) "Nothing to remove" else "Removed ${books(n)} from the library · bring ${if (n == 1) "it" else "them"} back in Settings")
+    }
+  }
+
+  fun deleteSelected() {
+    if (!_state.value.selecting) return
+    val ids = takeSelection()
+    scope.launch { report(store.deleteFiles(ids), "Deleted", "delete") }
+  }
+
+  /** A file action's toast; when files failed without all-files access, asks for it instead. */
+  private fun report(result: FileOpResult, past: String, verb: String, tail: String = "") {
+    toasts.show(if (result.failed > 0 && !hasFileAccess()) "Allow access to your files first" else describeFileOp(result, past, verb, tail))
   }
 
   // ── going elsewhere ──────────────────────────────────────────────────────

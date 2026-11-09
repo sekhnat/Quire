@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Where the books Quire can send live: anywhere on the device's storage (watched folders may be on an SD card, which no
+  narrower path type covers) and the imported-books folder. Nothing is readable until a file's URI is granted to an app.
+-->
+<paths>
+    <root-path name="storage" path="storage/" />
+    <files-path name="imported" path="imported/" />
+</paths>

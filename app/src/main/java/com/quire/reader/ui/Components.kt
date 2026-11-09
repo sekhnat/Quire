@@ -144,6 +144,10 @@ object Ic {
   val BookBookmark = R.drawable.ph_book_bookmark
   val CheckBold = R.drawable.ph_check_bold
   val Gear = R.drawable.ph_gear_six
+  val Trash = R.drawable.ph_trash
+  val Tag = R.drawable.ph_tag
+  val Info = R.drawable.ph_info
+  val MinusCircle = R.drawable.ph_minus_circle
 }
 
 @Composable

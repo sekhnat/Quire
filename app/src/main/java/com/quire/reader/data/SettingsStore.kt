@@ -63,6 +63,14 @@ class SettingsStore(context: Context) {
   }
   suspend fun setHiddenTags(tags: Set<String>) = store.edit { it[HIDDEN_TAGS] = tags }
 
+  /**
+   * Paths of book files the user removed from the library while keeping them on the device. Scans skip them, so they
+   * stay out until brought back from Settings. Paths name this device's files, so backups do not carry them.
+   */
+  val removedBooks: Flow<Set<String>> = flow(REMOVED_BOOKS, emptySet())
+  suspend fun addRemovedBooks(paths: Collection<String>) = store.edit { it[REMOVED_BOOKS] = it[REMOVED_BOOKS].orEmpty() + paths }
+  suspend fun restoreRemovedBooks(paths: Collection<String>) = store.edit { it[REMOVED_BOOKS] = it[REMOVED_BOOKS].orEmpty() - paths.toSet() }
+
   /** The library layout last picked, by name; null until one is. */
   val libraryLayout: Flow<String?> = store.data.map { it[LIBRARY_LAYOUT] }
   suspend fun setLibraryLayout(name: String) = store.edit { it[LIBRARY_LAYOUT] = name }
@@ -188,6 +196,7 @@ class SettingsStore(context: Context) {
     private val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     private val USE_CALIBRE = booleanPreferencesKey("use_calibre")
     private val HIDDEN_TAGS = stringSetPreferencesKey("hidden_tags")
+    private val REMOVED_BOOKS = stringSetPreferencesKey("removed_book_paths")
     private val SHOW_WORD_COUNT = booleanPreferencesKey("show_word_count")
     private val WATCH_NEW = booleanPreferencesKey("watch_new_books")
     private val COVERS_BACKFILLED = booleanPreferencesKey("covers_backfilled")
