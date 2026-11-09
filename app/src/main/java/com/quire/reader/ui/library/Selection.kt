@@ -158,7 +158,7 @@ internal fun SelectionSheets(s: LibraryUiState, lib: LibraryData, library: Libra
     s.bulkSheet == BulkSheet.ConfirmRemove,
     if (shown.size == 1) "Remove “${shown.single().title}” from the library?" else "Remove ${books(shown.size)} from the library?",
     "The ${if (shown.size == 1) "file stays" else "files stay"} on your device, and scans leave ${if (shown.size == 1) "it" else "them"} out. " +
-      "Bring ${if (shown.size == 1) "it" else "them"} back from Settings, under Library. Reading history is kept.",
+      "Bring ${if (shown.size == 1) "it" else "them"} back from Settings, under Removed books. Reading history is kept.",
     "Remove", Nq.text, close, library::removeSelected,
   )
   ConfirmSheet(
