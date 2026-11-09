@@ -56,6 +56,31 @@ class BookModelTest {
     assertFalse(book(status = "reading", progress = .1f, added = now - day).isNew)
   }
 
+  @Test fun `the word count comes from the catalogue, unknown until counted`() {
+    assertEquals(null, catalog().toBook(now).words)
+    assertEquals(92_431, catalog().copy(wordCount = 92_431).toBook(now).words)
+  }
+
+  @Test fun `word counts read short on a shared line and in full on their own`() {
+    fun short(n: Int?) = book().copy(words = n).wordsShort
+    fun long(n: Int?) = book().copy(words = n).wordsLong
+    assertEquals(null, short(null))
+    assertEquals(null, short(0))
+    assertEquals("1 word", short(1))
+    assertEquals("999 words", short(999))
+    assertEquals("1k words", short(1_000))
+    assertEquals("1.5k words", short(1_540))
+    assertEquals("9.9k words", short(9_940))
+    assertEquals("10k words", short(9_950))
+    assertEquals("92k words", short(92_431))
+    assertEquals("999k words", short(999_499))
+    assertEquals("1M words", short(999_500))
+    assertEquals("1.2M words", short(1_234_567))
+    assertEquals("92,431 words", long(92_431))
+    assertEquals("1 word", long(1))
+    assertEquals(null, long(0))
+  }
+
   @Test fun `size and series labels read naturally`() {
     assertEquals("2.4 MB", book(size = 2_500_000).sizeLabel)
     assertEquals("512 KB", book(size = 524_288).sizeLabel)

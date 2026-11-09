@@ -131,6 +131,27 @@ class LibraryLogicTest {
     assertEquals(setOf(1L, 2L), visible(LibraryUiState(query = "austen"), books).map { it.id }.toSet())
   }
 
+  @Test fun `sorting by words puts the longest first and books not counted yet last`() {
+    val counted = listOf(
+      testBook(1, "Short", words = 20_000), testBook(2, "Long", words = 180_000), testBook(3, "Uncounted"), testBook(4, "Unreadable", words = 0),
+    )
+    assertEquals(listOf(2L, 1L), visible(LibraryUiState(sort = SortKey.Words), counted).map { it.id }.take(2))
+    assertEquals(listOf(1L, 2L), visible(LibraryUiState(sort = SortKey.Words, sortAscending = true), counted).map { it.id }.takeLast(2))
+  }
+
+  @Test fun `the word count joins a metadata line only while it is shown and known`() {
+    val b = testBook(1, "Emma", words = 160_000, status = BookStatus.Reading, progress = .4f)
+    assertEquals("160k words", wordsLabel(b, show = true))
+    assertEquals(null, wordsLabel(b, show = false))
+    assertEquals(null, wordsLabel(testBook(2, "Uncounted"), show = true))
+    assertEquals(null, wordsLabel(testBook(3, "Unreadable", words = 0), show = true))
+    assertEquals("40% · 160k words", withWords(cardStatus(b, SortKey.Opened), b, show = true, sort = SortKey.Opened))
+    assertEquals("40%", withWords(cardStatus(b, SortKey.Opened), b, show = false, sort = SortKey.Opened))
+    // Sorted by words, the caption is the count itself, so it is not repeated.
+    assertEquals("160k words", withWords(cardStatus(b, SortKey.Words), b, show = true, sort = SortKey.Words))
+    assertEquals("Not counted yet", cardStatus(testBook(2, "Uncounted"), SortKey.Words))
+  }
+
   @Test fun `card caption follows the active sort`() {
     val b = books[0]
     assertEquals("40%", cardStatus(b, SortKey.Opened))

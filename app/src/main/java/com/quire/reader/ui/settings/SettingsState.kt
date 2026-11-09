@@ -36,6 +36,9 @@ interface LibrarySettings {
   suspend fun setUseCalibre(v: Boolean)
   val watchNewBooks: Flow<Boolean>
   suspend fun setWatchNewBooks(v: Boolean)
+  /** Whether books show their word count. */
+  val showWordCount: Flow<Boolean>
+  suspend fun setShowWordCount(v: Boolean)
   /** Every tag in the library, each once, in name order. */
   val tagNames: Flow<List<String>>
   /** Tags whose books the library leaves out. */
@@ -74,6 +77,7 @@ class SettingsState(
   val defaults: StateFlow<ReaderPrefs> = store.readerDefaults.stateIn(scope, SharingStarted.Eagerly, ReaderPrefs())
   val useCalibre: StateFlow<Boolean> = store.useCalibre.stateIn(scope, SharingStarted.Eagerly, true)
   val watch: StateFlow<Boolean> = store.watchNewBooks.stateIn(scope, SharingStarted.Eagerly, true)
+  val showWordCount: StateFlow<Boolean> = store.showWordCount.stateIn(scope, SharingStarted.Eagerly, false)
   /** Tags whose books the library hides, and every tag the picker can offer. */
   val hiddenTags: StateFlow<Set<String>> = store.hiddenTags.stateIn(scope, SharingStarted.Eagerly, emptySet())
   val tagNames: StateFlow<List<String>> = store.tagNames.stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -125,6 +129,7 @@ class SettingsState(
     persist.launch { store.setReaderControls(next) }
   }
   fun resetAllBookPrefs() = persist.launch { store.clearAllBookPrefs(); toasts.show("Every book now uses your defaults") }
+  fun setShowWordCount(v: Boolean) = persist.launch { store.setShowWordCount(v) }
   fun setUseCalibre(v: Boolean) = persist.launch { store.setUseCalibre(v); toasts.show("Takes effect on the next full rescan") }
   fun setWatch(v: Boolean) = persist.launch { store.setWatchNewBooks(v) }
   fun setTagHidden(tag: String, hidden: Boolean) = persist.launch { store.setTagHidden(tag, hidden) }

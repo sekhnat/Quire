@@ -63,6 +63,7 @@ import com.quire.reader.ui.Tag
 import com.quire.reader.ui.bleed
 import com.quire.reader.ui.cornerGlow
 import com.quire.reader.ui.statusLabel
+import com.quire.reader.ui.wordsLabel
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -99,7 +100,7 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
             QText(book.author, 13.5f, Modifier.clickable { detail.showScope(Scope(ScopeKind.Author, book.primaryAuthor)) }, color = Nq.accent300)
             Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
               if (book.rating > 0) (1..5).forEach { i -> Ph(if (i <= book.rating) Ic.StarFill else Ic.Star, 13.dp, if (i <= book.rating) Nq.accent else Nq.neutral700) }
-              QText(listOfNotNull(book.year?.toString(), "${book.pages} pages").joinToString(" · "), 11.5f, Modifier.padding(start = if (book.rating > 0) 6.dp else 0.dp), color = Nq.neutral500)
+              QText(listOfNotNull(book.year?.toString(), "${book.pages} pages", wordsLabel(book, lib.showWords)).joinToString(" · "), 11.5f, Modifier.padding(start = if (book.rating > 0) 6.dp else 0.dp), color = Nq.neutral500)
             }
           }
         }
@@ -151,8 +152,9 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
 
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
           Kicker("File", Modifier.padding(bottom = 6.dp))
-          listOf(
+          listOfNotNull(
             Triple("Format", "${BookFormats.label(book.path)} · ${book.sizeLabel}", false),
+            book.wordsLong?.takeIf { lib.showWords }?.let { Triple("Length", it, false) },
             Triple("Language", book.languageLabel, false),
             Triple("Added", book.addedLabel, false),
             Triple("Source", if (book.fromCalibre) "Calibre · metadata.opf" else "Folder scan", false),

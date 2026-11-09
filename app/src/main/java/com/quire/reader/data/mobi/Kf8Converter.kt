@@ -28,7 +28,7 @@ internal class Kf8Converter(private val book: MobiBook, private val db: PalmData
 
   fun convert(): EpubContent {
     val raw = String(readText(db, header), Charsets.ISO_8859_1)
-    val flows = flowTable(raw.length).map { (start, end) -> raw.substring(start, end) }
+    val flows = flowTable(db, header, raw.length).map { (start, end) -> raw.substring(start, end) }
     flows.forEachIndexed { n, flow -> if (n > 0 && flow.contains("<svg")) svgFlows += n }
     val fragments = MobiIndex.read(db, header.fragmentIndex, header.charset).entries
     fragmentStarts = fragments.map { it.key.trim().toLongOrNull() ?: -1L }
@@ -60,20 +60,6 @@ internal class Kf8Converter(private val book: MobiBook, private val db: PalmData
       }
     }
     return EpubContent(book, documents, styles, toc)
-  }
-
-  /** Flow boundaries from the FDST record; one flow covering everything when there is none. */
-  private fun flowTable(length: Int): List<Pair<Int, Int>> {
-    val whole = listOf(0 to length)
-    if (header.fdstIndex == NULL_INDEX || header.fdstIndex >= db.recordCount) return whole
-    val fdst = runCatching { db.record(header.fdstIndex.toInt()) }.getOrNull() ?: return whole
-    if (fdst.size < 12 || String(fdst, 0, 4, Charsets.ISO_8859_1) != "FDST") return whole
-    val count = fdst.u32(8).toInt()
-    if (count < 1 || 12 + count * 8 > fdst.size) return whole
-    return (0 until count).map { i ->
-      val start = fdst.u32(12 + i * 8).coerceIn(0, length.toLong()).toInt()
-      start to fdst.u32(16 + i * 8).coerceIn(start.toLong(), length.toLong()).toInt()
-    }
   }
 
   /** Each skeleton with its fragments put back at their insert positions; a fragment's text follows its skeleton's. */

@@ -20,6 +20,7 @@ import com.quire.reader.ui.Visit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -146,6 +147,31 @@ class LibraryStateTest {
     library.toggleSearch(); library.setSearchScope(SearchScope.Text); library.setTextLibraryQuery("pemberley")
     runCurrent(); advanceTimeBy(300); runCurrent()
     assertEquals(listOf(TextSearchFilters(hiddenTags = setOf("Private"))), store.searches)
+  }
+
+  @Test fun `the word count setting reaches every screen through the library data`() = runTest {
+    val prefs = FakeLibraryPrefs()
+    val library = library(prefs)
+    runCurrent()
+    assertEquals(false, library.data.value.showWords)
+    prefs.showWordCount.value = true; runCurrent()
+    assertEquals(true, library.data.value.showWords)
+  }
+
+  @Test fun `a saved sort by words falls back to the default while word counts are off`() = runTest {
+    val library = library(FakeLibraryPrefs(sort = "Words"))
+    runCurrent()
+    assertEquals(SortKey.Opened, library.state.value.sort)
+  }
+
+  @Test fun `a saved sort by words is kept while word counts are on, and dropped when they are turned off`() = runTest {
+    val prefs = FakeLibraryPrefs(sort = "Words", showWordCount = MutableStateFlow(true))
+    val library = library(prefs)
+    runCurrent()
+    assertEquals(SortKey.Words, library.state.value.sort)
+    prefs.showWordCount.value = false; runCurrent()
+    assertEquals(SortKey.Opened, library.state.value.sort)
+    assertEquals(emptyList<Pair<String, Boolean>>(), prefs.savedSorts)
   }
 
   @Test fun `a rescan without file access only asks for it`() = runTest {

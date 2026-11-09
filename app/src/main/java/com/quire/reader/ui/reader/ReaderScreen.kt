@@ -71,6 +71,7 @@ import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.ColorDot
 import com.quire.reader.ui.Ic
 import com.quire.reader.ui.IconBtn
+import com.quire.reader.ui.MetaLine
 import com.quire.reader.ui.Ph
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QSlider
@@ -257,6 +258,7 @@ private fun LightBarsEffect(theme: ReaderTheme, overlay: Boolean) {
 @Composable
 private fun ReaderChrome(s: ReaderUiState, session: ReaderSession, reader: ReaderState, marked: Boolean, progress: Float) {
   val book = session.book
+  val words by reader.wordCount.collectAsStateWithLifecycle()
   var dragging by remember { mutableStateOf<Float?>(null) }
   Box(Modifier.fillMaxSize()) {
     AnimatedVisibility(s.chrome, Modifier.align(Alignment.TopCenter), enter = slideInVertically(tween(250)) { -it }, exit = slideOutVertically(tween(250)) { -it }) {
@@ -267,7 +269,7 @@ private fun ReaderChrome(s: ReaderUiState, session: ReaderSession, reader: Reade
         IconBtn(Ic.ArrowLeft, reader::leave)
         Column(Modifier.weight(1f)) {
           QText(book.title, 14f, weight = 500, maxLines = 1)
-          QText(book.author, 11f, color = Nq.neutral500, maxLines = 1)
+          MetaLine(book.author, words, 11f, Nq.neutral500)
         }
         IconBtn(Ic.Search, { reader.setTextSearch(true) })
         IconBtn(if (marked) Ic.BookmarkFill else Ic.Bookmark, reader::toggleBookmark, tint = if (marked) Nq.accent else Nq.text)

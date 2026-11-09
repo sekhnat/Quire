@@ -24,6 +24,20 @@ internal fun readText(db: PalmDatabase, header: MobiHeader): ByteArray {
   return out.toByteArray()
 }
 
+/** A KF8 section's flow boundaries from its FDST record; one flow covering everything when there is none. Flow 0 is the text. */
+internal fun flowTable(db: PalmDatabase, header: MobiHeader, length: Int): List<Pair<Int, Int>> {
+  val whole = listOf(0 to length)
+  if (header.fdstIndex == NULL_INDEX || header.fdstIndex >= db.recordCount) return whole
+  val fdst = runCatching { db.record(header.fdstIndex.toInt()) }.getOrNull() ?: return whole
+  if (fdst.size < 12 || String(fdst, 0, 4, Charsets.ISO_8859_1) != "FDST") return whole
+  val count = fdst.u32(8).toInt()
+  if (count < 1 || 12 + count * 8 > fdst.size) return whole
+  return (0 until count).map { i ->
+    val start = fdst.u32(12 + i * 8).coerceIn(0, length.toLong()).toInt()
+    start to fdst.u32(16 + i * 8).coerceIn(start.toLong(), length.toLong()).toInt()
+  }
+}
+
 /** Comfortably above any real book; a damaged length or record count must not exhaust memory. */
 private const val MAX_TEXT_BYTES = 256 * 1024 * 1024
 

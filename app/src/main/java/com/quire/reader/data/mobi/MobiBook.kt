@@ -1,5 +1,6 @@
 package com.quire.reader.data.mobi
 
+import com.quire.reader.data.scan.WordTally
 import java.io.Closeable
 import java.io.File
 import java.io.OutputStream
@@ -86,6 +87,16 @@ class MobiBook private constructor(private val db: PalmDatabase, private val mob
       else -> runCatching { Kf8Converter(this, db, kf8).convert() }.getOrElse { Mobi6Converter(this, db, mobi6).convert() }
     }
     EpubWriter.write(content, out)
+  }
+
+  /**
+   * Words in the book's text, read straight from its text records: a KF8 book's first flow (the others are stylesheets
+   * and SVG), or a MOBI 6 book's whole HTML stream. Nothing is converted.
+   */
+  fun countWords(): Int {
+    val raw = readText(db, main)
+    val text = if (main.isKf8) flowTable(db, main, raw.size).first().let { (start, end) -> raw.copyOfRange(start, end) } else raw
+    return WordTally.ofHtml(String(text, main.charset))
   }
 
   /** Text bytes in the book: a size measure comparable to an EPUB's HTML bytes. */

@@ -99,6 +99,7 @@ class Features(private val app: QuireApplication) {
     override val librarySortAscending get() = settings.librarySortAscending
     override val textSearchOrder get() = settings.textSearchOrder
     override val hiddenTags get() = settings.hiddenTags
+    override val showWordCount get() = settings.showWordCount
     override suspend fun setLibraryLayout(name: String) { settings.setLibraryLayout(name) }
     override suspend fun setLibrarySort(name: String, ascending: Boolean) { settings.setLibrarySort(name, ascending) }
     override suspend fun setTextSearchOrder(order: SearchOrder) { settings.setTextSearchOrder(order) }
@@ -203,6 +204,8 @@ class Features(private val app: QuireApplication) {
     override suspend fun setUseCalibre(v: Boolean) { repo.setUseCalibre(v) }
     override val watchNewBooks get() = repo.watchNewBooks
     override suspend fun setWatchNewBooks(v: Boolean) { repo.setWatchNewBooks(v) }
+    override val showWordCount get() = repo.showWordCount
+    override suspend fun setShowWordCount(v: Boolean) { repo.setShowWordCount(v) }
     override val tagNames get() = repo.tagNames
     override val hiddenTags get() = repo.hiddenTags
     override suspend fun setTagHidden(tag: String, hidden: Boolean) { repo.setTagHidden(tag, hidden) }

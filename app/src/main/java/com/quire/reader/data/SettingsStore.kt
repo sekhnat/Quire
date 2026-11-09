@@ -78,6 +78,10 @@ class SettingsStore(context: Context) {
 
   /** Whether the advanced reading controls are shown at all; independent of their values. */
   val advancedReadingEnabled: Flow<Boolean> = flow(ADVANCED_READING_ENABLED, false)
+
+  /** Whether books show their word count; while on, uncounted books are counted in the background. */
+  val showWordCount: Flow<Boolean> = flow(SHOW_WORD_COUNT, false)
+  suspend fun setShowWordCount(v: Boolean) = store.edit { it[SHOW_WORD_COUNT] = v }
   suspend fun setAdvancedReadingEnabled(v: Boolean) = store.edit { it[ADVANCED_READING_ENABLED] = v }
 
   /** How the reader behaves around the page: volume keys, screen-on, orientation. */
@@ -148,6 +152,7 @@ class SettingsStore(context: Context) {
       readAloud = ReadAloudPrefs.fromJson(prefs[READ_ALOUD]) ?: ReadAloudPrefs(),
       textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
       hiddenTags = prefs[HIDDEN_TAGS].orEmpty().sorted(),
+      showWordCount = prefs[SHOW_WORD_COUNT] ?: false,
     )
   }
 
@@ -164,6 +169,7 @@ class SettingsStore(context: Context) {
     s.readAloud?.let { setReadAloudPrefs(it) }
     s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
     s.hiddenTags?.let { setHiddenTags(it.toSet()) }
+    s.showWordCount?.let { setShowWordCount(it) }
   }
 
   companion object {
@@ -182,6 +188,7 @@ class SettingsStore(context: Context) {
     private val ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
     private val USE_CALIBRE = booleanPreferencesKey("use_calibre")
     private val HIDDEN_TAGS = stringSetPreferencesKey("hidden_tags")
+    private val SHOW_WORD_COUNT = booleanPreferencesKey("show_word_count")
     private val WATCH_NEW = booleanPreferencesKey("watch_new_books")
     private val COVERS_BACKFILLED = booleanPreferencesKey("covers_backfilled")
     private val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")

@@ -23,6 +23,8 @@ class LibraryData(
   val folders: List<FolderEntity>,
   val hidden: Set<String> = emptySet(),
   val loaded: Boolean = true,
+  /** Whether books show their word count (the setting); the counts themselves are on each [Book]. */
+  val showWords: Boolean = false,
 ) {
   val books: List<Book> = if (hidden.isEmpty()) all else all.filter { b -> b.tags.none { it in hidden } }
   val byId: Map<Long, Book> = all.associateBy { it.id }

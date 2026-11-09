@@ -283,6 +283,8 @@ class LibraryRepository(
   /** Every tag in the library, each once, in name order; the hidden-tags picker chooses from these. */
   val tagNames: Flow<List<String>> = db.books().observeTagNames()
   val hiddenTags: Flow<Set<String>> = settings.hiddenTags
+  val showWordCount: Flow<Boolean> = settings.showWordCount
+  suspend fun setShowWordCount(v: Boolean) = settings.setShowWordCount(v)
   suspend fun setTagHidden(tag: String, hidden: Boolean) = settings.setTagHidden(tag, hidden)
 
   val indexingEnabled: Flow<Boolean> = settings.indexingEnabled

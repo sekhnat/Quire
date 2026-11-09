@@ -146,6 +146,23 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals(listOf(30L), db.stats().observeSessions().first().map { it.startedAt })
   }
 
+  @Test fun `migration to version 8 leaves every word count to be counted, and stores a count only for the file counted`() = runBlocking {
+    val db = migrated()
+    val sqlite = db.openHelper.writableDatabase
+    assertEquals(listOf(null, null), sqlite.rows("SELECT wordCount FROM book ORDER BY id").map { it[0] })
+    // The unreadable book (2) is never counted.
+    val uncounted = db.books().uncounted()
+    assertEquals(listOf(1L), uncounted.map { it.id })
+    assertEquals(1, db.books().observeUncountedCount().first())
+
+    val dracula = uncounted.single()
+    db.books().setWordCounts(mapOf(dracula.copy(mtime = dracula.mtime + 1) to 7)) // the file changed since: not stored
+    assertEquals(null, sqlite.rows("SELECT wordCount FROM book WHERE id = 1").single()[0])
+    db.books().setWordCounts(mapOf(dracula to 160_000))
+    assertEquals(160_000, db.books().catalogByIds(listOf(1L)).single().wordCount)
+    assertEquals(emptyList<UncountedBook>(), db.books().uncounted())
+  }
+
   private val legacyTriggers = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'room_fts_content_sync_text_chunk_fts%'"
   private val legacyTables = "SELECT COUNT(*) FROM sqlite_master WHERE name IN ('text_chunk', 'text_chunk_fts', 'index_state', 'text_chunk_fts_terms')"
 

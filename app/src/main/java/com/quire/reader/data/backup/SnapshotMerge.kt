@@ -96,6 +96,7 @@ object SnapshotMerge {
       readerControls = incoming.readerControls ?: local.readerControls,
       readAloud = incoming.readAloud ?: local.readAloud,
       hiddenTags = incoming.hiddenTags ?: local.hiddenTags,
+      showWordCount = incoming.showWordCount ?: local.showWordCount,
     )
   }
 }

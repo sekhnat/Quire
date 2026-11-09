@@ -18,10 +18,12 @@ import com.quire.reader.data.scan.CoverStore
 import com.quire.reader.data.scan.LibraryScanner
 import com.quire.reader.data.scan.ScanPhase
 import com.quire.reader.data.scan.ScanWorker
+import com.quire.reader.data.scan.WordCounts
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.quire.reader.reader.PublicationLoader
 
@@ -50,6 +52,11 @@ class QuireApplication : Application() {
         combine(settings.indexingEnabled, settings.indexChargingOnly) { enabled, chargingOnly -> enabled to chargingOnly }
           .distinctUntilChanged().drop(1).collect { indexer.applyPolicy() }
       }
+      // While word counts are shown, any change to the library that leaves books uncounted asks for a counting pass.
+      launch {
+        combine(settings.showWordCount, database.books().observeUncountedCount()) { show, uncounted -> show && uncounted > 0 }
+          .collect { if (it) wordCounts.request() }
+      }
       indexer.request()
     }
   }
@@ -63,6 +70,7 @@ class QuireApplication : Application() {
   val publicationLoader by lazy { PublicationLoader(this) }
   val scanner by lazy { LibraryScanner(database, publicationLoader, covers, settings, importedDir = java.io.File(filesDir, "imported")) }
   val indexer by lazy { LibraryIndexer(this, database, indexDatabase, publicationLoader, settings, appScope) }
+  val wordCounts by lazy { WordCounts(database, enabled = { settings.showWordCount.first() }, scope = appScope) }
   val library by lazy { LibraryRepository(this, database, indexDatabase, scanner, covers, settings, indexer) }
 
   val restore by lazy { RestoreCoordinator(this, database, settings, SnapshotImporter(database, settings)) }
