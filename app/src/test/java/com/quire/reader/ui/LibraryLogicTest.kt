@@ -78,7 +78,7 @@ class LibraryLogicTest {
         assertEquals("$s", sortThenFilter(s, library).map { it.id }, visibleBooks(s.bookQuery, lib).map { it.id })
         combinations++
       }
-    assertEquals(5 * 2 * 5 * 9 * 7, combinations)
+    assertEquals(SortKey.entries.size * 2 * LibFilter.entries.size * 9 * 7, combinations)
   }
 
   /** The library list as it was worked out before filtering came first: the whole library sorted, then narrowed. */

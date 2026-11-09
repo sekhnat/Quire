@@ -146,7 +146,7 @@ class TextIndexMigrationTest : DbTestCase() {
     assertEquals(listOf(30L), db.stats().observeSessions().first().map { it.startedAt })
   }
 
-  @Test fun `migration to version 8 leaves every word count to be counted, and stores a count only for the file counted`() = runBlocking {
+  @Test fun `migration to version 8 leaves every word count to be counted and stores a count only for the file counted`() = runBlocking {
     val db = migrated()
     val sqlite = db.openHelper.writableDatabase
     assertEquals(listOf(null, null), sqlite.rows("SELECT wordCount FROM book ORDER BY id").map { it[0] })
