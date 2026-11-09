@@ -6,6 +6,12 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.12.1] - 2026-11-09
+
+### Fixed
+
+- The library keeps its scroll position when you come back from a book, the reader, Settings or Stats, in every view and layout. A list opened from a book's author, series or tag still starts at the top.
+
 ## [1.12.0] - 2026-11-09
 
 Select several books at once, and send, tag, copy, remove or delete them together.
@@ -190,6 +196,7 @@ First release.
 - Search inside every book, with a full-text index built in the background.
 - Scroll mode reads the whole book as one continuous page, and a fling stops the moment your finger lands.
 
+[1.12.1]: https://github.com/sekhnat/Quire/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/sekhnat/Quire/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/sekhnat/Quire/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/sekhnat/Quire/compare/v1.9.0...v1.10.0
