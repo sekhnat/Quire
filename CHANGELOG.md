@@ -6,7 +6,9 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.12.0] - 2026-11-09
+
+Select several books at once, and send, tag, copy, remove or delete them together.
 
 ### Added
 
@@ -15,8 +17,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - *Tag* adds one of your tags to every selected book, typed or picked from the library's tags.
   - *Copy* copies the files into a folder you pick; a copy into a watched folder joins the library.
   - *Info* shows their files: count, total size and formats, and each book's format, size, date added and location.
-  - *Remove* takes the books out of the library and leaves the files on your device. Scans skip them until you bring them back from Settings → Library → *Removed books*, with any reading history they had.
+  - *Remove* takes the books out of the library and leaves the files on your device. Scans skip them until you bring them back from Settings → *Removed books*, with any reading history they had.
   - *Delete* deletes the book files from your device, with their reading history. Only the book file goes: a Calibre folder's `metadata.opf` and `cover.jpg` stay.
+
+### Upgrading
+
+- No database migration and no new permissions.
+- Going back to 1.11.0 brings removed books back into the library at its next scan.
 
 ## [1.11.0] - 2026-11-09
 
@@ -183,6 +190,7 @@ First release.
 - Search inside every book, with a full-text index built in the background.
 - Scroll mode reads the whole book as one continuous page, and a fling stops the moment your finger lands.
 
+[1.12.0]: https://github.com/sekhnat/Quire/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/sekhnat/Quire/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/sekhnat/Quire/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/sekhnat/Quire/compare/v1.8.0...v1.9.0
