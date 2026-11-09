@@ -6,7 +6,9 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.11.0] - 2026-11-09
+
+Every book's word count, in the library, on its page and in the reader.
 
 ### Added
 
@@ -14,7 +16,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Upgrading
 
-- Database version 8 adds the word count to every book, empty until the setting is first turned on.
+- The library database moves to version 8, which an older build cannot open. Back up first if you may want to go back.
+- Version 8 adds the word count to every book, empty until the setting is first turned on.
 
 ## [1.10.0] - 2026-11-08
 
@@ -168,6 +171,7 @@ First release.
 - Search inside every book, with a full-text index built in the background.
 - Scroll mode reads the whole book as one continuous page, and a fling stops the moment your finger lands.
 
+[1.11.0]: https://github.com/sekhnat/Quire/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/sekhnat/Quire/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/sekhnat/Quire/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/sekhnat/Quire/compare/v1.7.0...v1.8.0
