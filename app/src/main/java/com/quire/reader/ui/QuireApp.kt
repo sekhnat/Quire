@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -51,13 +52,16 @@ fun QuireApp(
   val lib by vm.library.data.collectAsStateWithLifecycle()
   val destination by vm.destination.collectAsStateWithLifecycle()
   val toast by vm.toastText.collectAsStateWithLifecycle()
+  // The library leaves composition while a book, Settings or Stats is open; this keeps its saveable state (the views'
+  // scroll positions, the pager's page) for when it comes back.
+  val saved = rememberSaveableStateHolder()
   Box(Modifier.fillMaxSize().background(Nq.bg)) {
     // Keyed by kind, so moving between two books' pages swaps the content without a fade.
     updateTransition(destination, label = "screen").Crossfade(Modifier.fillMaxSize(), animationSpec = tween(180), contentKey = { it::class }) { d ->
       when (d) {
         Destination.Splash -> Box(Modifier.fillMaxSize().background(Nq.bg))
         is Destination.Onboard -> OnboardingScreen(d.state)
-        Destination.Library -> LibraryScreen(libState, lib, vm.library)
+        Destination.Library -> saved.SaveableStateProvider("library") { LibraryScreen(libState, lib, vm.library) }
         is Destination.Detail -> DetailScreen(d.state, lib)
         is Destination.Reader -> ReaderScreen(d.state)
         is Destination.Settings -> SettingsScreen(d.state)

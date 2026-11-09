@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -246,32 +247,36 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
   val bottom = 32.dp + navBottomPadding() + if (s.selecting) SelectionBarSpace else 0.dp
   val hPad = 20.dp
   val taps = rememberBookTaps(s.selected, library)
-  when (layout) {
-    LibLayout.Grid -> LazyVerticalGrid(
-      GridCells.Fixed(3), Modifier.fillMaxSize(),
-      contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom),
-      horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-      item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, visible, layout) }
-      items(list, key = { it.id }) { b -> GridCard(b, s.sort, lib.showWords, taps) }
-    }
-    LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
-      item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, visible, layout) } }
-      items(list, key = { it.id }) { b -> ListRow(b, s.sort, lib.showWords, taps) }
-    }
-    LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
-      item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, visible, layout) } }
-      items(list, key = { it.id }) { b ->
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
-        ComfortableRow(b, s.sort, lib.showWords, taps)
+  // Each scope is its own list: one opened from a book's page (its author, series, tag) starts at the top rather than
+  // where the previous list was scrolled to.
+  key(s.scope) {
+    when (layout) {
+      LibLayout.Grid -> LazyVerticalGrid(
+        GridCells.Fixed(3), Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom),
+        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(18.dp),
+      ) {
+        item(span = { GridItemSpan(maxLineSpan) }) { BooksHeader(s, lib, library, visible, layout) }
+        items(list, key = { it.id }) { b -> GridCard(b, s.sort, lib.showWords, taps) }
       }
-    }
-    LibLayout.Shelves -> {
-      // Only observed while shelves are on screen, so the other layouts never build them.
-      val shelves = library.shelves.collectAsStateWithLifecycle().value?.value.orEmpty()
-      LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-        item { BooksHeader(s, lib, library, visible, layout) }
-        items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, lib.showWords, library, taps) }
+      LibLayout.List -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
+        item { Box(Modifier.padding(bottom = 16.dp)) { BooksHeader(s, lib, library, visible, layout) } }
+        items(list, key = { it.id }) { b -> ListRow(b, s.sort, lib.showWords, taps) }
+      }
+      LibLayout.Comfortable -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom)) {
+        item { Box(Modifier.padding(bottom = 8.dp)) { BooksHeader(s, lib, library, visible, layout) } }
+        items(list, key = { it.id }) { b ->
+          Box(Modifier.fillMaxWidth().height(1.dp).background(Nq.neutral800))
+          ComfortableRow(b, s.sort, lib.showWords, taps)
+        }
+      }
+      LibLayout.Shelves -> {
+        // Only observed while shelves are on screen, so the other layouts never build them.
+        val shelves = library.shelves.collectAsStateWithLifecycle().value?.value.orEmpty()
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = hPad, end = hPad, top = 14.dp, bottom = bottom), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+          item { BooksHeader(s, lib, library, visible, layout) }
+          items(shelves, key = { it.title }) { shelf -> ShelfRow(shelf, s.sort, lib.showWords, library, taps) }
+        }
       }
     }
   }
