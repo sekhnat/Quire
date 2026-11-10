@@ -32,6 +32,16 @@ class OpfParserTest {
   }
 
   @Test
+  fun `text escaped twice is decoded in every field`() {
+    val m = checkNotNull(opf("double_escaped.opf"))
+    assertEquals("Silks & Scourges", m.title)
+    assertEquals("silks & scourges", m.titleSort)
+    assertEquals("Team Hailfire: Aloy & Ikrie", m.series)
+    assertEquals(listOf("Aloy & Ikrie"), m.tags)
+    assertEquals("Six months ago, Hallie Thatcher\u2019s parents sold the inn.\nEverything is changing\u2014really.", m.description)
+  }
+
+  @Test
   fun `a minimal OPF still yields a title and treats Calibre's null date as unknown`() {
     val m = checkNotNull(opf("minimal.opf"))
     assertEquals("Plain Book", m.title)
