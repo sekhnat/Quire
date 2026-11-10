@@ -81,6 +81,12 @@ class LibraryScanner(
       settings.setCoversBackfilled(true)
       Log.i(TAG, "queued cover backfill for cover-less books")
     }
+    // Books stored while titles kept `&amp;` and descriptions kept entities and tags: read them once more.
+    if (!settings.metadataTidied.first()) {
+      db.books().queueMetadataReread()
+      settings.setMetadataTidied(true)
+      Log.i(TAG, "queued re-read of books with untidied metadata")
+    }
     val folders = db.folders().watched()
     val folderById = folders.associateBy { it.id }
     val known = db.books().knownFiles().associateBy { it.path }
