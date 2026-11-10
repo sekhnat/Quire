@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="uuid_id" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>Silks &amp;amp; Scourges</dc:title>
+    <dc:creator opf:file-as="Someone" opf:role="aut">Someone</dc:creator>
+    <dc:description>&amp;lt;p&amp;gt;Six months ago, Hallie Thatcher&amp;rsquo;s parents sold the inn.&amp;lt;/p&amp;gt;&amp;lt;p&amp;gt;Everything is changing&amp;#8212;really.&amp;lt;/p&amp;gt;</dc:description>
+    <dc:subject>Aloy &amp;amp; Ikrie</dc:subject>
+    <dc:subject>Aloy &amp; Ikrie</dc:subject>
+    <meta name="calibre:series" content="Team Hailfire: Aloy &amp;amp; Ikrie"/>
+    <meta name="calibre:title_sort" content="silks &amp;amp; scourges"/>
+  </metadata>
+</package>

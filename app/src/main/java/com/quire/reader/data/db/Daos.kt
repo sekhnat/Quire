@@ -275,6 +275,17 @@ abstract class BookDao {
    */
   @Query("UPDATE book SET mtime = -1 WHERE coverPath IS NULL") abstract suspend fun queueCoverBackfill()
 
+  /**
+   * One-time re-read, the same way as [queueCoverBackfill], of books stored before metadata was tidied (see
+   * [com.quire.reader.data.scan.MetadataText]): those whose fields may hold an HTML entity, or whose description a tag.
+   */
+  @Query(
+    """UPDATE book SET mtime = -1 WHERE title LIKE '%&%;%' OR series LIKE '%&%;%' OR author LIKE '%&%;%'
+       OR description LIKE '%&%;%' OR description LIKE '%<%>%'
+       OR id IN (SELECT bookId FROM book_tag WHERE origin = 'calibre' AND tag LIKE '%&%;%')"""
+  )
+  abstract suspend fun queueMetadataReread()
+
   /** Books that point at a cover file; a full restore without covers checks which of those files exist. */
   @Query("SELECT id, coverPath FROM book WHERE coverPath IS NOT NULL") abstract suspend fun withCovers(): List<BookCover>
   @Query("UPDATE book SET coverPath = NULL WHERE id IN (:ids)") abstract suspend fun clearCovers(ids: List<Long>)

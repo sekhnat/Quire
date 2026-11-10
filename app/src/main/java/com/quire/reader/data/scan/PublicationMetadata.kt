@@ -16,11 +16,11 @@ fun Publication.toOpfMetadata(): OpfMetadata {
     seriesIndex = series?.position,
     tags = m.subjects.mapNotNull { it.name.takeIf { n -> n.isNotBlank() } },
     rating = 0,
-    description = m.description?.let(OpfParser::stripHtml)?.takeIf { it.isNotBlank() },
+    description = m.description,
     year = m.published?.toString()?.let(OpfParser::parseYear),
     language = m.languages.firstOrNull(),
     addedAtMillis = null,
-  )
+  ).tidy()
 }
 
 /** The same fields from a MOBI's EXTH header. MOBI has no series; Calibre keeps that in its `metadata.opf`. */
@@ -33,8 +33,8 @@ fun MobiMetadata.toOpfMetadata(): OpfMetadata = OpfMetadata(
   seriesIndex = null,
   tags = subjects,
   rating = 0,
-  description = description?.let(OpfParser::stripHtml)?.takeIf { it.isNotBlank() },
+  description = description,
   year = OpfParser.parseYear(published),
   language = language,
   addedAtMillis = null,
-)
+).tidy()
