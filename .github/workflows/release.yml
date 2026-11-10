@@ -1,0 +1,98 @@
+name: Release
+
+# Cuts a release without pushing a tag by hand: from the Actions tab, the GitHub mobile app,
+# or a Claude session (which can only push its own branch). It tags main and starts the Build
+# workflow on that tag, which signs the APK and publishes the GitHub release exactly as a
+# hand-pushed v* tag does. A tag pushed with GITHUB_TOKEN never triggers `on: push`, but a
+# workflow_dispatch sent with it does, so nothing builds twice.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.13.0 (CHANGELOG.md on main needs a dated ## [1.13.0] - entry)"
+        required: true
+        type: string
+      dry_run:
+        description: "Only run the checks; create no tag and no release"
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # push the tag
+      actions: write # start the Build workflow on it
+    steps:
+      # Every release is a commit on main (v1.12.1 was tagged off it and never got a release).
+      - name: Releases are cut from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run the Release workflow on main, not ${GITHUB_REF}."
+          exit 1
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Check the version
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          VERSION="${VERSION_INPUT#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version must look like 1.13.0, got '${VERSION_INPUT}'."
+            exit 1
+          fi
+          TAG="v$VERSION"
+          if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            echo "::error::Tag $TAG already exists."
+            exit 1
+          fi
+          LATEST=$(git tag --list 'v*' | sort -V | tail -n 1)
+          if [[ -n "$LATEST" && "$(printf '%s\n%s\n' "$LATEST" "$TAG" | sort -V | tail -n 1)" != "$TAG" ]]; then
+            echo "::error::$TAG is not newer than the latest release, $LATEST."
+            exit 1
+          fi
+          if ! grep -qF "## [$VERSION] - " CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no dated '## [$VERSION] - YYYY-MM-DD' entry. Add and date it on main first."
+            exit 1
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Releasing $TAG from $(git rev-parse --short HEAD) (latest was ${LATEST:-none})."
+
+      - name: Tag the release
+        if: ${{ !inputs.dry_run }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Quire $TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+      - name: Build and publish it
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+
+      - name: Summary
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Dry run: $TAG passed every check; no tag was created." >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "Tagged \`$TAG\` at \`${GITHUB_SHA::7}\`."
+              echo
+              echo "The [Build run on $TAG](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/workflows/build.yml?query=branch%3A${TAG}) signs the APK and publishes the [release](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${TAG})."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

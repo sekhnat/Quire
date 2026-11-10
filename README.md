@@ -114,6 +114,13 @@ The debug APK lands in `app/build/outputs/apk/debug/app-debug.apk`.
 
 The release APK lands in `app/build/outputs/apk/release/app-release.apk`. It is minified with R8 (see `app/proguard-rules.pro` for the keep rules). Without the `QUIRE_KEYSTORE_FILE`/`QUIRE_KEYSTORE_PASSWORD`/`QUIRE_KEY_ALIAS`/`QUIRE_KEY_PASSWORD` environment variables it is signed with the debug key; CI sets them from the repository secrets and signs with the release keystore. CI also passes `-PversionCode` (the run number) and `-PversionName` (the tag or `dev-<sha>`); locally these default to `1` and `1.0`.
 
+### Releasing
+
+1. Add the version's entry to `CHANGELOG.md` and date it (`## [1.13.0] - 2026-11-12`), then get it onto `main`.
+2. Run **Actions → [Release](https://github.com/sekhnat/Quire/actions/workflows/release.yml) → Run workflow** on `main` with the version (`1.13.0`). Tick *dry run* to only check it.
+
+The workflow checks that the version is new, newer than the last release and in the changelog, tags `main` as `v1.13.0`, and starts the Build workflow on that tag, which signs the APK and publishes the GitHub release. It can also be started from the GitHub mobile app or a Claude session. Pushing a `v*` tag by hand still works the same way.
+
 To try it on an emulator, grant access and put some books on the device:
 
 ```sh
