@@ -94,11 +94,11 @@ object OpfParser {
       seriesIndex = if (series != null) seriesIndex else null,
       tags = tags.distinct(),
       rating = rating,
-      description = description?.let(::stripHtml)?.takeIf { it.isNotBlank() },
+      description = description,
       year = parseYear(date),
       language = language,
       addedAtMillis = metas["calibre:timestamp"]?.let(::parseIsoMillis),
-    )
+    ).tidy()
   }
 
   /**
@@ -136,14 +136,6 @@ object OpfParser {
 
   internal fun parseIsoMillis(value: String): Long? = runCatching { java.time.OffsetDateTime.parse(value.trim()).toInstant().toEpochMilli() }.getOrNull()
 
-  /** Description fields are escaped HTML; keep just the text. */
-  internal fun stripHtml(html: String): String =
-    html.replace(Regex("""<\s*(br|/p|/div|/li)\s*/?>""", RegexOption.IGNORE_CASE), "\n")
-      .replace(Regex("<[^>]*>"), "")
-      .replace("&nbsp;", " ").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&")
-      .lines().joinToString("\n") { it.trim() }
-      .replace(Regex("\n{3,}"), "\n\n")
-      .trim()
 
   private fun attr(el: Element, name: String): String? =
     el.getAttributeNS(NS_OPF, name).takeIf { it.isNotEmpty() } ?: el.getAttribute("opf:$name").takeIf { it.isNotEmpty() } ?: el.getAttribute(name).takeIf { it.isNotEmpty() }

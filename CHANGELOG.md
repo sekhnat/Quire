@@ -6,6 +6,15 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Titles, series, authors and tags show `&` and other symbols instead of `&amp;` and similar codes, for books whose
+  metadata was escaped twice.
+- Book descriptions no longer show codes such as `&#8212;` or `&rsquo;` or leftover tags such as `<p>`, and start a new
+  line at headings, quotes and rules. Books already in the library that are affected are read once more on the next scan.
+
 ## [1.12.1] - 2026-11-09
 
 ### Fixed
@@ -196,6 +205,7 @@ First release.
 - Search inside every book, with a full-text index built in the background.
 - Scroll mode reads the whole book as one continuous page, and a fling stops the moment your finger lands.
 
+[Unreleased]: https://github.com/sekhnat/Quire/compare/v1.12.1...HEAD
 [1.12.1]: https://github.com/sekhnat/Quire/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/sekhnat/Quire/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/sekhnat/Quire/compare/v1.10.0...v1.11.0

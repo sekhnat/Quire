@@ -36,12 +36,15 @@ class SettingsStore(context: Context) {
 
   /** False until the scan has re-read the books a cover-broken build stored without one (see [LibraryScanner]). */
   val coversBackfilled: Flow<Boolean> = flow(COVERS_BACKFILLED, false)
+  /** Whether books stored before metadata was tidied have been queued for one re-read (see `BookDao.queueMetadataReread`). */
+  val metadataTidied: Flow<Boolean> = flow(METADATA_TIDIED, false)
   suspend fun setOnboardingDone(v: Boolean) = store.edit { it[ONBOARDING_DONE] = v }
   suspend fun setUseCalibre(v: Boolean) = store.edit { it[USE_CALIBRE] = v }
   suspend fun setWatchNewBooks(v: Boolean) = store.edit { it[WATCH_NEW] = v }
   suspend fun setIndexingEnabled(v: Boolean) = store.edit { it[INDEXING_ENABLED] = v }
   suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
   suspend fun setCoversBackfilled(v: Boolean) = store.edit { it[COVERS_BACKFILLED] = v }
+  suspend fun setMetadataTidied(v: Boolean) = store.edit { it[METADATA_TIDIED] = v }
 
   /** Whether Quire has asked for the notification permission indexing shows its progress with (Android 13+); asked once. */
   val notificationsAsked: Flow<Boolean> = flow(NOTIFICATIONS_ASKED, false)
@@ -200,6 +203,7 @@ class SettingsStore(context: Context) {
     private val SHOW_WORD_COUNT = booleanPreferencesKey("show_word_count")
     private val WATCH_NEW = booleanPreferencesKey("watch_new_books")
     private val COVERS_BACKFILLED = booleanPreferencesKey("covers_backfilled")
+    private val METADATA_TIDIED = booleanPreferencesKey("metadata_tidied")
     private val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")
     private val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
