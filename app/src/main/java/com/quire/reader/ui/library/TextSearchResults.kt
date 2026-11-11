@@ -91,6 +91,7 @@ internal fun TextSearchResults(s: LibraryUiState, lib: LibraryData, search: Libr
       if (s.scope != null) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
           Tag(s.scope.label, { library.setScope(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp)
+          s.words?.let { Tag(it.label + " words", { library.setWords(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp) }
         }
       } else {
         FilterChips(s, lib, library)

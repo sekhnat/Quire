@@ -19,6 +19,9 @@ data class TextSearchFilters(
   val tag: String? = null,
   val status: TextStatusFilter? = null,
   val hiddenTags: Set<String> = emptySet(),
+  /** The library's length filter: books with at least [minWords] and fewer than [maxWords] words; null leaves a side open. */
+  val minWords: Int? = null,
+  val maxWords: Int? = null,
 ) {
   companion object { val None = TextSearchFilters() }
 }

@@ -18,6 +18,8 @@ private const val FILTERS_SQL = """
       AND (:series IS NULL OR b.series = :series)
       AND (:tag IS NULL OR EXISTS (SELECT 1 FROM book_tag t WHERE t.bookId = b.id AND t.tag = :tag))
       AND NOT EXISTS (SELECT 1 FROM book_tag h WHERE h.bookId = b.id AND h.tag IN (:hidden))
+      AND ((:minWords IS NULL AND :maxWords IS NULL)
+        OR (b.wordCount > 0 AND (:minWords IS NULL OR b.wordCount >= :minWords) AND (:maxWords IS NULL OR b.wordCount < :maxWords)))
       AND (:status IS NULL
         OR (:status = 'reading' AND st.status = 'reading')
         OR (:status = 'finished' AND st.status = 'finished')
@@ -39,6 +41,7 @@ abstract class SearchDao {
   )
   abstract suspend fun searchableBooks(
     author: String?, series: String?, tag: String?, status: String?, newSince: Long, hidden: List<String>,
+    minWords: Int?, maxWords: Int?,
   ): List<SearchableBook>
 
   /** One book if it is readable and present, whatever the filters. */

@@ -60,7 +60,7 @@ class LibraryQueriesTest : DbTestCase() {
     assertEquals(emptyList<String>(), rows.getValue(a).userTagList)
     assertEquals(listOf("Classic", "Fiction", "lib", "Private"), db.books().observeTagNames().first())
 
-    fun searchable(hidden: List<String>, tag: String? = null) = runBlocking { db.search().searchableBooks(null, null, tag, null, 0, hidden).map { it.id }.toSet() }
+    fun searchable(hidden: List<String>, tag: String? = null) = runBlocking { db.search().searchableBooks(null, null, tag, null, 0, hidden, null, null).map { it.id }.toSet() }
     assertEquals(setOf(a, b), searchable(emptyList()))
     assertEquals(setOf(a), searchable(listOf("Private")))
     assertEquals(setOf(b), searchable(listOf("Fiction")))

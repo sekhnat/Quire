@@ -6,6 +6,16 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Filter the library by length. While word counts are shown, a *Words* chip after the status chips opens a sheet with
+  Under 5K, 5–10K, 10–20K, 20–50K, 50–100K and 100K+ words, or a custom range: fill in a minimum, a maximum or both
+  (a minimum alone means "that many and more", a maximum alone "up to that many"; `12k` and `12,000` both work). It
+  combines with the status filter, an author, series or tag, and the search boxes, and narrows "Inside books" results
+  too. Books not counted yet are left out of a range. The filter is not saved, and turning word counts off clears it.
+
 ## [1.12.2] - 2026-11-10
 
 Titles and descriptions show their symbols and nothing of their HTML.
@@ -212,6 +222,7 @@ First release.
 - Search inside every book, with a full-text index built in the background.
 - Scroll mode reads the whole book as one continuous page, and a fling stops the moment your finger lands.
 
+[Unreleased]: https://github.com/sekhnat/Quire/compare/v1.12.2...HEAD
 [1.12.2]: https://github.com/sekhnat/Quire/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/sekhnat/Quire/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/sekhnat/Quire/compare/v1.11.0...v1.12.0

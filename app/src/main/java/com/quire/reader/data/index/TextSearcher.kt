@@ -53,7 +53,7 @@ class TextSearcher(
   /** The books to search for [filters]: both databases read at once, then joined here. */
   private suspend fun candidates(filters: TextSearchFilters, recentSince: Long): List<Candidate> = coroutineScope {
     val states = async { indexDb.states().searchable() }
-    val books = async { db.search().searchableBooks(filters.author, filters.series, filters.tag, filters.status?.name?.lowercase(), recentSince, filters.hiddenTags.toList()) }
+    val books = async { db.search().searchableBooks(filters.author, filters.series, filters.tag, filters.status?.name?.lowercase(), recentSince, filters.hiddenTags.toList(), filters.minWords, filters.maxWords) }
     candidates(books.await(), states.await())
   }
 
