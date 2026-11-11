@@ -33,6 +33,7 @@ import com.quire.reader.ui.SeriesEntry
 import com.quire.reader.ui.ShelfDef
 import com.quire.reader.ui.SortKey
 import com.quire.reader.ui.Toasts
+import com.quire.reader.ui.WordRange
 import com.quire.reader.ui.bookQuery
 import com.quire.reader.ui.books
 import com.quire.reader.ui.describeImport
@@ -192,7 +193,12 @@ class LibraryState(
     // Only the first saved value is applied: later changes come from this screen, and a shelf's forced grid must not be undone by them.
     scope.launch { prefs.libraryLayout.first().let { saved -> edit { copy(layout = libLayoutOf(saved)) } } }
     // Sorting by words needs the word count shown; turning it off goes back to the default sort (the saved one stays).
-    scope.launch { prefs.showWordCount.collect { show -> if (!show) edit { if (sort == SortKey.Words) copy(sort = SortKey.Opened) else this } } }
+    // The length filter goes with them too, so a hidden filter never leaves books out.
+    scope.launch {
+      prefs.showWordCount.collect { show ->
+        if (!show) edit { copy(sort = if (sort == SortKey.Words) SortKey.Opened else sort, words = null, wordsOpen = false) }
+      }
+    }
     scope.launch {
       val sort = sortKeyOf(prefs.librarySort.first()).let { if (it == SortKey.Words && !prefs.showWordCount.first()) SortKey.Opened else it }
       val ascending = prefs.librarySortAscending.first() ?: false
@@ -208,8 +214,8 @@ class LibraryState(
   fun setFilter(f: LibFilter) = edit { copy(filter = f) }
   fun setScope(scope: Scope?, view: LibView = LibView.Books) =
     edit { copy(scope = scope, view = view, query = if (scope != null) "" else query) }
-  fun showFilter(f: LibFilter) = edit { copy(view = LibView.Books, filter = f, scope = null) }
-  fun showShelf(filter: LibFilter? = null, scope: Scope? = null) = edit { copy(filter = filter ?: LibFilter.All, scope = scope, layout = LibLayout.Grid) }
+  fun showFilter(f: LibFilter) = edit { copy(view = LibView.Books, filter = f, scope = null, words = null) }
+  fun showShelf(filter: LibFilter? = null, scope: Scope? = null) = edit { copy(filter = filter ?: LibFilter.All, scope = scope, words = null, layout = LibLayout.Grid) }
   fun toggleSearch() = edit { copy(searchOpen = !searchOpen, query = "", textLibraryQuery = "") }
   fun setQuery(q: String) = edit { copy(query = q, view = LibView.Books) }
   fun setSearchScope(scope: SearchScope) = edit { copy(searchScope = scope) }
@@ -220,6 +226,9 @@ class LibraryState(
   }
   fun openImport(open: Boolean) = edit { copy(importOpen = open) }
   fun openSort(open: Boolean) = edit { copy(sortOpen = open) }
+  fun openWords(open: Boolean) = edit { copy(wordsOpen = open) }
+  /** Filters the Books view to [range] (null: any length) and closes the sheet. */
+  fun setWords(range: WordRange?) = edit { copy(words = range, wordsOpen = false, view = LibView.Books) }
   fun setSortAscending(asc: Boolean) { edit { copy(sortAscending = asc) }; saveSort() }
   fun flipSort() { edit { copy(sortAscending = !sortAscending) }; saveSort() }
   fun pickSort(k: SortKey) {

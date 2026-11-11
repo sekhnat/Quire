@@ -83,6 +83,9 @@ import com.quire.reader.ui.ProgressLine
 import com.quire.reader.ui.QButton
 import com.quire.reader.ui.QText
 import com.quire.reader.ui.QTextField
+import com.quire.reader.ui.WordPreset
+import com.quire.reader.ui.WordRange
+import androidx.compose.foundation.layout.imePadding
 import com.quire.reader.ui.authorLine
 import com.quire.reader.ui.scanStatus
 import com.quire.reader.ui.synopsisPreview
@@ -196,6 +199,7 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
     }
     ImportSheet(s, lib, library, onAddFolder = { pickingFolder = true })
     SortSheet(s, lib.showWords, library)
+    WordsSheet(s, library)
     FolderPickerSheet(pickingFolder, { pickingFolder = false }, library::addFolder)
     SelectionSheets(s, lib, library)
   }
@@ -242,7 +246,7 @@ private fun ScanStatusCard(library: LibraryState) {
 private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
   val visible by library.visible.collectAsStateWithLifecycle()
   val list = visible.books
-  val filtered = s.scope != null || s.query.isNotBlank() || s.filter != LibFilter.All
+  val filtered = s.scope != null || s.query.isNotBlank() || s.filter != LibFilter.All || s.words != null
   val layout = if (s.layout == LibLayout.Shelves && filtered) LibLayout.Grid else s.layout
   val bottom = 32.dp + navBottomPadding() + if (s.selecting) SelectionBarSpace else 0.dp
   val hPad = 20.dp
@@ -285,12 +289,13 @@ private fun BooksView(s: LibraryUiState, lib: LibraryData, library: LibraryState
 @Composable
 private fun BooksHeader(s: LibraryUiState, lib: LibraryData, library: LibraryState, visible: VisibleBooks, layout: LibLayout) {
   val list = visible.books
-  val showHero = s.scope == null && s.filter == LibFilter.All && s.query.isBlank() && layout != LibLayout.Shelves
+  val showHero = s.scope == null && s.filter == LibFilter.All && s.words == null && s.query.isBlank() && layout != LibLayout.Shelves
   val showSortRow = layout != LibLayout.Shelves
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
     if (s.scope != null) {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Tag(s.scope.label, { library.setScope(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp)
+        s.words?.let { Tag(it.label + " words", { library.setWords(null) }, accent = true, size = 12f, icon = Ic.X, hPad = 10.dp, vPad = 6.dp) }
         QText(list.size.toString() + if (list.size == 1) " book" else " books", 11.5f, color = Nq.neutral500)
       }
     } else {
@@ -326,6 +331,60 @@ internal fun FilterChips(s: LibraryUiState, lib: LibraryData, library: LibrarySt
       ) {
         QText(f.label, 12.5f, color = if (on) Nq.accent200 else Nq.neutral300, maxLines = 1)
         QText(fmt(lib.counts.getValue(f)), 11f, color = Nq.neutral500, tabular = true)
+      }
+    }
+    // The length filter, with the word counts it works on; it opens its own sheet and combines with the status filter.
+    if (lib.showWords) item {
+      val range = s.words
+      val on = range != null
+      val shape = RoundedCornerShape(999.dp)
+      Row(
+        Modifier.clip(shape).background(if (on) Nq.accentA(0.12f) else Color.Transparent).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { library.openWords(true) }.padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+      ) {
+        QText(if (range != null) "${range.label} words" else "Words", 12.5f, color = if (on) Nq.accent200 else Nq.neutral300, maxLines = 1)
+        Ph(Ic.CaretDown, 10.dp, if (on) Nq.accent200 else Nq.neutral500)
+      }
+    }
+  }
+}
+
+@Composable
+private fun WordsSheet(s: LibraryUiState, library: LibraryState) {
+  // The typed bounds start from the active custom range, and again each time the sheet opens.
+  var min by remember(s.wordsOpen) { mutableStateOf(s.words?.takeIf { r -> WordPreset.entries.none { it.range == r } }?.min?.toString().orEmpty()) }
+  var max by remember(s.wordsOpen) { mutableStateOf(s.words?.takeIf { r -> WordPreset.entries.none { it.range == r } }?.max?.toString().orEmpty()) }
+  val custom = WordRange.custom(min, max)
+  val typed = min.isNotBlank() || max.isNotBlank()
+  SheetHost(s.wordsOpen, { library.openWords(false) }, Modifier.imePadding().padding(start = 12.dp, end = 12.dp, bottom = 30.dp)) {
+    Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      QText("Filter by length", 17f, weight = 500, modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 6.dp))
+      val choices = listOf<Pair<String, WordRange?>>("Any length" to null) + WordPreset.entries.map { it.range.label to it.range }
+      choices.forEach { (label, range) ->
+        val on = s.words == range
+        Row(
+          Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (on) Nq.accentA(0.10f) else Color.Transparent).clickable { library.setWords(range) }.padding(horizontal = 10.dp, vertical = 11.dp),
+          horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically,
+        ) {
+          QText(label + if (range != null) " words" else "", 14f, color = if (on) Nq.accent200 else Nq.text, modifier = Modifier.weight(1f))
+          if (on) Ph(Ic.CheckBold, 16.dp, Nq.accent)
+        }
+      }
+      Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        QText("Custom range", 12.5f, color = Nq.neutral400)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+          QTextField(min, { min = it }, "Min, e.g. 12k", Modifier.weight(1f))
+          QTextField(max, { max = it }, "Max, e.g. 40k", Modifier.weight(1f))
+        }
+        QText(
+          when {
+            !typed -> "Leave one side empty for “min+” or “up to max”."
+            custom == null -> "Enter at least one number, with the minimum below the maximum."
+            else -> "Shows books of ${custom.label} words."
+          },
+          11f, color = if (typed && custom == null) Nq.neutral400 else Nq.neutral500,
+        )
+        QButton("Apply", { library.setWords(custom) }, Modifier.fillMaxWidth(), BtnKind.Primary, size = 13f, height = 40.dp, enabled = custom != null)
       }
     }
   }

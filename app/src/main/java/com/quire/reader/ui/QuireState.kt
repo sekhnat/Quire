@@ -3,6 +3,7 @@ package com.quire.reader.ui
 import androidx.tracing.trace
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.compactCount
 import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearchFilters
 import com.quire.reader.data.index.TextStatusFilter
@@ -13,6 +14,62 @@ enum class OnboardStep { Welcome, Access, Folders, Scan }
 enum class LibView(val label: String) { Books("Books"), Authors("Authors"), Series("Series"), Tags("Tags") }
 enum class LibLayout { Grid, List, Comfortable, Shelves }
 enum class LibFilter(val label: String) { All("All"), Reading("In progress"), Unread("Unread"), Recent("Recently added"), Finished("Finished") }
+
+/**
+ * A word-count range for the library's length filter: [min] is included, [max] is not, and null leaves that side open
+ * ("12K+" has no max, "under 40K" no min). Books not counted yet, or unreadable (0), are in no range.
+ */
+data class WordRange(val min: Int? = null, val max: Int? = null) {
+  fun matches(words: Int?): Boolean = words != null && words > 0 && (min == null || words >= min) && (max == null || words < max)
+
+  /** "Under 5K", "5K–10K", "100K+". */
+  val label: String get() = when {
+    min != null && max != null -> "${compactCount(min).uppercase()}–${compactCount(max).uppercase()}"
+    min != null -> "${compactCount(min).uppercase()}+"
+    max != null -> "Under ${compactCount(max).uppercase()}"
+    else -> "Any length"
+  }
+
+  companion object {
+    /**
+     * A custom range from the two text fields: either may be empty (min only is "min+", max only "up to max"), but not
+     * both. Null when both are empty, a typed side is not a number, or the minimum is not below the maximum.
+     */
+    fun custom(min: String, max: String): WordRange? {
+      val lo = parseWordBound(min)
+      val hi = parseWordBound(max)
+      if ((lo == null && min.isNotBlank()) || (hi == null && max.isNotBlank())) return null
+      if (lo == null && hi == null) return null
+      if (lo != null && hi != null && lo >= hi) return null
+      return WordRange(lo, hi)
+    }
+  }
+}
+
+/** The ready-made length ranges the filter sheet offers. */
+enum class WordPreset(val range: WordRange) {
+  Under5k(WordRange(max = 5_000)),
+  From5kTo10k(WordRange(5_000, 10_000)),
+  From10kTo20k(WordRange(10_000, 20_000)),
+  From20kTo50k(WordRange(20_000, 50_000)),
+  From50kTo100k(WordRange(50_000, 100_000)),
+  Over100k(WordRange(min = 100_000)),
+}
+
+/** A typed bound: digits with optional separators and an optional "k" or "m" ("12k", "12,000", "1.5m"); null if empty or not a number. */
+fun parseWordBound(text: String): Int? {
+  val t = text.trim().lowercase().replace(",", "").replace(" ", "")
+  if (t.isEmpty()) return null
+  val scale = when {
+    t.endsWith("k") -> 1_000.0
+    t.endsWith("m") -> 1_000_000.0
+    else -> 1.0
+  }
+  val n = (if (scale == 1.0) t else t.dropLast(1)).toDoubleOrNull() ?: return null
+  val words = n * scale
+  return if (words.isFinite() && words >= 1 && words <= Int.MAX_VALUE) words.toInt() else null
+}
+
 enum class Sheet { Display, Contents, Voices }
 /** The library's sheets for the selected books: add a tag, file info, the copy folder picker, and the two confirmations. */
 enum class BulkSheet { Tag, Info, Copy, ConfirmRemove, ConfirmDelete }
@@ -52,6 +109,9 @@ data class LibraryUiState(
   val sort: SortKey = SortKey.Opened,
   val sortAscending: Boolean = false,
   val sortOpen: Boolean = false,
+  /** The length filter (null = any length), and whether its sheet is open. Not saved; only offered while word counts are shown. */
+  val words: WordRange? = null,
+  val wordsOpen: Boolean = false,
   val scope: Scope? = null,
   val query: String = "",
   val searchOpen: Boolean = false,
@@ -119,9 +179,10 @@ data class BookQuery(
   val filter: LibFilter = LibFilter.All,
   val scope: Scope? = null,
   val query: String = "",
+  val words: WordRange? = null,
 )
 
-val LibraryUiState.bookQuery: BookQuery get() = BookQuery(sort, sortAscending, filter, scope, query)
+val LibraryUiState.bookQuery: BookQuery get() = BookQuery(sort, sortAscending, filter, scope, query, words)
 
 /**
  * Books for the library list: those in the scope (or, without one, passing the status filter) that match the search,
@@ -129,6 +190,7 @@ val LibraryUiState.bookQuery: BookQuery get() = BookQuery(sort, sortAscending, f
  */
 fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.visibleBooks") {
   val scope = q.scope
+  val words = q.words
   val text = q.query.takeIf { it.isNotBlank() }?.lowercase()
   val searchText = if (text != null) lib.searchText else null
   val kept = ArrayList<Book>()
@@ -144,7 +206,7 @@ fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.vi
       LibFilter.Unread -> b.status == BookStatus.Unread
       LibFilter.Finished -> b.status == BookStatus.Finished
     }
-    if (inView && (text == null || searchText!![i].contains(text))) kept += b
+    if (inView && (words == null || words.matches(b.words)) && (text == null || searchText!![i].contains(text))) kept += b
   }
   var order = compareBy<Book> { q.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
   if (!q.ascending) order = order.reversed()
@@ -158,7 +220,8 @@ fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.vi
  * The library filters that narrow a text search: the same scope and status filter [visibleBooks] applies, without its
  * metadata query, and never a book with one of the [hidden] tags. Like there, an active scope replaces the status filter.
  */
-fun textFilters(s: LibraryUiState, hidden: Set<String> = emptySet()): TextSearchFilters = textFiltersOf(s).copy(hiddenTags = hidden)
+fun textFilters(s: LibraryUiState, hidden: Set<String> = emptySet()): TextSearchFilters =
+  textFiltersOf(s).copy(hiddenTags = hidden, minWords = s.words?.min, maxWords = s.words?.max)
 
 private fun textFiltersOf(s: LibraryUiState): TextSearchFilters = when (val scope = s.scope) {
   null -> TextSearchFilters(
