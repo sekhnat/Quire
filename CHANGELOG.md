@@ -6,7 +6,9 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.13.0] - 2026-11-11
+
+Filter the library by how long books are.
 
 ### Added
 
@@ -222,7 +224,7 @@ First release.
 - Search inside every book, with a full-text index built in the background.
 - Scroll mode reads the whole book as one continuous page, and a fling stops the moment your finger lands.
 
-[Unreleased]: https://github.com/sekhnat/Quire/compare/v1.12.2...HEAD
+[1.13.0]: https://github.com/sekhnat/Quire/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/sekhnat/Quire/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/sekhnat/Quire/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/sekhnat/Quire/compare/v1.11.0...v1.12.0
