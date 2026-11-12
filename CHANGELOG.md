@@ -6,6 +6,14 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Search the Tags tab. With the library search open on *Tags*, typing narrows the tag cloud to the tags whose name
+  contains it (ignoring case) instead of jumping to the books; tapping a tag opens its books as before. On the other
+  tabs the search still finds books by title, author, series or tag.
+
 ## [1.13.0] - 2026-11-11
 
 Filter the library by how long books are.

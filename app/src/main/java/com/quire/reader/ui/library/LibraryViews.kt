@@ -146,7 +146,7 @@ private class Smart(val label: String, val rule: String, val icon: Int, val coun
  * line is its own lazy item, so only the chips on screen are composed however many tags the library has.
  */
 @Composable
-internal fun TagsView(lib: LibraryData, library: LibraryState) {
+internal fun TagsView(lib: LibraryData, query: String, library: LibraryState) {
   val counts = lib.counts
   val smart = listOf(
     Smart("In progress", "Opened, not finished", Ic.BookOpen, fmt(counts.getValue(LibFilter.Reading))) { library.showFilter(LibFilter.Reading) },
@@ -159,18 +159,21 @@ internal fun TagsView(lib: LibraryData, library: LibraryState) {
   BoxWithConstraints(Modifier.fillMaxSize()) {
     // The list's 20dp content padding, rounded per side as LazyColumn does.
     val available = constraints.maxWidth - 2 * with(density) { 20.dp.roundToPx() }
-    // Keeps the previous lines while a library change is repacked, so the cloud doesn't blink.
-    val lines by produceState<List<TagLine>?>(null, lib, available, metrics) {
-      value = withContext(Dispatchers.Default) { tagLines(lib.tags, available, metrics) }
+    val search = query.trim()
+    // Keeps the previous lines while a library change or a new search is repacked, so the cloud doesn't blink.
+    val lines by produceState<List<TagLine>?>(null, lib, available, metrics, search) {
+      value = withContext(Dispatchers.Default) { tagLines(matchingTags(lib.tags, search), available, metrics) }
     }
-    TagsList(lines, lib.loaded, smart, library)
+    TagsList(lines, lib.loaded, smart, search, library)
   }
 }
 
+/** The tag cloud, under the smart collections; while [search] isn't empty, only the tags matching it. */
 @Composable
-private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>, library: LibraryState) {
+private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>, search: String, library: LibraryState) {
+  val searching = search.isNotEmpty()
   LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 32.dp + navBottomPadding()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    item(contentType = "smart") {
+    if (!searching) item(contentType = "smart") {
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Kicker("Smart collections")
         smart.forEach { sm ->
@@ -188,7 +191,9 @@ private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>,
         }
       }
     }
-    item(contentType = "kicker") { Kicker("Tags · from your books", Modifier.padding(top = 12.dp)) }
+    item(contentType = "kicker") {
+      if (searching) Kicker("Tags matching “$search”") else Kicker("Tags · from your books", Modifier.padding(top = 12.dp))
+    }
     items(lines.orEmpty(), key = { it.tags.first().first }, contentType = { "tagLine" }) { line ->
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         line.tags.forEach { (name, n) ->
@@ -196,7 +201,9 @@ private fun TagsList(lines: List<TagLine>?, loaded: Boolean, smart: List<Smart>,
         }
       }
     }
-    if (lines?.isEmpty() == true && loaded) item { QText("No tags yet. Tags come from Calibre, or add your own from a book's page.", 12f, color = Nq.neutral500) }
+    if (lines?.isEmpty() == true && loaded) item {
+      QText(if (searching) "No tags match “$search”." else "No tags yet. Tags come from Calibre, or add your own from a book's page.", 12f, color = Nq.neutral500)
+    }
   }
 }
 

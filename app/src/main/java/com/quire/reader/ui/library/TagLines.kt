@@ -62,6 +62,15 @@ internal fun tagChipWidths(tags: List<Pair<String, Int>>, m: TagChipMetrics): In
   }
 }
 
+/**
+ * The [tags] whose name contains [query] (trimmed, ignoring case), in their order; all of them for a blank query. The
+ * same rule as the hidden-tags sheet's search.
+ */
+internal fun matchingTags(tags: List<Pair<String, Int>>, query: String): List<Pair<String, Int>> {
+  val q = query.trim().lowercase()
+  return if (q.isEmpty()) tags else tags.filter { it.first.lowercase().contains(q) }
+}
+
 /** Lays [tags] out as chip lines [available] pixels wide. */
 internal fun tagLines(tags: List<Pair<String, Int>>, available: Int, m: TagChipMetrics): List<TagLine> =
   packLines(tagChipWidths(tags, m), available, m.gapPx).map { TagLine(tags.subList(it.first, it.last + 1)) }

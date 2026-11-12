@@ -1,6 +1,7 @@
 package com.quire.reader.ui.library
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class TagLinesTest {
@@ -24,5 +25,21 @@ class TagLinesTest {
 
   @Test fun `a chip wider than the line gets a line to itself`() {
     assertEquals(listOf(0..0, 1..1, 2..3), packLines(intArrayOf(30, 150, 30, 30), 100, 8))
+  }
+
+  private val tags = listOf("Fantasy" to 12, "Science Fiction" to 7, "fiction" to 5, "Poetry" to 2)
+
+  @Test fun `a blank search keeps every tag`() {
+    assertSame(tags, matchingTags(tags, ""))
+    assertSame(tags, matchingTags(tags, "   "))
+  }
+
+  @Test fun `a search keeps the tags containing it, ignoring case and spaces around it, in their order`() {
+    assertEquals(listOf("Science Fiction" to 7, "fiction" to 5), matchingTags(tags, " FICTION "))
+    assertEquals(listOf("Fantasy" to 12), matchingTags(tags, "tas"))
+  }
+
+  @Test fun `a search nothing contains keeps no tags`() {
+    assertEquals(emptyList<Pair<String, Int>>(), matchingTags(tags, "history"))
   }
 }
