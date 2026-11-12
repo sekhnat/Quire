@@ -83,6 +83,16 @@ class LibraryStateTest {
     assertEquals(listOf(3L, 1L), library.visible.value.books.map { it.id })
   }
 
+  @Test fun `searching on the Tags view stays there, and on any other view shows the books`() = runTest {
+    val library = library()
+    library.setView(LibView.Tags)
+    library.setQuery("fant")
+    assertEquals(LibView.Tags to "fant", library.state.value.let { it.view to it.query })
+    library.setView(LibView.Authors)
+    library.setQuery("emma")
+    assertEquals(LibView.Books to "emma", library.state.value.let { it.view to it.query })
+  }
+
   @Test fun `a view's groups are only worked out while it is observed`() = runTest {
     val library = library()
     runCurrent()

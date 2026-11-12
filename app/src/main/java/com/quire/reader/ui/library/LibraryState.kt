@@ -217,7 +217,8 @@ class LibraryState(
   fun showFilter(f: LibFilter) = edit { copy(view = LibView.Books, filter = f, scope = null, words = null) }
   fun showShelf(filter: LibFilter? = null, scope: Scope? = null) = edit { copy(filter = filter ?: LibFilter.All, scope = scope, words = null, layout = LibLayout.Grid) }
   fun toggleSearch() = edit { copy(searchOpen = !searchOpen, query = "", textLibraryQuery = "") }
-  fun setQuery(q: String) = edit { copy(query = q, view = LibView.Books) }
+  /** On the Tags view the query narrows the tag cloud, so it stays there; from any other view it shows the matching books. */
+  fun setQuery(q: String) = edit { copy(query = q, view = if (view == LibView.Tags) view else LibView.Books) }
   fun setSearchScope(scope: SearchScope) = edit { copy(searchScope = scope) }
   fun setTextLibraryQuery(q: String) = edit { copy(textLibraryQuery = q, view = LibView.Books) }
   fun setTextSearchOrder(order: SearchOrder) {

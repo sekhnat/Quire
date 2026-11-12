@@ -170,7 +170,8 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
             if (s.searchScope == SearchScope.Text) {
               QTextField(s.textLibraryQuery, library::setTextLibraryQuery, "Words or a “phrase” inside books", leadingIcon = Ic.Search, onClear = { library.setTextLibraryQuery("") }, focusRequester = focus)
             } else {
-              QTextField(s.query, library::setQuery, "Title, author, series, tag", leadingIcon = Ic.Search, focusRequester = focus)
+              // On the Tags view the query narrows the tag cloud rather than the books.
+              QTextField(s.query, library::setQuery, if (s.view == LibView.Tags) "Tag name" else "Title, author, series, tag", leadingIcon = Ic.Search, focusRequester = focus)
             }
             Segmented(
               SearchScope.entries.map { SegOption(it.label, s.searchScope == it, { library.setSearchScope(it) }) },
@@ -190,7 +191,7 @@ fun LibraryScreen(s: LibraryUiState, lib: LibraryData, library: LibraryState) {
           } else BooksView(s, lib, library)
           LibView.Authors -> AuthorsView(library)
           LibView.Series -> SeriesView(library)
-          LibView.Tags -> TagsView(lib, library)
+          LibView.Tags -> TagsView(lib, s.query, library)
         }
       }
     }
