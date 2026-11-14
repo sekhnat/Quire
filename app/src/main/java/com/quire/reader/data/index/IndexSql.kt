@@ -37,7 +37,7 @@ class RoomIndexSql(private val db: IndexDatabase) : IndexSql {
       override suspend fun <R> statement(sql: String, block: (SQLiteStatement) -> R): R = usePrepared(sql, block)
     }) } }.also { db.invalidationTracker.refreshAsync() }
 
-  override suspend fun exec(sql: String) = db.useWriterConnection { c -> c.usePrepared(sql) { while (it.step()) Unit } }
+  override suspend fun exec(sql: String) = db.useWriterConnection { c -> c.usePrepared(sql) { while (it.step()) {} } }
 }
 
 /** A single bare connection, for tools that build index files without Room. Not thread-safe. */
@@ -58,7 +58,7 @@ class ConnectionIndexSql(private val connection: SQLiteConnection) : IndexSql {
     }
   }
 
-  override suspend fun exec(sql: String) = connection.prepare(sql).use { while (it.step()) Unit }
+  override suspend fun exec(sql: String) = connection.prepare(sql).use { while (it.step()) {} }
 }
 
 internal suspend fun IndexConnection.exec(sql: String, vararg args: Any?) = statement(sql) { st -> st.bindAll(args); st.step(); Unit }

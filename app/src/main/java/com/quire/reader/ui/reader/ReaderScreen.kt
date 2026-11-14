@@ -258,7 +258,7 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
       actions = DefinitionCardActions(
         close = reader::closeDefinition, back = reader::definitionBack, more = reader::expandDefinition, lookUp = reader::lookUpInCard,
         highlight = { reader.onSelectionAction(SelectionAction.Highlight) }, copy = { reader.onSelectionAction(SelectionAction.Copy) },
-        openInApp = reader.openInApp?.let { open -> { s.definition?.let { open(it.query) }; Unit } },
+        openInApp = reader.openInApp?.let { open -> { val d = s.definition; if (d != null) open(d.query) } },
       ),
       modifier = Modifier.align(if (cardAtTop) Alignment.TopCenter else Alignment.BottomCenter)
         .padding(top = statusTop + 8.dp, bottom = navBottom + 8.dp),
