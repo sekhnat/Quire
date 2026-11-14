@@ -5,6 +5,9 @@ import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.ParagraphPreset
 import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
+import com.quire.reader.data.AutoScrollPrefs
+import com.quire.reader.data.ReadMode
+import com.quire.reader.data.TypographySource
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
@@ -60,12 +63,19 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.quire.reader.reader.UserFontRegistry
+import com.quire.reader.data.dictionary.WordLookup
+import com.quire.qdict.LookupResult
+import com.quire.qdict.Selections
+import com.quire.reader.navigator.epub.ReaderMedia
+import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.positions
@@ -108,6 +118,7 @@ interface ReaderStore {
   suspend fun setLastHighlightColor(color: Int)
 
   val readerControls: Flow<ReaderControls>
+  suspend fun setReaderControls(controls: ReaderControls)
   val readAloudPrefs: Flow<ReadAloudPrefs>
   suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs)
   val brightness: Flow<Int>
@@ -155,9 +166,19 @@ data class ReaderUiState(
   val noteFor: Long? = null,
   /** Colour the Highlights tab is narrowed to, as a `HighlightColor` index; null shows every highlight. */
   val highlightColorFilter: Int? = null,
+  /** Auto-scroll or auto page turn, and what is pausing it. */
+  val auto: AutoScrollState = AutoScrollState(),
+  /** The definition card, open while a word chosen by a long press is selected. */
+  val definition: DefinitionUi? = null,
+  /** An image, SVG or table open full screen. */
+  val media: ReaderMedia? = null,
+  /** A passage waiting in the Share quote sheet. */
+  val quote: QuoteDraft? = null,
+  /** Where the last link inside the book was followed from, offered back as a chip. */
+  val returnTo: ReturnPoint<Locator>? = null,
 ) {
   /** Whether anything is drawn over the page; the volume keys stay with the system then. */
-  val overlaysOpen: Boolean get() = chrome || sheet != null || textSearchOpen || showZones || activeHighlight != null || noteFor != null
+  val overlaysOpen: Boolean get() = chrome || sheet != null || textSearchOpen || showZones || activeHighlight != null || noteFor != null || quote != null || media != null || definition != null
 }
 
 /**
@@ -187,7 +208,12 @@ class ReaderState(
   private val now: () -> Long = System::currentTimeMillis,
   /** What reading aloud needs; null where it is not offered. */
   private val readAloudSupport: ReadAloudSupport? = null,
+  userFonts: UserFontsPort = NoUserFonts,
+  /** The bundled dictionary; null where the definition card is not offered. */
+  private val wordLookup: WordLookup? = null,
 ) {
+  /** The user's fonts, for the font picker. */
+  val fonts = FontChoices(userFonts, scope, persist, toasts)
   val bookId: Long get() = request.bookId
 
   /** What the text-selection menu offers; "Look up" only when some app can take the text. */
@@ -342,6 +368,20 @@ class ReaderState(
     scope.launch { store.highlights(bookId).collect { _highlights.value = it } }
     scope.launch { store.brightness.collect { b -> edit { copy(brightness = b) } } }
     scope.launch { session.current.filterNotNull().collect { clock?.moved((it.locations.totalProgression ?: 0.0).toFloat()) } }
+    // A font added or removed while reading reaches the chapters already loaded (later ones are served with it).
+    scope.launch {
+      fonts.fonts.drop(1).collect { list ->
+        UserFontRegistry.fonts = list
+        session.navigator?.refreshUserFonts()
+      }
+    }
+    // The return chip goes once the reader has moved on from where the link led.
+    scope.launch {
+      session.current.filterNotNull().collect { here ->
+        val position = here.locations.position ?: return@collect
+        edit { returnTo?.let { point -> copy(returnTo = point.movedTo(position)) } ?: this }
+      }
+    }
     // Save the position a moment after the reader stops moving.
     scope.launch { session.current.filterNotNull().drop(1).debounce(800).collect { savePosition(session, it) } }
     // Reads every chapter file with an anchored entry; it waits for the first page so it never competes with it.
@@ -389,6 +429,8 @@ class ReaderState(
   fun close() {
     if (closed) return
     closed = true
+    // Nothing of the dictionary stays in memory once the book is closed.
+    runCatching { wordLookup?.close() }
     stopReadAloud(clearSentence = false)
     // Normally the screen already paused the clock; this catches a reader closed without being seen to leave.
     clock?.pause()?.let { span -> appScope.launch { store.addReadingSession(bookId, span) } }
@@ -425,6 +467,7 @@ class ReaderState(
    * there, and no [from] just plays or pauses it.
    */
   fun startReadAloud(from: Locator? = null) {
+    if (_ui.value.auto.on) stopAutoScroll()
     val session = session() ?: return
     val support = readAloudSupport ?: run { toasts.show("Read aloud isn’t available"); return }
     if (_readAloud.value.active) {
@@ -539,6 +582,31 @@ class ReaderState(
   fun setTocTab(tab: TocTab) = edit { copy(tocTab = tab) }
   fun setAdvancedOpen(open: Boolean) = edit { copy(advancedOpen = open) }
   fun showZones(show: Boolean) = edit { copy(showZones = show, sheet = if (show) null else sheet, chrome = if (show) false else chrome) }
+  /**
+   * A link inside the book was tapped; returns whether the navigator should follow it. A link to the book's own
+   * navigation document, which is not in the reading order and so cannot be shown, opens the Contents sheet instead.
+   * Any followed link remembers where it was tapped, for the return chip.
+   */
+  fun onInternalLink(link: Link): Boolean {
+    val session = session() ?: return true
+    val target = link.url().removeFragment()
+    if (session.publication.readingOrder.none { it.url().removeFragment() == target }) {
+      if (isNavigationDocument(session.publication, link)) openSheet(Sheet.Contents, TocTab.Contents)
+      return false
+    }
+    val from = session.current.value
+    val page = from?.locations?.position
+    if (from != null && page != null) edit { copy(returnTo = ReturnPoint(from, page)) }
+    return true
+  }
+
+  /** Goes back to where the last followed link was tapped. */
+  fun returnFromLink() {
+    val point = _ui.value.returnTo ?: return
+    edit { copy(returnTo = null) }
+    session()?.go(point.locator)
+  }
+
   fun closeReaderOverlays() = edit { copy(sheet = null, chrome = false, textSearchOpen = false, showZones = false, activeHighlight = null, noteFor = null) }
 
   // ── reading settings ─────────────────────────────────────────────────────
@@ -592,6 +660,18 @@ class ReaderState(
 
   fun setBrightness(v: Int) { edit { copy(brightness = v) }; persist.launch { store.setBrightness(v) } }
 
+  /** Changes the app-wide reading controls (status line, warm light) from inside the reader. */
+  fun updateControls(change: (ReaderControls) -> ReaderControls) {
+    val next = change(controls.value)
+    persist.launch { store.setReaderControls(next) }
+  }
+
+  /** Flips the warm light's switch: on or off, or, under a schedule, against it until its next change. */
+  fun toggleWarmLight() {
+    val nowMs = now()
+    updateControls { it.copy(warmLight = it.warmLight.toggled(nowMs, minuteOfDay(nowMs))) }
+  }
+
   // ── bookmarks ────────────────────────────────────────────────────────────
 
   /** Whether the page showing now is bookmarked: a bookmark within half a position of the reader's place. */
@@ -636,7 +716,7 @@ class ReaderState(
   internal fun onSelectedText(session: ReaderSession, action: SelectionAction, text: String): Boolean {
     when (action) {
       SelectionAction.Copy -> { copyText(text); toasts.show("Copied") }
-      SelectionAction.Share -> shareText(shareQuote(text, session.book.title, session.book.author))
+      SelectionAction.Share -> shareQuoteOf(session, text)
       SelectionAction.LookUp -> lookUp?.invoke(text)
       SelectionAction.Highlight, SelectionAction.Note, SelectionAction.ReadAloud -> return false
     }
@@ -674,9 +754,198 @@ class ReaderState(
   fun shareHighlight(id: Long) {
     val text = _highlights.value.firstOrNull { it.id == id }?.text ?: return
     val book = (session()?.book) ?: return
-    shareText(shareQuote(text, book.title, book.author))
     edit { copy(activeHighlight = null) }
+    shareQuoteOf(session() ?: return, text)
   }
+
+  /** Opens the Share quote sheet for [text]; a passage too long for a card is shared as text straight away. */
+  private fun shareQuoteOf(session: ReaderSession, text: String) {
+    val book = session.book
+    if (text.trim().length > QuoteCardSpec.MAX_IMAGE_CHARS) return shareText(shareQuote(text, book.title, book.author))
+    val prefs = _prefs.value
+    val font = if (prefs.advanced.typographySource == TypographySource.Book) null else prefs.font
+    edit { copy(quote = QuoteDraft(text, book.title, book.author, prefs.theme, font)) }
+  }
+
+  fun closeQuote() = edit { copy(quote = null) }
+
+  // ── auto-scroll and auto page turn ───────────────────────────────────────
+
+  private var autoJob: Job? = null
+
+  /** Starts or stops auto-scroll (scroll mode) or auto page turn (paged mode). Read aloud and auto-scroll exclude each other. */
+  fun toggleAutoScroll() {
+    if (_ui.value.auto.on) return stopAutoScroll()
+    if (readAloud.value.active) stopReadAloud()
+    edit { copy(auto = AutoScrollState(on = true), chrome = false) }
+    restartAuto()
+  }
+
+  fun stopAutoScroll() {
+    edit { copy(auto = AutoScrollState()) }
+    restartAuto()
+  }
+
+  fun autoFaster() = changeAutoSpeed(AutoScrollSpeed::faster)
+  fun autoSlower() = changeAutoSpeed(AutoScrollSpeed::slower)
+
+  /** A new speed applies at once (the stored controls catch up a moment later) and is remembered for this mode. */
+  private fun changeAutoSpeed(step: (AutoScrollPrefs, Boolean) -> AutoScrollPrefs) {
+    val next = step(controls.value.autoScroll, _prefs.value.mode == ReadMode.Paged)
+    updateControls { it.copy(autoScroll = next) }
+    restartAuto(next)
+  }
+
+  /** The reading mode, text size or spacing changed: auto-scroll goes on in the new layout at the same reading pace. */
+  fun refreshAuto() { if (_ui.value.auto.on) restartAuto() }
+
+  /** Something paused or released auto-scroll. A finger lifting resumes it a second later, unless another touch comes first. */
+  fun pauseAuto(why: AutoPause, paused: Boolean) {
+    val before = _ui.value.auto
+    if (!before.on) return
+    if (why == AutoPause.Touch && !paused) {
+      touchResume?.cancel()
+      touchResume = scope.launch {
+        delay(AutoScrollState.RESUME_AFTER_TOUCH_MS)
+        edit { copy(auto = auto.paused(AutoPause.Touch, false)) }
+        restartAuto()
+      }
+      return
+    }
+    if (why == AutoPause.Touch) touchResume?.cancel()
+    val after = before.paused(why, paused)
+    if (after == before) return
+    edit { copy(auto = after) }
+    restartAuto()
+  }
+
+  private var touchResume: Job? = null
+
+  /** Applies the current state: scrolls (or times page turns) while running, stands still otherwise. */
+  private fun restartAuto(speeds: AutoScrollPrefs = controls.value.autoScroll) {
+    autoJob?.cancel()
+    val session = session() ?: return
+    val state = _ui.value.auto
+    val prefs = _prefs.value
+    if (!state.running) { session.navigator?.setAutoScroll(null); return }
+    if (prefs.mode == ReadMode.Scroll) {
+      session.navigator?.setAutoScroll(AutoScrollSpeed.pxPerSecond(speeds.linesPerMinute, prefs.fontSize, prefs.lineHeight))
+      // Stops at the end of the book.
+      autoJob = scope.launch {
+        session.current.filterNotNull().collect { if ((it.locations.totalProgression ?: 0.0) >= 0.999) endOfBook() }
+      }
+    } else {
+      // Each page shows for the set time; any turn (the timer's own, a tap, a volume key) starts the count again.
+      autoJob = scope.launch {
+        session.current.collectLatest {
+          delay(speeds.secondsPerPage * 1000L)
+          if (!session.goForward()) endOfBook()
+        }
+      }
+    }
+  }
+
+  private fun endOfBook() {
+    stopAutoScroll()
+    toasts.show("End of book")
+  }
+
+  // ── the definition card ──────────────────────────────────────────────────
+
+  private var definitionJob: Job? = null
+
+  /**
+   * A long press made a selection (the selection menu just opened). When looking up on long press is on and the book is
+   * in English (or does not say), the selection's word or short phrase is looked up and the card opens; it then follows
+   * the selection as its handles are dragged, and closes when the selection goes.
+   */
+  fun onSelectionStarted() {
+    val lookup = wordLookup ?: return
+    val session = session() ?: return
+    if (!controls.value.lookUpOnLongPress || !Selections.isEnglish(session.book.language)) return
+    definitionJob?.cancel()
+    definitionJob = scope.launch {
+      // The selection settles a moment after the menu opens.
+      delay(120)
+      var shown: String? = null
+      var candidate: String? = null
+      var since = 0L
+      while (true) {
+        val text = session.selectedText() ?: break
+        if (text != shown) {
+          if (text != candidate) { candidate = text; since = now() }
+          // The first selection is looked up at once; a handle being dragged, once the selection holds still.
+          if (shown == null || now() - since >= SELECTION_SETTLE_MS) {
+            showDefinition(lookup, text)
+            shown = text
+          }
+        }
+        delay(SELECTION_POLL_MS)
+      }
+      edit { copy(definition = null) }
+    }
+  }
+
+  private suspend fun showDefinition(lookup: WordLookup, text: String) {
+    val query = Selections.normalise(text)
+    if (query == null) {
+      edit { copy(definition = null) }
+      return
+    }
+    edit { copy(definition = DefinitionUi(query, null)) }
+    val result = lookup.lookUp(query)
+    edit { definition?.takeIf { it.query == query }?.let { copy(definition = it.copy(result = result)) } ?: this }
+  }
+
+  /** The selection menu closed: the selection is gone, and so is the card. */
+  fun onSelectionEnded() {
+    definitionJob?.cancel()
+    definitionJob = null
+    edit { copy(definition = null) }
+  }
+
+  fun closeDefinition() {
+    onSelectionEnded()
+    session()?.clearSelection()
+  }
+
+  fun expandDefinition() = edit { definition?.let { copy(definition = it.copy(expanded = true)) } ?: this }
+
+  /** Looks a synonym up inside the card; Back returns to the entry it came from. */
+  fun lookUpInCard(word: String) {
+    val lookup = wordLookup ?: return
+    val current = _ui.value.definition ?: return
+    if (current.result == null) return
+    scope.launch {
+      val result = lookup.lookUp(word)
+      edit { definition?.let { copy(definition = it.copy(result = result, history = it.history + listOfNotNull(it.result), expanded = false)) } ?: this }
+    }
+  }
+
+  fun definitionBack() = edit {
+    val d = definition ?: return@edit this
+    val previous = d.history.lastOrNull() ?: return@edit copy(definition = null)
+    copy(definition = d.copy(result = previous, history = d.history.dropLast(1)))
+  }
+
+  /** Hands the looked-up text to another dictionary app (the card's *Open in app*); null when none is installed. */
+  val openInApp: ((String) -> Unit)? get() = lookUp
+
+  /** Opens an image, SVG or table full screen; the page underneath stays exactly where it is. */
+  fun openMedia(media: ReaderMedia) = edit { copy(media = media, chrome = false, activeHighlight = null) }
+  fun closeMedia() = edit { copy(media = null) }
+
+  /** An image file's bytes, read from the book. */
+  suspend fun mediaBytes(image: ReaderMedia.Image): ByteArray? = withContext(Dispatchers.IO) {
+    val publication = session()?.publication ?: return@withContext null
+    runCatching {
+      val resource = publication.get(image.link) ?: return@runCatching null
+      try { resource.read().getOrNull() } finally { resource.close() }
+    }.getOrNull()
+  }
+
+  /** Shares the plain-text quote (the sheet's Share text). */
+  fun shareQuoteText(text: String) = shareText(text)
 
   fun copyHighlight(id: Long) {
     val text = _highlights.value.firstOrNull { it.id == id }?.text ?: return
@@ -781,3 +1050,32 @@ class ReaderState(
   fun goTo(entry: TocEntry) { session()?.go(entry.link); closeReaderOverlays() }
   fun goTo(locator: Locator) { session()?.go(locator); closeReaderOverlays() }
 }
+
+/** Whether [link] is the book's navigation document (EPUB 3 nav or EPUB 2 NCX). */
+internal fun isNavigationDocument(publication: Publication, link: Link): Boolean {
+  if ("contents" in link.rels) return true
+  if (link.mediaType?.toString()?.startsWith("application/x-dtbncx+xml") == true) return true
+  val target = link.url().removeFragment()
+  return publication.resources.any { ("contents" in it.rels) && it.url().removeFragment() == target }
+}
+
+/** Minutes after local midnight at [epochMs]. */
+internal fun minuteOfDay(epochMs: Long): Int {
+  val c = java.util.Calendar.getInstance().apply { timeInMillis = epochMs }
+  return c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE)
+}
+
+/** How often the card looks at the selection while it is open, and how still it must hold before a new lookup. */
+private const val SELECTION_POLL_MS = 150L
+private const val SELECTION_SETTLE_MS = 300L
+
+/**
+ * The definition card. [query] is the selection as looked up, [result] null while looking. [history] holds the entries
+ * synonyms were followed from.
+ */
+data class DefinitionUi(
+  val query: String,
+  val result: LookupResult?,
+  val history: List<LookupResult> = emptyList(),
+  val expanded: Boolean = false,
+)

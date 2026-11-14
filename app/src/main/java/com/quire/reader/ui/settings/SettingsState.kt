@@ -13,6 +13,9 @@ import com.quire.reader.ui.IndexerControl
 import com.quire.reader.ui.NotesExport
 import com.quire.reader.ui.Toasts
 import com.quire.reader.ui.books
+import com.quire.reader.ui.reader.FontChoices
+import com.quire.reader.ui.reader.NoUserFonts
+import com.quire.reader.ui.reader.UserFontsPort
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
@@ -83,7 +86,10 @@ class SettingsState(
   private val scope: CoroutineScope,
   private val persist: CoroutineScope,
   private val appScope: CoroutineScope,
+  userFonts: UserFontsPort = NoUserFonts,
 ) {
+  /** The user's fonts, for the font picker. */
+  val fonts = FontChoices(userFonts, scope, persist, toasts)
   /** The reading settings new books start with. */
   val defaults: StateFlow<ReaderPrefs> = store.readerDefaults.stateIn(scope, SharingStarted.Eagerly, ReaderPrefs())
   val useCalibre: StateFlow<Boolean> = store.useCalibre.stateIn(scope, SharingStarted.Eagerly, true)

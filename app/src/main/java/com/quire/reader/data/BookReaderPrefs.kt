@@ -22,6 +22,8 @@ data class BookReaderPrefs(
   val fontSize: Int? = null,
   val lineHeight: Float? = null,
   val margin: Int? = null,
+  /** Custom margins; part of the basic group, where null means the [margin] preset. */
+  val margins: PageMargins? = null,
   val align: TextAlignPref? = null,
   val mode: ReadMode? = null,
   val advanced: AdvancedReaderPrefs? = null,
@@ -46,6 +48,7 @@ data class BookReaderPrefs(
     fontSize = fontSize ?: defaults.fontSize,
     lineHeight = lineHeight ?: defaults.lineHeight,
     margin = margin ?: defaults.margin,
+    margins = if (hasBasic) margins else defaults.margins,
     align = align ?: defaults.align,
     mode = mode ?: defaults.mode,
     advanced = advanced ?: defaults.advanced,
@@ -57,6 +60,7 @@ data class BookReaderPrefs(
     fontSize = prefs.fontSize,
     lineHeight = prefs.lineHeight,
     margin = prefs.margin,
+    margins = prefs.margins,
     align = prefs.align,
     mode = prefs.mode,
   )

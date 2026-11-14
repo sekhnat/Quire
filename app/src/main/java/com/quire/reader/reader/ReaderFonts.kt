@@ -11,7 +11,9 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily as ComposeFontFamily
 import com.quire.reader.R
+import com.quire.reader.data.fonts.UserFont
 import com.quire.reader.theme.QuireFonts
+import java.io.File
 
 /**
  * A reading font: the name Readium knows it by, the bundled files, and how it is previewed.
@@ -25,11 +27,24 @@ class ReaderFont(
   val files: List<FontFile>,
   private val bundled: ComposeFontFamily? = null,
   private val previewAsset: String? = null,
+  /** What the picker calls it; the [name] for a bundled font, the family for a user font (whose [name] is a CSS name). */
+  val label: String = name,
+  /** A user font's files on disk, previewed straight from there. */
+  private val userFiles: List<Pair<File, FontFile>>? = null,
 ) {
   /** The regular weight, for the font picker and the Settings preview. */
   @OptIn(ExperimentalTextApi::class)
   fun preview(assets: AssetManager): ComposeFontFamily {
     bundled?.let { return it }
+    userFiles?.let { files ->
+      // Every style, so a quote card's italics are real; a variable file asks for Regular.
+      return ComposeFontFamily(files.map { (file, f) ->
+        val variable = f.weights.first != f.weights.last
+        val weight = if (variable || FontWeight.Normal.weight in f.weights) FontWeight.Normal else FontWeight(f.weights.first)
+        Font(file, weight, if (f.italic) FontStyle.Italic else FontStyle.Normal,
+          variationSettings = if (variable) FontVariation.Settings(FontVariation.weight(FontWeight.Normal.weight)) else FontVariation.Settings())
+      })
+    }
     val file = files.firstOrNull { !it.italic && FontWeight.Normal.weight in it.weights } ?: files.firstOrNull { !it.italic }
     val path = file?.asset ?: requireNotNull(previewAsset) { "$name has nothing to preview" }
     // A variable file opens on its default instance, which can be Thin: ask for Regular.
@@ -108,3 +123,22 @@ val ReaderFontList: List<ReaderFont> = listOf(
 /** The reading-font paths the WebView server answers from `res/font` rather than `assets`, by asset path. */
 val ReaderFontResources: Map<String, Int> =
   ReaderFontList.flatMap { it.files }.mapNotNull { file -> file.resource?.let { file.asset to it } }.toMap()
+
+/** A user font as a reading font: declared under its CSS name, served from `fonts/user/`, previewed from its files. */
+fun UserFont.toReaderFont(dir: File?): ReaderFont {
+  val files = files.map { FontFile("fonts/user/${it.name}", italic = it.italic, weights = it.weights) }
+  return ReaderFont(
+    name = cssName, files = files, label = family,
+    userFiles = dir?.let { d -> this.files.zip(files).map { (f, ff) -> File(d, f.name) to ff } },
+  )
+}
+
+/**
+ * The font a book's stored index means: a bundled font by position, a user font ([UserFont.USER_FONT_BASE] + id) by id,
+ * and the default font (Literata) for anything else: a removed user font, or an index from a newer build.
+ */
+fun resolveFont(index: Int, users: List<UserFont> = UserFontRegistry.fonts, dir: File? = UserFontRegistry.dir): ReaderFont {
+  ReaderFontList.getOrNull(index)?.let { return it }
+  val id = UserFont.idOf(index) ?: return ReaderFontList[0]
+  return users.firstOrNull { it.id == id }?.toReaderFont(dir) ?: ReaderFontList[0]
+}

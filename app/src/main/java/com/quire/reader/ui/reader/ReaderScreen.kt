@@ -16,6 +16,13 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.input.pointer.pointerInput
+import com.quire.reader.data.StatusItem
+import com.quire.reader.reader.PageFrame
+import com.quire.reader.reader.SelectionAction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +45,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -128,12 +136,19 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
   val controls by reader.controls.collectAsStateWithLifecycle()
   val listening by reader.readAloud.collectAsStateWithLifecycle()
   // While it reads aloud the volume keys are the phone's own, so the volume can be set.
-  ReaderControlsEffects(session, controls, s.overlaysOpen || listening.active, reader)
+  ReaderControlsEffects(session, controls, s.overlaysOpen || listening.active, reader, keepAwake = s.auto.running)
   LifecycleResumeEffect(session) {
     reader.resumeReading()
-    onPauseOrDispose { reader.pauseReading() }
+    reader.pauseAuto(AutoPause.Background, false)
+    onPauseOrDispose { reader.pauseReading(); reader.pauseAuto(AutoPause.Background, true) }
   }
-  val epubPrefs = remember(prefs, session.layout) { prefs.toEpubPreferences(session.layout) }
+  // The menu, a sheet, a selection or the full-screen viewer holds auto-scroll still while it is open.
+  val overlay = s.overlaysOpen || s.definition != null
+  LaunchedEffect(overlay) { reader.pauseAuto(AutoPause.Overlay, overlay) }
+  LaunchedEffect(prefs.mode, prefs.fontSize, prefs.lineHeight) { reader.refreshAuto() }
+  // The user's fonts are part of the key: removing the font a book uses must take it back to the default.
+  val userFonts by reader.fonts.fonts.collectAsStateWithLifecycle()
+  val epubPrefs = remember(prefs, session.layout, userFonts) { prefs.toEpubPreferences(session.layout) }
   // The single submission path: mapped preferences go to the session, which deduplicates
   // by equality and applies them through the navigator in one serialized pass.
   LaunchedEffect(session, epubPrefs) { session.submit(epubPrefs) }
@@ -141,6 +156,8 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
 
   BackHandler {
     when {
+      s.quote != null -> reader.closeQuote()
+      s.definition != null -> reader.closeDefinition()
       s.noteFor != null -> reader.editNote(null)
       s.textSearchOpen -> reader.setTextSearch(false)
       s.sheet != null || s.showZones || s.activeHighlight != null || s.chrome -> reader.closeReaderOverlays()
@@ -150,6 +167,7 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
 
   val onTap: (Float) -> Unit = { x ->
     when {
+      s.definition != null -> reader.closeDefinition()
       s.activeHighlight != null -> reader.setActiveHighlight(null)
       s.chrome -> reader.setChrome(false)
       x < ZONE_BACK -> if (!session.goBackward()) reader.toast("Start of book")
@@ -158,31 +176,101 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
     }
   }
 
-  Box(Modifier.fillMaxSize().background(bgColor)) {
-    QText(book.title, 11f, Modifier.padding(top = statusTop + 6.dp, start = 24.dp, end = 24.dp).fillMaxWidth(), color = theme.muted, ls = 0.04f, maxLines = 1, align = TextAlign.Center)
+  val status = controls.statusLine
+  val tick by rememberMinuteTick()
+  val battery by rememberBattery(enabled = status.uses(StatusItem.Battery))
+  // Built from the collected locator, so every move recomposes it (the session's own getters are not state).
+  val here = locator
+  val position = here?.locations?.position ?: 1
+  val progress = (here?.locations?.totalProgression ?: 0.0).toFloat().coerceIn(0f, 1f)
+  val facts = StatusFacts(
+    bookTitle = book.title,
+    chapterTitle = if (status.uses(StatusItem.ChapterTitle)) session.chapterTitle(here) else "",
+    clock = clockText(tick),
+    battery = battery,
+    position = position,
+    total = session.positions.size,
+    pagesLeftInChapter = StatusLineText.pagesLeftInChapter(session.chapterStarts(), position, session.positions.size),
+    minutesLeftInBook = session.minutesLeftAt(progress),
+    progress = progress,
+  )
+  // The page's frame: margins (custom ones put the sides in padding), and the status lines' bands when they show.
+  val (padLeft, padRight) = PageFrame.sidePadding(prefs)
+  val topSpace = PageFrame.topSpace(prefs, status.showHeader).dp
+  val bottomSpace = PageFrame.bottomSpace(prefs, status.showFooter).dp
 
-    Box(Modifier.fillMaxSize().padding(top = statusTop + 32.dp, bottom = navBottom + 46.dp + if (listening.active) READ_ALOUD_BAR_SPACE else 0.dp)) {
+  var lastPressY by remember { mutableFloatStateOf(0f) }
+  BoxWithConstraints(Modifier.fillMaxSize().background(bgColor)) {
+    val fullWidth = maxWidth
+    if (status.showHeader) {
+      StatusLineRow(status.header, facts, theme.muted, Modifier.padding(top = statusTop + 6.dp, start = 24.dp, end = 24.dp))
+    }
+
+    Box(
+      Modifier.fillMaxSize().padding(top = statusTop + topSpace, bottom = navBottom + bottomSpace + if (listening.active || s.auto.on) READ_ALOUD_BAR_SPACE else 0.dp)
+        // Watches (never consumes) where each touch on the page starts, to place the definition card clear of the word.
+        .pointerInput(Unit) {
+          awaitPointerEventScope {
+            while (true) {
+              val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+              when (event.type) {
+                androidx.compose.ui.input.pointer.PointerEventType.Press -> {
+                  lastPressY = event.changes.first().position.y
+                  reader.pauseAuto(AutoPause.Touch, true)
+                }
+                androidx.compose.ui.input.pointer.PointerEventType.Release ->
+                  if (event.changes.all { !it.pressed }) reader.pauseAuto(AutoPause.Touch, false)
+              }
+            }
+          }
+        },
+    ) {
+      // Taps on a custom margin still turn pages or show the menu, by where they land across the whole reader.
+      if (padLeft > 0) MarginTaps(Modifier.align(Alignment.CenterStart).width(padLeft.dp)) { x -> onTap(x / fullWidth.value) }
+      if (padRight > 0) MarginTaps(Modifier.align(Alignment.CenterEnd).width(padRight.dp)) { x -> onTap((fullWidth.value - padRight + x) / fullWidth.value) }
+      val innerWidth = fullWidth.value - padLeft - padRight
       EpubHost(
-        session = session, preferences = epubPrefs, selectionActions = reader.selectionActions, onTap = onTap,
+        session = session, preferences = epubPrefs, selectionActions = reader.selectionActions,
+        onTap = { f -> onTap((padLeft + f * innerWidth) / fullWidth.value) },
         onSelectionAction = reader::onSelectionAction, onHighlightTapped = { reader.setActiveHighlight(it) },
-        modifier = Modifier.fillMaxSize(),
+        onInternalLink = reader::onInternalLink,
+        onMedia = reader::openMedia,
+        onSelectionStarted = reader::onSelectionStarted,
+        onSelectionEnded = reader::onSelectionEnded,
+        modifier = Modifier.fillMaxSize().padding(start = padLeft.dp, end = padRight.dp),
       )
       if (bookmarked) Ph(Ic.BookmarkFill, 26.dp, Nq.accent, Modifier.align(Alignment.TopEnd).padding(end = 22.dp).offset(y = (-6).dp))
     }
 
-    // footer: where you are, and how long is left
-    val left = session.minutesLeft()
-    Row(Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = navBottom + 18.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-      QText("Page ${session.position} of ${session.positions.size}", 11f, color = theme.muted, tabular = true)
-      QText(timeLabel(left), 11f, color = theme.muted, tabular = true)
+    if (status.showFooter) {
+      StatusLineRow(status.footer, facts, theme.muted, Modifier.align(Alignment.BottomCenter).padding(start = 24.dp, end = 24.dp, bottom = navBottom + 18.dp))
     }
 
     ReadAloudBar(listening, reader, Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 40.dp))
+    AutoScrollBar(s.auto, controls.autoScroll, prefs.mode == ReadMode.Paged, reader, Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 40.dp))
+
+    // The definition card, over the page: at the bottom, or at the top when the selected word is low on the screen.
+    val pageHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { (maxHeight - statusTop - topSpace - navBottom - bottomSpace).toPx() }
+    // Where the long press landed decides: a word low on the page gets the card at the top, out of its way.
+    val cardAtTop = lastPressY > pageHeightPx * 0.5f
+    DefinitionCard(
+      s.definition, cardAtTop, maxExpanded = maxHeight * 0.7f,
+      actions = DefinitionCardActions(
+        close = reader::closeDefinition, back = reader::definitionBack, more = reader::expandDefinition, lookUp = reader::lookUpInCard,
+        highlight = { reader.onSelectionAction(SelectionAction.Highlight) }, copy = { reader.onSelectionAction(SelectionAction.Copy) },
+        openInApp = reader.openInApp?.let { open -> { s.definition?.let { open(it.query) }; Unit } },
+      ),
+      modifier = Modifier.align(if (cardAtTop) Alignment.TopCenter else Alignment.BottomCenter)
+        .padding(top = statusTop + 8.dp, bottom = navBottom + 8.dp),
+    )
+
+    s.returnTo?.let { point ->
+      ReturnChip(point.label, reader::returnFromLink,
+        Modifier.align(Alignment.BottomCenter).padding(bottom = navBottom + 40.dp + if (listening.active || s.auto.on) READ_ALOUD_BAR_SPACE else 0.dp))
+    }
 
     // in-app brightness dimmer (never intercepts touches)
     Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = (1 - s.brightness / 100f) * 0.8f)))
-
-    if (s.showZones) TapZones { reader.showZones(false) }
 
     ReaderChrome(s, session, reader, bookmarked, locator?.locations?.totalProgression?.toFloat() ?: 0f)
     HighlightActions(s, highlights, reader, navBottom)
@@ -191,17 +279,33 @@ private fun ReaderContent(session: ReaderSession, s: ReaderUiState, reader: Read
     SearchOverlay(s, search, bookSearch, reader)
     NoteSheet(s, highlights, reader)
     VoiceSheet(s, reader)
+    StatusLineSheet(s.sheet == Sheet.StatusLine, controls.statusLine, facts, theme, { reader.openSheet(null) }) { change -> reader.updateControls { it.copy(statusLine = change(it.statusLine)) } }
+
+    ShareQuoteSheet(s.quote, reader::closeQuote, reader::shareQuoteText, reader::toast)
+    s.media?.let { media ->
+      MediaViewer(
+        media, theme, prefs.advanced.imageFilter, reader::mediaBytes,
+        intercept = { request -> session.navigator?.interceptViewerRequest(request) },
+        onClose = reader::closeMedia, toast = reader::toast,
+      )
+    }
+
+    // The warm light, over the page, the status lines, the menus and the sheets; it never takes touches.
+    if (controls.warmLight.isActive(tick, minuteOfDay(tick))) WarmTint(controls.warmLight)
+
+    if (s.showZones) TapZones { reader.showZones(false) }
   }
 }
 
 /** Applies the app-wide reading controls while this reader is on screen, and puts everything back when it leaves. */
 @Composable
-private fun ReaderControlsEffects(session: ReaderSession, controls: ReaderControls, overlaysOpen: Boolean, reader: ReaderState) {
+private fun ReaderControlsEffects(session: ReaderSession, controls: ReaderControls, overlaysOpen: Boolean, reader: ReaderState, keepAwake: Boolean) {
   val view = LocalView.current
   val activity = LocalActivity.current
 
-  DisposableEffect(view, controls.keepScreenOn) {
-    view.keepScreenOn = controls.keepScreenOn
+  // Auto-scroll keeps the screen on while it runs, whatever *Keep screen on* is set to.
+  DisposableEffect(view, controls.keepScreenOn, keepAwake) {
+    view.keepScreenOn = controls.keepScreenOn || keepAwake
     onDispose { view.keepScreenOn = false }
   }
 
@@ -230,10 +334,11 @@ private fun ReaderControlsEffects(session: ReaderSession, controls: ReaderContro
   }
 }
 
-private fun timeLabel(minutes: Int): String = when {
-  minutes < 1 -> "Almost done"
-  minutes < 60 -> "$minutes min left"
-  else -> "${minutes / 60}h ${minutes % 60}m left"
+/** Catches taps on a custom margin, outside the page's own view; [onTap] gets x in dp across this strip. */
+@Composable
+private fun MarginTaps(modifier: Modifier, onTap: (Float) -> Unit) {
+  val density = androidx.compose.ui.platform.LocalDensity.current
+  Box(modifier.fillMaxHeight().pointerInput(Unit) { detectTapGestures { offset -> onTap(with(density) { offset.x.toDp().value }) } })
 }
 
 @Composable
@@ -271,6 +376,7 @@ private fun ReaderChrome(s: ReaderUiState, session: ReaderSession, reader: Reade
           QText(book.title, 14f, weight = 500, maxLines = 1)
           MetaLine(book.author, words, 11f, Nq.neutral500)
         }
+        IconBtn(Ic.Play, reader::toggleAutoScroll, tint = if (s.auto.on) Nq.accent else Nq.text)
         IconBtn(Ic.Search, { reader.setTextSearch(true) })
         IconBtn(if (marked) Ic.BookmarkFill else Ic.Bookmark, reader::toggleBookmark, tint = if (marked) Nq.accent else Nq.text)
       }
@@ -362,6 +468,39 @@ private fun ReadAloudBar(ui: ReadAloudUi, reader: ReaderState, modifier: Modifie
       IconBtn(Ic.Speaker, { reader.openSheet(Sheet.Voices) })
       IconBtn(Ic.X, { reader.stopReadAloud() })
     }
+  }
+}
+
+/** Auto-scroll's controls, where the read-aloud bar sits: play or pause, slower, the speed, faster, and stop. */
+@Composable
+private fun AutoScrollBar(state: AutoScrollState, speeds: com.quire.reader.data.AutoScrollPrefs, paged: Boolean, reader: ReaderState, modifier: Modifier) {
+  AnimatedVisibility(state.on, modifier, enter = fadeIn(tween(150)) + slideInVertically(tween(200)) { it / 2 }, exit = fadeOut(tween(150))) {
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+      Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(READ_ALOUD_BAR_SPACE - 4.dp).shadow(8.dp, shape).background(Nq.surface, shape).padding(horizontal = 6.dp),
+      verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+      // Paused by hand, it stays paused until play is tapped.
+      IconBtn(if (AutoPause.Manual in state.pauses) Ic.Play else Ic.Pause, { reader.pauseAuto(AutoPause.Manual, AutoPause.Manual !in state.pauses) }, size = 44.dp, iconSize = 24.dp, tint = Nq.accent)
+      QText("−", 22f, Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = reader::autoSlower).padding(horizontal = 14.dp, vertical = 4.dp), color = Nq.neutral200)
+      QText(AutoScrollSpeed.label(speeds, paged), 12.5f, color = Nq.neutral200, tabular = true)
+      QText("+", 22f, Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = reader::autoFaster).padding(horizontal = 14.dp, vertical = 4.dp), color = Nq.neutral200)
+      IconBtn(Ic.X, reader::stopAutoScroll)
+    }
+  }
+}
+
+/** "Back to page 34": a small pill over the foot of the page after following a link inside the book. */
+@Composable
+private fun ReturnChip(label: String, onClick: () -> Unit, modifier: Modifier) {
+  val shape = RoundedCornerShape(50)
+  Row(
+    modifier.shadow(6.dp, shape).background(Nq.surface, shape).clip(shape).clickable(onClick = onClick)
+      .padding(start = 10.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
+    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+  ) {
+    Ph(Ic.ArrowLeft, 14.dp, Nq.accent200)
+    QText(label, 12f, color = Nq.neutral200, tabular = true)
   }
 }
 

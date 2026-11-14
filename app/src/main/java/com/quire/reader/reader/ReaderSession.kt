@@ -109,7 +109,10 @@ class ReaderSession(
   val totalProgress: Float get() = (_current.value?.locations?.totalProgression ?: 0.0).toFloat().coerceIn(0f, 1f)
   val position: Int get() = _current.value?.locations?.position ?: 1
 
-  fun minutesLeft(): Int = ((1 - totalProgress) * positions.size * MINUTES_PER_POSITION).toInt().coerceAtLeast(0)
+  fun minutesLeft(): Int = minutesLeftAt(totalProgress)
+
+  /** Reading time left from [progress] (0–1 through the book). */
+  fun minutesLeftAt(progress: Float): Int = ((1 - progress) * positions.size * MINUTES_PER_POSITION).toInt().coerceAtLeast(0)
 
   /** The table-of-contents entry for the chapter being read: the last one whose file is at or before here. */
   fun chapterIndex(locator: Locator? = _current.value): Int {
@@ -155,6 +158,22 @@ class ReaderSession(
 
   fun chapterTitle(locator: Locator? = _current.value): String =
     toc.getOrNull(chapterIndex(locator))?.title ?: locator?.title.orEmpty()
+
+  private var chapterStartsOf: List<TocEntry>? = null
+  private var chapterStartsCache: List<Int> = emptyList()
+
+  /**
+   * The first page of each table-of-contents entry, sorted, for "pages left in chapter". Worked out once per table of
+   * contents (it changes once, when anchored chapters are resolved), not on every page turn.
+   */
+  fun chapterStarts(): List<Int> {
+    val entries = toc
+    if (entries !== chapterStartsOf) {
+      chapterStartsCache = entries.map { it.position }.filter { it > 0 }.distinct().sorted()
+      chapterStartsOf = entries
+    }
+    return chapterStartsCache
+  }
 
   // ── navigation ───────────────────────────────────────────────────────────
 
@@ -231,6 +250,9 @@ class ReaderSession(
   // ── selection and decorations ────────────────────────────────────────────
 
   suspend fun currentSelection(): Locator? = (navigator as? SelectableNavigator)?.currentSelection()?.locator
+
+  /** The selected text, or null with no selection. */
+  suspend fun selectedText(): String? = (navigator as? SelectableNavigator)?.currentSelection()?.locator?.text?.highlight
   fun clearSelection() { (navigator as? SelectableNavigator)?.clearSelection() }
 
   suspend fun applyHighlights(highlights: List<HighlightEntity>) {

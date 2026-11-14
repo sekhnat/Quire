@@ -1,5 +1,7 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.fonts.UserFontLibrary
+
 import android.content.Context
 import com.quire.reader.data.db.IndexDatabase
 import com.quire.reader.data.db.QuireDatabase
@@ -19,6 +21,8 @@ data class BackupLocations(
   val settings: File,
   val covers: File,
   val imported: File,
+  /** The user's font files (UserFontLibrary). */
+  val fonts: File,
   /** The portable snapshot [SnapshotWriter] keeps. */
   val snapshot: File,
   /** [RestoreCoordinator]'s staged copy and phase marker; a full restore supersedes them. */
@@ -37,6 +41,7 @@ data class BackupLocations(
         settings = File(app.filesDir, "datastore/settings.preferences_pb"),
         covers = File(app.filesDir, "covers"),
         imported = File(app.filesDir, "imported"),
+        fonts = File(app.filesDir, UserFontLibrary.DIR),
         snapshot = snapshotFile(app),
         pendingRestoreFiles = listOf(RestoreCoordinator.PENDING_FILE_NAME, RestoreCoordinator.PHASE_FILE_NAME).map { File(app.noBackupFilesDir, it) },
         restoreDir = File(app.noBackupFilesDir, "full-restore"),
@@ -56,6 +61,8 @@ data class RestoreMarker(
   val covers: Boolean,
   /** The archive's settings file is staged and replaces the current one. */
   val settings: Boolean,
+  /** The archive's fonts are staged and replace the current ones (format 2); older markers have none. */
+  val fonts: Boolean = false,
 ) {
   companion object {
     /** Extracted and validated, waiting for the next start to swap it in. */
@@ -103,6 +110,7 @@ class StagedRestore(private val at: BackupLocations) {
   val stagedSnapshot get() = File(stagedDir, "user-data.json")
   val stagedCovers get() = File(stagedDir, "covers")
   val stagedImported get() = File(stagedDir, "imported")
+  val stagedFonts get() = File(stagedDir, "fonts")
 
   /**
    * Drops each staged imported book whose bytes the imported-books folder already holds under the same name; the restored
@@ -130,7 +138,9 @@ class StagedRestore(private val at: BackupLocations) {
     replaceDatabase(stagedLibrary, at.libraryDb)
     if (marker.index) replaceDatabase(stagedIndex, at.indexDb) else retireDatabase(at.indexDb)
     if (marker.settings) replaceFile(stagedSettings, at.settings)
-    if (marker.covers) replaceDirectory(stagedCovers, at.covers)
+    if (marker.covers) replaceDirectory(stagedCovers, at.covers) else addInto(stagedCovers, at.covers)
+    // The settings come back with the font list that names these files.
+    if (marker.fonts && marker.settings) replaceDirectory(stagedFonts, at.fonts)
     addImported(stagedImported, at.imported)
     if (stagedSnapshot.isFile) replaceFile(stagedSnapshot, at.snapshot)
     at.pendingRestoreFiles.forEach { it.delete() }
@@ -177,6 +187,18 @@ class StagedRestore(private val at: BackupLocations) {
     for (file in files) {
       val existing = File(target, file.name)
       if (existing.exists()) move(existing, uniqueSibling(existing))
+      move(file, existing)
+    }
+    staged.deleteRecursively()
+  }
+
+  /** Moves the staged files (the covers the user chose, from a backup without the others) in beside the current ones. */
+  private fun addInto(staged: File, target: File) {
+    val files = staged.listFiles()?.filter { it.isFile } ?: return
+    target.mkdirs()
+    for (file in files) {
+      val existing = File(target, file.name)
+      if (existing.exists()) retire(existing)
       move(file, existing)
     }
     staged.deleteRecursively()

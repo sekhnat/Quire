@@ -1,6 +1,8 @@
 package com.quire.reader.navigator.epub
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -56,4 +58,33 @@ class ReaderLinkPolicyTest {
     assertFalse(ReaderLinkPolicy.isSupportedScheme(""))
     assertFalse(ReaderLinkPolicy.isSupportedScheme(null))
   }
+
+  @Test
+  fun `the scheme is read from the text, lower-cased`() {
+    assertEquals("https", ReaderLinkPolicy.schemeOf("https://example.org/a#b"))
+    assertEquals("http", ReaderLinkPolicy.schemeOf("HTTP://EXAMPLE.ORG"))
+    assertEquals("mailto", ReaderLinkPolicy.schemeOf("mailto:nobody@example.invalid"))
+    assertEquals("javascript", ReaderLinkPolicy.schemeOf("  javascript:alert(1)"))
+    assertEquals("android-app", ReaderLinkPolicy.schemeOf("android-app://x"))
+  }
+
+  @Test
+  fun `text without a scheme has none`() {
+    assertNull(ReaderLinkPolicy.schemeOf("chapter2.xhtml#sec4"))
+    assertNull(ReaderLinkPolicy.schemeOf("#note3"))
+    assertNull(ReaderLinkPolicy.schemeOf("//example.org/x"))
+    assertNull(ReaderLinkPolicy.schemeOf("1http://x"))
+    assertNull(ReaderLinkPolicy.schemeOf(""))
+  }
+
+  @Test
+  fun `unsupported, schemeless and overlong links never reach navigation`() {
+    val reached = mutableListOf<Any>()
+    ReaderLinkPolicy.onLinkActivated("mailto:nobody@example.invalid") { reached += it }
+    ReaderLinkPolicy.onLinkActivated("javascript:alert(1)") { reached += it }
+    ReaderLinkPolicy.onLinkActivated("chapter2.xhtml") { reached += it }
+    ReaderLinkPolicy.onLinkActivated("https://example.org/" + "a".repeat(ReaderLinkPolicy.MAX_LINK_LENGTH)) { reached += it }
+    assertTrue(reached.isEmpty())
+  }
 }
+

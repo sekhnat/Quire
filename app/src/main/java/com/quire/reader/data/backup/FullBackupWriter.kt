@@ -77,19 +77,23 @@ class FullBackupWriter(
     val indexedBooks = if (index != null) indexDb.states().searchable().size else 0
 
     val settings = locations.settings.takeIf { it.isFile }?.readBytes()
-    val covers = if (contents.covers) filesIn(locations.covers) else emptyList()
+    // Covers read from books can be read again; the ones the user chose cannot, so they always go along.
+    val covers = filesIn(locations.covers).filter { contents.covers || it.name.startsWith(USER_COVER_PREFIX) }
     val imported = if (contents.imported) filesIn(locations.imported) else emptyList()
+    // The user's fonts are their own files, like imported books, and always go along.
+    val fonts = filesIn(locations.fonts)
 
     val entries = buildList {
       add(BackupEntry(BackupPaths.SNAPSHOT, snapshotBytes.size.toLong()))
       settings?.let { add(BackupEntry(BackupPaths.SETTINGS, it.size.toLong())) }
       imported.forEach { add(BackupEntry(BackupPaths.IMPORTED + it.name, it.length())) }
       covers.forEach { add(BackupEntry(BackupPaths.COVERS + it.name, it.length())) }
+      fonts.forEach { add(BackupEntry(BackupPaths.FONTS + it.name, it.length())) }
       add(BackupEntry(BackupPaths.LIBRARY_DB, library.length()))
       index?.let { add(BackupEntry(BackupPaths.INDEX_DB, it.length())) }
     }
     val manifest = FullBackupManifest(
-      formatVersion = FULL_BACKUP_FORMAT_VERSION,
+      formatVersion = formatFor(hasFonts = fonts.isNotEmpty()),
       createdAt = createdAt,
       appVersionName = appVersionName,
       libraryDbVersion = QuireDatabase.VERSION,
@@ -102,6 +106,7 @@ class FullBackupWriter(
         indexedBooks = indexedBooks,
         covers = covers.size,
         importedBooks = imported.size,
+        fonts = fonts.size,
       ),
       entries = entries,
     )
@@ -116,6 +121,7 @@ class FullBackupWriter(
       // EPUBs and WebP covers are compressed already; deflating them again costs time and saves nothing.
       imported.forEach { file -> file.inputStream().use { zip.put(BackupPaths.IMPORTED + file.name, Deflater.NO_COMPRESSION, it, counted) } }
       covers.forEach { file -> file.inputStream().use { zip.put(BackupPaths.COVERS + file.name, Deflater.NO_COMPRESSION, it, counted) } }
+      fonts.forEach { file -> file.inputStream().use { zip.put(BackupPaths.FONTS + file.name, Deflater.DEFAULT_COMPRESSION, it, counted) } }
       library.inputStream().use { zip.put(BackupPaths.LIBRARY_DB, Deflater.DEFAULT_COMPRESSION, it, counted) }
       // The index can be gigabytes: the fastest level keeps most of the saving at a fraction of the time.
       index?.inputStream()?.use { zip.put(BackupPaths.INDEX_DB, Deflater.BEST_SPEED, it, counted) }
@@ -166,3 +172,6 @@ internal fun humanBytes(bytes: Long): String = when {
   bytes >= 1L shl 20 -> "${bytes shr 20} MB"
   else -> "${(bytes shr 10).coerceAtLeast(1)} KB"
 }
+
+/** Covers the user chose are named `user-<book>-<time>.webp` (see CoverStore.saveUserCover). */
+internal const val USER_COVER_PREFIX = "user-"

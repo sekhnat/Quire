@@ -45,6 +45,7 @@ import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
 import com.quire.reader.reader.ReaderFontList
+import com.quire.reader.reader.resolveFont
 import com.quire.reader.reader.previewFamily
 import com.quire.reader.theme.Nq
 import com.quire.reader.theme.QuireFonts
@@ -68,6 +69,13 @@ import com.quire.reader.ui.formatBytes
 import com.quire.reader.ui.indexStatusText
 import com.quire.reader.ui.reader.ReadingControls
 import com.quire.reader.ui.reader.SettingRow
+import com.quire.reader.ui.reader.SampleStatusFacts
+import com.quire.reader.ui.reader.StatusLineSheet
+import com.quire.reader.ui.reader.hhmm
+import com.quire.reader.data.WarmLight
+import com.quire.reader.data.WarmSchedule
+import android.app.TimePickerDialog
+import androidx.compose.ui.platform.LocalContext
 import com.quire.reader.ui.SegOption
 import com.quire.reader.ui.Segmented
 import java.text.DateFormat
@@ -141,7 +149,7 @@ fun SettingsScreen(settings: SettingsState) {
         Kicker("Reading defaults")
         QText("How a book looks the first time you open it. You can still change a single book from its Display menu.", 12.5f, color = Nq.neutral400, lh = 1.5f)
         Preview(defaults)
-        ReadingControls(defaults, neutralAvailability) { change -> settings.updateDefaults(change) }
+        ReadingControls(defaults, neutralAvailability, settings.fonts) { change -> settings.updateDefaults(change) }
         QButton("Reset every book to these defaults", settings::resetAllBookPrefs, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
         QText("Books you have given their own settings keep them until you do this.", 11.5f, color = Nq.neutral500)
 
@@ -185,11 +193,19 @@ fun SettingsScreen(settings: SettingsState) {
         Kicker("Reading controls")
         Toggle("Volume keys turn pages", "Volume down for the next page, volume up for the previous one.", controls.volumeKeys) { settings.updateControls { it.copy(volumeKeys = !it.volumeKeys) } }
         Toggle("Keep screen on", "Stops the screen from timing out while a book is open.", controls.keepScreenOn) { settings.updateControls { it.copy(keepScreenOn = !it.keepScreenOn) } }
+        Toggle("Look up words on long press", "Shows a word's meaning from the built-in English dictionary, offline.", controls.lookUpOnLongPress) { settings.updateControls { it.copy(lookUpOnLongPress = !it.lookUpOnLongPress) } }
         Box(Modifier.padding(top = 10.dp)) {
           SettingRow("Orientation") {
             Segmented(ReaderOrientation.entries.map { o -> SegOption(o.name, controls.orientation == o, { settings.updateControls { it.copy(orientation = o) } }) })
           }
         }
+        var editingStatusLine by remember { mutableStateOf(false) }
+        BackHandler(enabled = editingStatusLine) { editingStatusLine = false }
+        NavRow("Status line", "What the lines above and below the page show") { editingStatusLine = true }
+        StatusLineSheet(editingStatusLine, controls.statusLine, SampleStatusFacts, defaults.theme, { editingStatusLine = false }) { change ->
+          settings.updateControls { it.copy(statusLine = change(it.statusLine)) }
+        }
+        WarmScheduleRows(controls.warmLight) { change -> settings.updateControls { it.copy(warmLight = change(it.warmLight)) } }
       }
 
       Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -418,7 +434,7 @@ internal fun Toggle(label: String, sub: String, on: Boolean, onClick: () -> Unit
 @Composable
 private fun Preview(p: ReaderPrefs) {
   val shape = RoundedCornerShape(12.dp)
-  val font = ReaderFontList[p.font.coerceIn(0, ReaderFontList.lastIndex)]
+  val font = resolveFont(p.font)
   Box(Modifier.fillMaxWidth().clip(shape).background(p.theme.bg).border(1.dp, Nq.neutral800, shape).padding(horizontal = (p.margin * 0.6f).dp, vertical = 16.dp)) {
     Text(
       "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood…",
@@ -428,5 +444,40 @@ private fun Preview(p: ReaderPrefs) {
       ),
       maxLines = 6,
     )
+  }
+}
+
+/** A row that opens something: a label, a line under it, and a caret. */
+@Composable
+private fun NavRow(label: String, sub: String, onClick: () -> Unit) {
+  Row(
+    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 10.dp),
+    horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+      QText(label, 14f)
+      QText(sub, 11.5f, color = Nq.neutral500)
+    }
+    Ph(Ic.CaretRight, 16.dp, Nq.neutral500)
+  }
+}
+
+/** The warm light's schedule: off (the reader's switch alone), or on between two times of day. */
+@Composable
+private fun WarmScheduleRows(light: WarmLight, onChange: ((WarmLight) -> WarmLight) -> Unit) {
+  val context = LocalContext.current
+  val schedule = light.schedule
+  Toggle("Warm light on a schedule", if (schedule == null) "Turn the warm light on and off yourself, from the reader's Display menu" else "On from ${hhmm(schedule.startMinute)} to ${hhmm(schedule.endMinute)}; the reader's switch overrides it until the next change", schedule != null) {
+    onChange { it.copy(schedule = if (it.schedule == null) WarmSchedule() else null, overrideOn = null, overrideUntil = 0) }
+  }
+  if (schedule != null) {
+    fun pick(minute: Int, set: (Int) -> WarmSchedule) {
+      TimePickerDialog(context, { _, h, m -> onChange { it.copy(schedule = set(h * 60 + m), overrideOn = null, overrideUntil = 0) } },
+        minute / 60, minute % 60, android.text.format.DateFormat.is24HourFormat(context)).show()
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      QButton("From ${hhmm(schedule.startMinute)}", { pick(schedule.startMinute) { schedule.copy(startMinute = it) } }, Modifier.weight(1f), size = 12.5f)
+      QButton("To ${hhmm(schedule.endMinute)}", { pick(schedule.endMinute) { schedule.copy(endMinute = it) } }, Modifier.weight(1f), size = 12.5f)
+    }
   }
 }

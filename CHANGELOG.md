@@ -6,6 +6,81 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- After following a link inside a book (a contents page, a cross-reference, an endnote), a *Back to page N* chip over
+  the foot of the page returns to where the link was tapped. It goes away once you read more than three pages on from
+  where the link led, or follow another link.
+- A link to the book's own navigation document opens the Contents sheet.
+- Open books in Quire from other apps. Quire is offered in *Open with* for EPUB, MOBI and AZW3 files (file managers,
+  downloads, mail attachments), and as *Add to Quire* in the share sheet. A book already in your library opens at your
+  place in it, even from another copy of the same file. A new book in a watched folder is scanned in and opened, and a
+  book you removed from the library comes back. Any other file is copied into your library first ("Added to your
+  library"), so it is never copied twice. Sharing several books adds them all. Back from the reader goes to your library,
+  and a book opened before you have finished setting up Quire takes you on to set-up afterwards.
+- Custom margins. Next to S, M and L in the Display menu, *Custom* sets the top, bottom, left and right margins on their
+  own (0–64 dp; left and right stay together unless you switch *Same left and right* off). The page follows as you drag,
+  taps on a wide margin still turn pages, and like the other settings they are per book with a default in Settings. The
+  S, M and L pages look exactly as before.
+- An adjustable status line. Choose what shows on the left, centre and right of the lines above and below the page: the
+  book or chapter title, the clock, the battery, the page, pages or time left in the chapter, time left in the book, or
+  the percentage read. Either line can be hidden to give the page more room. Set it in Settings → Reading controls →
+  *Status line*, or from the reader's Display menu. It starts as it always was.
+- Warm light. A switch and strength slider under the brightness in the Display menu tint the reader amber, sheets and
+  menus included, to cut blue light at night; dark themes stay dark. It can follow a schedule (Settings → Reading
+  controls), 21:00 to 07:00 to start with, and the reader's switch then overrides the schedule until its next change. It
+  applies only in the reader.
+- Share a quote as an image. *Share* on a selection or a highlight opens a preview of a card with the passage in the
+  book's reading font, a rule, the title and author, and a small Quire mark (which can be turned off). Pick Paper, Sepia,
+  Night or Black, or the 9:16 story size, then *Share image* (the plain-text quote goes along for apps that take both),
+  *Share text* as before, or *Save to Pictures*. Long passages get smaller type and, past that, are shortened at a word;
+  passages over 1,200 characters are shared as text.
+- Your own fonts. *Add font…* at the end of the font row (Display menu and Settings) adds TrueType and OpenType files
+  (.ttf, .otf, variable fonts too, up to 25 MB each); pick a family's regular, italic and bold files together and they
+  become one font. They show under "Your fonts" in their own face, apply to the open book straight away, and appear on
+  shared quote cards. Long-press one to remove it; books that used it go back to Literata. Font collections (.ttc) and
+  web fonts (.woff) are not supported, and Quire says so. Full backups include your fonts.
+- Zoom into images and tables. Long-press an image (or an SVG drawing) to open it full screen: pinch to zoom up to 8×,
+  drag to move around, double-tap to zoom in on a spot and back out. Wide tables, and tables with many columns, get a
+  small expand button at their top-right corner that opens them full screen in the book's own style. Captions and
+  image descriptions show underneath, dark themes keep images dimmed or inverted as on the page (with an *Original*
+  switch), images can be shared, and Back returns to exactly where you were.
+- A built-in English dictionary. Long-press a word and its meaning slides up from the foot of the page (or from the
+  top, when the word is low on the screen): the dictionary form ("run, from ran"), numbered meanings by part of speech
+  with an example each, and similar words you can tap to look up in turn. *More* shows every meaning, and the card has
+  *Highlight*, *Copy* and *Open in app* (for another dictionary). It works offline: the dictionary, Open English
+  WordNet, is part of the app (about 5 MB) and is read straight from it, never unpacked. Books in other languages keep
+  the usual menu, and the card can be turned off in Settings → Reading controls.
+- Auto-scroll and auto page turn. The play button in the reader's top bar scrolls the page steadily in scroll mode
+  (2 to 60 lines a minute, keeping the same pace whatever the text size) or turns the page every few seconds in page
+  mode (5 to 170 seconds). A bar at the foot of the page pauses it, changes the speed and stops it. It holds still
+  while a finger is on the page (picking up again a second after it lifts), while the menu, a sheet or a selection is
+  open, and while Quire is in the background; the screen stays on while it runs, and it stops at the end of the book.
+  Read aloud and auto-scroll take turns. Each mode remembers its own speed.
+- Edit a book's title, authors, series and cover. The book page's *Edit in Quire* sheet now has the title, the authors
+  (several separated by `&` or `;`), the series and its number (2.5 works), and a cover chosen from your photos,
+  cropped to the shape of a book. Each edited field says so and can be reset, and *Revert all* goes back to the book's
+  own details. Edits show everywhere and sort as you would expect, and they outlast rescans, even when the file
+  changes; the book file and Calibre's `metadata.opf` are never touched. Backups carry them, and full backups carry
+  the covers you chose.
+
+### Fixed
+
+- Links in books work in scroll mode. Tapping a link there only showed or hid the reader's menu, and a web link could
+  load its page inside the chapter. Web links now open in your browser (or say "No app can open this link"), and links
+  to other places in the book go there, landing on the linked paragraph rather than the start of its chapter.
+- Links within the same chapter (`#note3`) go to their target in both reading modes without disturbing the page
+  layout. Links that open a new window (`target="_blank"`) open in the browser too.
+
+### Upgrading
+
+- The library database moves to version 9 (a new table for the details you edit), automatically on first start. A
+  full backup made with this version cannot be restored by an earlier one.
+- A full backup made with your own fonts in it is written in a newer backup format (2), which earlier versions of
+  Quire refuse to restore ("newer than this app"). Backups without fonts are unchanged and still restore anywhere.
+
 ## [1.14.0] - 2026-11-13
 
 Search the Tags tab by name.

@@ -18,6 +18,14 @@ data class ReaderControls(
   val volumeKeys: Boolean = false,
   val keepScreenOn: Boolean = false,
   val orientation: ReaderOrientation = ReaderOrientation.Auto,
+  /** What the lines above and below the page show. */
+  val statusLine: StatusLine = StatusLine(),
+  /** The warm tint over the reader. */
+  val warmLight: WarmLight = WarmLight(),
+  /** A long press on a word shows its definition from the bundled dictionary. */
+  val lookUpOnLongPress: Boolean = true,
+  /** Auto-scroll and auto page turn speeds. */
+  val autoScroll: AutoScrollPrefs = AutoScrollPrefs(),
 ) {
   fun toJson(): String = json.encodeToString(this)
 

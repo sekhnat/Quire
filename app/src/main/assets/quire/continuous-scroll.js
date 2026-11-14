@@ -20,6 +20,7 @@
  *   remeasureAll()                             a reflow: remeasure live frames, rescale the rest
  *   frameByHref(href)                          the live iframe of a slot, or null
  *   flingHint(stop, velocity, durationMs)      a fling started: its predicted stop (CSS px); null stops it
+ *   autoScroll(pxPerSecond) / stopAutoScroll() scroll steadily on its own (auto-scroll); 0 or stop ends it
  *   setPressure(level)                         memory pressure: 0 normal, 1 reduced, 2 minimal
  *   setPolicy(name)                            'adaptive' (the default) or 'static', the fixed window
  *   planWindow(input)                          the window policy as a pure function (tests)
@@ -967,7 +968,40 @@ var QuireShellHost = (function () {
     telemetry.loads = [];
   }
 
+  // ── Auto-scroll ──────────────────────────────────────────────────────────
+  // A steady scroll driven here, one animation frame at a time, so the native side never steps it per frame. It is
+  // ordinary reader motion: its scroll events feed the velocity, so the window planner reads it as a slow scroll in
+  // one direction and loads ahead. Fractions of a pixel are carried, so slow speeds never stall.
+  var auto = null; // {speed, last, carry}
+
+  function autoScroll(pxPerSecond) {
+    if (!(pxPerSecond > 0)) { stopAutoScroll(); return; }
+    var running = auto !== null;
+    auto = { speed: pxPerSecond, last: auto ? auto.last : null, carry: auto ? auto.carry : 0 };
+    if (!running) window.requestAnimationFrame(autoStep);
+  }
+
+  function stopAutoScroll() { auto = null; }
+
+  function autoStep(ts) {
+    if (!auto) return;
+    if (auto.last !== null) {
+      // A long gap (the page was hidden, the device busy) is not caught up with in one leap.
+      var dt = Math.min(ts - auto.last, 100);
+      auto.carry += dt / 1000 * auto.speed;
+      var whole = Math.floor(auto.carry);
+      if (whole >= 1) {
+        auto.carry -= whole;
+        window.scrollBy(0, whole);
+      }
+    }
+    auto.last = ts;
+    window.requestAnimationFrame(autoStep);
+  }
+
   return {
+    autoScroll: autoScroll,
+    stopAutoScroll: stopAutoScroll,
     addFrame: addFrame,
     initialWindow: initialWindow,
     scrollToOffset: scrollToOffset,

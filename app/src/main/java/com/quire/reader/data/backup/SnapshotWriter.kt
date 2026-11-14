@@ -149,6 +149,7 @@ class SnapshotWriter(
     val bookmarks = ids.chunked(MAX_SQL_ARGS).flatMap { dao.bookmarks(it) }.groupBy { it.bookId }
     val highlights = ids.chunked(MAX_SQL_ARGS).flatMap { dao.highlights(it) }.groupBy { it.bookId }
     val sessions = ids.chunked(MAX_SQL_ARGS).flatMap { dao.sessions(it) }.groupBy { it.bookId }
+    val edits = db.edits().all().associateBy { it.bookId }
     return rows.map { row ->
       val identity = snapshotIdentity(row.calibreUuid, row.epubUid, row.fingerprint)
       val entryKey = tombstoneEntryKey(row.path) ?: entryKeyFor(row.id, row.path)
@@ -177,6 +178,7 @@ class SnapshotWriter(
           )
         },
         sessions = sessions[row.id].orEmpty().map { SnapshotSession(it.startedAt, it.endedAt, it.activeMs, it.startProgress, it.endProgress, it.readProgress) },
+        edits = edits[row.id]?.let { SnapshotEdits(it.title, it.author, it.series, it.seriesIndex, hasCover = it.coverPath != null) },
       )
     }
   }

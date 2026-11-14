@@ -53,4 +53,37 @@ internal object ReaderLinkPolicy {
         navigate(url)
         return true
     }
+
+    /**
+     * Pure, JVM-testable: the scheme of [raw] (lower-cased), or null when it has none. Read
+     * from the text so that no URL parser sees an unsupported (possibly opaque) URI.
+     */
+    fun schemeOf(raw: String): String? =
+        SCHEME.find(raw.trimStart())?.groupValues?.get(1)?.lowercase()
+
+    /** Longer links are not real navigation targets; refusing them bounds the work done. */
+    const val MAX_LINK_LENGTH = 8192
+
+    private val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+.-]*):")
+
+    /**
+     * A link the user tapped in a document, reported by ContentScripts as an absolute URL.
+     * Same rules as [shouldOverrideNavigation]: only web URLs reach [navigate].
+     */
+    fun onLinkActivated(raw: String, navigate: (AbsoluteUrl) -> Unit) {
+        if (raw.length > MAX_LINK_LENGTH) {
+            Timber.w("Rejected link longer than $MAX_LINK_LENGTH characters")
+            return
+        }
+        if (!isSupportedScheme(schemeOf(raw))) {
+            Timber.w("Rejected link with unsupported scheme: $raw")
+            return
+        }
+        val url = runCatching { AbsoluteUrl(raw) }.getOrNull()
+        if (url == null) {
+            Timber.w("Rejected malformed link: $raw")
+            return
+        }
+        navigate(url)
+    }
 }

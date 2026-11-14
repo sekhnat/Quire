@@ -35,6 +35,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.remember
@@ -56,7 +58,18 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.ReaderPrefs
+import com.quire.reader.data.PageMargins
+import com.quire.reader.data.fonts.UserFont
+import com.quire.reader.reader.UserFontRegistry
+import com.quire.reader.reader.toReaderFont
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import com.quire.reader.data.TextAlignPref
+import com.quire.reader.data.WarmLight
+import com.quire.reader.reader.PageFrame
+import kotlin.math.roundToInt
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.HighlightColor
 import com.quire.reader.data.db.HighlightEntity
@@ -105,8 +118,17 @@ internal fun DisplaySheet(s: ReaderUiState, session: ReaderSession, prefs: Reade
         QSlider(s.brightness.toFloat(), { reader.setBrightness(it.toInt()) }, 30f..100f, Modifier.weight(1f))
         Ph(Ic.Sun, 20.dp, Nq.neutral200)
       }
+      WarmLightRow(reader)
 
-      ReadingControls(prefs, session.preferenceContext) { change -> reader.updatePrefs(change) }
+      ReadingControls(prefs, session.preferenceContext, reader.fonts) { change -> reader.updatePrefs(change) }
+
+      Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { reader.openSheet(Sheet.StatusLine) }.padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+      ) {
+        QText("Status line", 13f, color = Nq.neutral300)
+        Ph(Ic.CaretRight, 14.dp, Nq.neutral500)
+      }
 
       // The advanced controls, only when they are switched on in Settings. The section's
       // collapse state lives in session memory and resets for a new book.
@@ -159,7 +181,7 @@ internal fun DisplaySheet(s: ReaderUiState, session: ReaderSession, prefs: Reade
 
 /** The reading settings, shared by the reader's Display sheet and the Settings screen. */
 @Composable
-internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceContext? = null, onChange: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
+internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceContext? = null, fonts: FontChoices? = null, onChange: ((ReaderPrefs) -> ReaderPrefs) -> Unit) {
   Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ReaderTheme.entries.forEach { t ->
@@ -175,15 +197,7 @@ internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceC
         }
       }
 
-      LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        rowItemsIndexed(ReaderFontList) { i, font ->
-          val on = prefs.font == i
-          val shape = RoundedCornerShape(8.dp)
-          Box(Modifier.clip(shape).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).clickable { onChange { it.copy(font = i) } }.padding(horizontal = 14.dp, vertical = 9.dp)) {
-            QText(font.name, 15f, color = if (on) Nq.accent200 else Nq.neutral200, family = font.previewFamily(), maxLines = 1)
-          }
-        }
-      }
+      FontPicker(prefs.font, fonts) { i -> onChange { it.copy(font = i) } }
 
       SettingRow("Size") {
         val shape = RoundedCornerShape(8.dp)
@@ -203,8 +217,12 @@ internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceC
         Segmented(listOf(1.4f to "1.4", 1.6f to "1.6", 1.85f to "1.8").map { (v, label) -> SegOption(label, prefs.lineHeight == v, { onChange { it.copy(lineHeight = v) } }, enabled = availability?.lineHeight?.available != false) })
       }
       SettingRow("Margins") {
-        Segmented(listOf(16 to "S", 26 to "M", 40 to "L").map { (v, label) -> SegOption(label, prefs.margin == v, { onChange { it.copy(margin = v) } }) })
+        Segmented(
+          listOf(16 to "S", 26 to "M", 40 to "L").map { (v, label) -> SegOption(label, prefs.margins == null && prefs.margin == v, { onChange { it.copy(margin = v, margins = null) } }) } +
+            SegOption("Custom", prefs.margins != null, { if (prefs.margins == null) onChange { it.copy(margins = PageFrame.effectiveMargins(it)) } }),
+        )
       }
+      prefs.margins?.let { margins -> CustomMargins(margins) { m -> onChange { it.copy(margins = m) } } }
       SettingRow("Alignment", availability?.textAlign.reasonText()) {
         Segmented(listOf(
           SegOption("", prefs.align == TextAlignPref.Left, { onChange { it.copy(align = TextAlignPref.Left) } }, Ic.AlignLeft, enabled = availability?.textAlign?.available != false),
@@ -214,6 +232,134 @@ internal fun ReadingControls(prefs: ReaderPrefs, availability: ReaderPreferenceC
 
   }
 }
+
+/**
+ * Four sliders for custom margins, 0–64 dp in steps of 2, with the sides linked unless switched apart. The page lays
+ * out again as a slider moves, at most every 150 ms, rather than on every pixel of the drag.
+ */
+@Composable
+private fun CustomMargins(margins: PageMargins, onCommit: (PageMargins) -> Unit) {
+  var draft by remember { mutableStateOf(margins) }
+  var linked by remember { mutableStateOf(margins.left == margins.right) }
+  var editedAt by remember { mutableLongStateOf(0L) }
+  // Follow changes made elsewhere ("Back to my defaults"), but never fight a drag in progress.
+  LaunchedEffect(margins) { if (margins != draft && System.currentTimeMillis() - editedAt > 400) draft = margins }
+  LaunchedEffect(draft) {
+    delay(150)
+    if (draft != margins) onCommit(draft)
+  }
+  fun edit(change: (PageMargins) -> PageMargins) { editedAt = System.currentTimeMillis(); draft = PageFrame.snapped(change(draft)) }
+  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    MarginSlider("Top", draft.top) { v -> edit { it.copy(top = v) } }
+    MarginSlider("Bottom", draft.bottom) { v -> edit { it.copy(bottom = v) } }
+    MarginSlider("Left", draft.left) { v -> edit { if (linked) it.copy(left = v, right = v) else it.copy(left = v) } }
+    MarginSlider("Right", draft.right) { v -> edit { if (linked) it.copy(left = v, right = v) else it.copy(right = v) } }
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+      QText("Same left and right", 12.5f, Modifier.weight(1f), color = Nq.neutral300)
+      com.quire.reader.ui.Toggle(linked, {
+        linked = !linked
+        if (linked) edit { it.copy(right = it.left) }
+      })
+    }
+  }
+}
+
+@Composable
+private fun MarginSlider(label: String, value: Int, onChange: (Int) -> Unit) {
+  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    QText(label, 12f, Modifier.width(52.dp), color = Nq.neutral400)
+    QSlider(value.toFloat(), { onChange(it.roundToInt()) }, 0f..PageMargins.MAX.toFloat(), Modifier.weight(1f))
+    QText("$value", 12f, Modifier.width(28.dp), color = Nq.neutral300, tabular = true, align = TextAlign.End)
+  }
+}
+
+/** The warm light's switch and strength, under the brightness slider. */
+@Composable
+private fun WarmLightRow(reader: ReaderState) {
+  val controls by reader.controls.collectAsStateWithLifecycle()
+  val tick by rememberMinuteTick()
+  val light = controls.warmLight
+  val active = light.isActive(tick, minuteOfDay(tick))
+  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      Column(Modifier.weight(1f)) {
+        QText("Warm light", 13f, color = Nq.neutral300)
+        light.schedule?.let { QText("Scheduled ${hhmm(it.startMinute)}–${hhmm(it.endMinute)}", 11f, color = Nq.neutral500) }
+      }
+      com.quire.reader.ui.Toggle(active, reader::toggleWarmLight)
+    }
+    if (active) {
+      var strength by remember(light.strength) { mutableFloatStateOf(light.strength.toFloat()) }
+      QSlider(
+        strength, { strength = it }, WarmLight.MIN_STRENGTH.toFloat()..100f, Modifier.fillMaxWidth(),
+        onValueChangeFinished = { reader.updateControls { it.copy(warmLight = it.warmLight.copy(strength = strength.roundToInt())) } },
+      )
+    }
+  }
+}
+
+/** "21:00" for 1,260 minutes after midnight. */
+internal fun hhmm(minute: Int): String = "%02d:%02d".format(minute / 60, minute % 60)
+
+/**
+ * The reading fonts in a row: the bundled ones, then the user's own under "Your fonts", then *Add font…*. A long press on
+ * one of the user's fonts offers to remove it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FontPicker(selected: Int, fonts: FontChoices?, onPick: (Int) -> Unit) {
+  val users by (fonts?.fonts ?: remember { kotlinx.coroutines.flow.MutableStateFlow(emptyList<UserFont>()) }).collectAsStateWithLifecycle()
+  val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> fonts?.add(uris) }
+  var removing by remember { mutableStateOf<UserFont?>(null) }
+  val shape = RoundedCornerShape(8.dp)
+  @Composable
+  fun Chip(label: String, family: androidx.compose.ui.text.font.FontFamily?, on: Boolean, onClick: () -> Unit, onLongClick: (() -> Unit)? = null) {
+    Box(Modifier.clip(shape).border(1.dp, if (on) Nq.accent else Nq.neutral800, shape).combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 14.dp, vertical = 9.dp)) {
+      if (family != null) QText(label, 15f, color = if (on) Nq.accent200 else Nq.neutral200, family = family, maxLines = 1)
+      else QText(label, 13.5f, color = Nq.neutral300, maxLines = 1)
+    }
+  }
+  LazyRow(Modifier.bleed(20.dp), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    rowItemsIndexed(ReaderFontList) { i, font -> Chip(font.label, font.previewFamily(), selected == i, { onPick(i) }) }
+    if (users.isNotEmpty()) item { QText("Your fonts", 10f, Modifier.padding(horizontal = 4.dp), color = Nq.neutral500, ls = 0.12f, upper = true) }
+    rowItemsIndexed(users) { _, user ->
+      val font = remember(user) { user.toReaderFont(UserFontRegistry.dir) }
+      Chip(font.label, font.previewFamily(), selected == user.index, { onPick(user.index) }, onLongClick = { removing = user })
+    }
+    if (fonts != null) item {
+      Chip("Add font…", null, false, { picker.launch(FONT_TYPES) })
+    }
+  }
+  removing?.let { user ->
+    var using by remember(user) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(user) { using = fonts?.booksUsing(user) }
+    SheetHost(true, { removing = null }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
+      Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        QText("Remove ${user.family}?", 17f, weight = 500, lh = 1.3f)
+        val n = using
+        QText(
+          when {
+            n == null || n == 0 -> "Books set to it use Literata instead."
+            n == 1 -> "1 book uses this font. It will use Literata instead."
+            else -> "$n books use this font. They will use Literata instead."
+          },
+          13f, color = Nq.neutral400, lh = 1.5f,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          QButton("Cancel", { removing = null }, Modifier.weight(1f), size = 13f, height = 42.dp)
+          QButton("Remove", { removing = null; fonts?.remove(user) }, Modifier.weight(1f), size = 13f, height = 42.dp, color = Nq.danger)
+        }
+      }
+    }
+  }
+}
+
+/** What the system file picker is asked for: font types, and octet-stream, which many file managers report for fonts. */
+private val FONT_TYPES = arrayOf(
+  "font/ttf", "font/otf", "font/sfnt", "application/x-font-ttf", "application/x-font-otf", "application/vnd.ms-opentype", "application/octet-stream",
+  // Offered so that picking one explains why it cannot be used, rather than leaving it greyed out.
+  "font/collection", "font/woff", "font/woff2",
+)
 
 @Composable
 internal fun SettingRow(label: String, reason: String? = null, control: @Composable () -> Unit) {

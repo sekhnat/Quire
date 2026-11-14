@@ -103,6 +103,15 @@ data class AdvancedReaderPrefs(
   }
 }
 
+/** Page margins in dp, each side set on its own (the *Custom* margins). */
+@Serializable
+data class PageMargins(val top: Int, val bottom: Int, val left: Int, val right: Int) {
+  companion object {
+    const val MAX = 64
+    const val STEP = 2
+  }
+}
+
 /** How the reader looks. There is one default set, and each book can override it. */
 @Serializable
 data class ReaderPrefs(
@@ -111,7 +120,10 @@ data class ReaderPrefs(
   val font: Int = 0,
   val fontSize: Int = 19,
   val lineHeight: Float = 1.6f,
+  /** The S/M/L margin preset (16, 26 or 40); used while [margins] is null. */
   val margin: Int = 26,
+  /** Custom margins, each side on its own; null follows the [margin] preset, as every book did before. */
+  val margins: PageMargins? = null,
   val align: TextAlignPref = TextAlignPref.Justify,
   val mode: ReadMode = ReadMode.Paged,
   /** The advanced controls; they ride inside the same stored JSON as the basics. */
@@ -122,7 +134,9 @@ data class ReaderPrefs(
   companion object {
     const val MIN_SIZE = 13
     const val MAX_SIZE = 30
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    // explicitNulls: a book on a margin preset stores no `margins` key at all, so its JSON is exactly what it was before
+    // custom margins existed.
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
 
     /** Tolerates damaged or older JSON by falling back to the defaults. */
     fun fromJson(text: String?): ReaderPrefs? = text?.let { runCatching { json.decodeFromString<ReaderPrefs>(it) }.getOrNull() }

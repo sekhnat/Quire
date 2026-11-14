@@ -3,6 +3,7 @@ package com.quire.reader.data.backup
 import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderPrefs
+import com.quire.reader.data.fonts.UserFontList
 import kotlinx.serialization.Serializable
 import java.security.MessageDigest
 
@@ -45,6 +46,8 @@ data class SnapshotSettings(
   val hiddenTags: List<String>? = null,
   /** Whether books show their word count; absent in older snapshots. */
   val showWordCount: Boolean? = null,
+  /** The fonts the user added, without their files (a full backup carries those); absent in older snapshots. */
+  val userFonts: UserFontList? = null,
 )
 
 /** A book's identity keys, mirroring what a scan can read again from the file (see `BookIdentity`). */
@@ -79,6 +82,21 @@ data class SnapshotBook(
   val highlights: List<SnapshotHighlight> = emptyList(),
   /** Reading sessions; absent in snapshots written before reading statistics existed. */
   val sessions: List<SnapshotSession> = emptyList(),
+  /** The user's own title, authors and series; absent when none, and in older snapshots. */
+  val edits: SnapshotEdits? = null,
+)
+
+/**
+ * A book's edits made in Quire. Null fields are not edited; an empty [series] took the book out of its series.
+ * [hasCover] says a cover was chosen: the image itself travels only in a full backup, so a snapshot alone drops it.
+ */
+@Serializable
+data class SnapshotEdits(
+  val title: String? = null,
+  val author: String? = null,
+  val series: String? = null,
+  val seriesIndex: Double? = null,
+  val hasCover: Boolean = false,
 )
 
 /** Reading position and status; every field is optional so partial state survives schema growth. */

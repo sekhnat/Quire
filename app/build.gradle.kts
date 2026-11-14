@@ -97,6 +97,11 @@ android {
       shaders = false
     }
 
+    // The dictionary is compressed block by block already: stored as it is, it is read in place from the APK.
+    androidResources {
+      noCompress += "qdict"
+    }
+
     packaging {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -139,8 +144,32 @@ abstract class VerifyNoInternetPermissionTask : DefaultTask() {
     }
 }
 
+/**
+ * Puts the converted dictionary (`:qdict-tool:convertOewn`) into the app's assets as `dictionary/<name>.qdict`. The
+ * file is made at build time from the pinned Open English WordNet release and never committed.
+ */
+abstract class BundleDictionaryTask : DefaultTask() {
+    @get:InputFile abstract val dictionary: RegularFileProperty
+    @get:OutputDirectory abstract val assetsDir: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val out = assetsDir.get().asFile.resolve("dictionary")
+        out.deleteRecursively()
+        out.mkdirs()
+        dictionary.get().asFile.copyTo(out.resolve(dictionary.get().asFile.name))
+    }
+}
+
+val bundleDictionary = tasks.register("bundleDictionary", BundleDictionaryTask::class) {
+    dependsOn(":qdict-tool:convertOewn")
+    dictionary.set(rootProject.layout.projectDirectory.file("qdict-tool/build/dictionary/oewn-2025.qdict"))
+}
+
 androidComponents {
     onVariants { variant ->
+        // Every build type ships the dictionary (debug, release, benchmark).
+        variant.sources.assets?.addGeneratedSourceDirectory(bundleDictionary, BundleDictionaryTask::assetsDir)
         val capitalized = variant.name.replaceFirstChar { it.uppercase() }
         val verify = tasks.register("verifyNoInternetPermission$capitalized", VerifyNoInternetPermissionTask::class) {
             group = "verification"
@@ -192,6 +221,8 @@ dependencies {
   implementation(libs.androidx.work.runtime)
   implementation(libs.coil.compose)
   implementation(libs.kotlinx.serialization.json)
+  // The bundled dictionary's format (pure Kotlin; shared with the build-time converter).
+  implementation(project(":qdict"))
 
   val composeBom = platform(libs.androidx.compose.bom)
   implementation(composeBom)

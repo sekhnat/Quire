@@ -31,3 +31,6 @@ plugins {
 
 rootProject.name = "Quire"
 include(":app")
+// The bundled dictionary's format (shared by the app and the converter) and its build-time converter.
+include(":qdict")
+include(":qdict-tool")

@@ -27,7 +27,9 @@ class MarkdownNotesExport(private val app: QuireApplication, private val toasts:
       val chapterTitles = if (book.missingSince == null && File(book.path).isFile) {
         NotesExporter.chapterTitles(app.publicationLoader, book.path)
       } else emptyMap()
-      val markdown = NotesExporter.markdown(book.title, book.author, identityKeyFor(book), highlights, chapterTitles)
+      // The title and authors the library shows: the user's edits where there are some.
+      val edit = repo.bookEditNow(bookId)
+      val markdown = NotesExporter.markdown(edit?.title ?: book.title, edit?.author ?: book.author, identityKeyFor(book), highlights, chapterTitles)
       val ok = runCatching {
         app.contentResolver.openOutputStream(uri)?.use { it.write(markdown.toByteArray(Charsets.UTF_8)) } != null
       }.getOrDefault(false)

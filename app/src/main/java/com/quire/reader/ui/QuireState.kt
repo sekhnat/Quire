@@ -70,7 +70,7 @@ fun parseWordBound(text: String): Int? {
   return if (words.isFinite() && words >= 1 && words <= Int.MAX_VALUE) words.toInt() else null
 }
 
-enum class Sheet { Display, Contents, Voices }
+enum class Sheet { Display, Contents, Voices, StatusLine }
 /** The library's sheets for the selected books: add a tag, file info, the copy folder picker, and the two confirmations. */
 enum class BulkSheet { Tag, Info, Copy, ConfirmRemove, ConfirmDelete }
 enum class TocTab(val label: String) { Contents("Contents"), Bookmarks("Bookmarks"), Highlights("Highlights") }

@@ -162,6 +162,7 @@ class FakeReaderStore(var paths: Map<Long, String> = emptyMap()) : ReaderStore {
   override suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs) { readAloud.value = prefs }
   val controls = MutableStateFlow(ReaderControls())
   override val readerControls: Flow<ReaderControls> = controls
+  override suspend fun setReaderControls(controls: ReaderControls) { this.controls.value = controls }
   override val brightness = MutableStateFlow(100)
   override suspend fun setBrightness(value: Int) { writes += "brightness $value" }
   override suspend fun searchBookPage(bookId: Long, query: FtsQuery.Result.Query, afterSeq: Int) = pages[afterSeq] ?: error("no page after $afterSeq")

@@ -50,6 +50,7 @@ class FullBackupRoundTripTest : DbTestCase() {
       settings = File(dir, "files/datastore/settings.preferences_pb"),
       covers = File(dir, "files/covers"),
       imported = File(dir, "files/imported"),
+      fonts = File(dir, "files/fonts/user"),
       snapshot = File(dir, "files/backup/user-data.json"),
       pendingRestoreFiles = listOf(File(dir, "no_backup/pending-restore.json")),
       restoreDir = File(dir, "no_backup/full-restore"),

@@ -1,5 +1,8 @@
 package com.quire.reader
 
+import com.quire.reader.data.fonts.UserFontLibrary
+import com.quire.reader.reader.UserFontRegistry
+
 import android.app.Application
 import com.quire.reader.data.LibraryRepository
 import com.quire.reader.data.SettingsStore
@@ -33,6 +36,9 @@ class QuireApplication : Application() {
     super.onCreate()
     // A full restore staged before the restart goes in now, before anything opens a database or the settings.
     FullRestore.applyStagedIfAny(this)
+    // The reader's WebViews read the user's fonts from the registry, kept in step with the settings.
+    UserFontRegistry.dir = userFonts.dir
+    appScope.launch { userFonts.fonts.collect { UserFontRegistry.fonts = it } }
     appScope.launch {
       fullRestore.finishAfterStart()
       // Restored settings and onboarding routing must settle before scanning or indexing is scheduled.
@@ -62,6 +68,9 @@ class QuireApplication : Application() {
   }
 
   /** For work that must outlive a screen, such as saving the reading position as the reader closes. */
+  /** A book or message handed over by [OpenBookActivity], waiting for the UI to act on it. */
+  val externalOpens = kotlinx.coroutines.flow.MutableStateFlow<ExternalOpenRequest?>(null)
+
   val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
   val database by lazy { QuireDatabase.create(this) }
   val indexDatabase by lazy { IndexDatabase.create(this) }
@@ -71,6 +80,7 @@ class QuireApplication : Application() {
   val scanner by lazy { LibraryScanner(database, publicationLoader, covers, settings, importedDir = java.io.File(filesDir, "imported")) }
   val indexer by lazy { LibraryIndexer(this, database, indexDatabase, publicationLoader, settings, appScope) }
   val wordCounts by lazy { WordCounts(database, enabled = { settings.showWordCount.first() }, scope = appScope) }
+  val userFonts by lazy { UserFontLibrary(this, settings, database) }
   val library by lazy { LibraryRepository(this, database, indexDatabase, scanner, covers, settings, indexer) }
 
   val restore by lazy { RestoreCoordinator(this, database, settings, SnapshotImporter(database, settings)) }

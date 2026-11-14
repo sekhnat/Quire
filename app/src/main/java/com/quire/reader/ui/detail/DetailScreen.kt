@@ -1,5 +1,14 @@
 package com.quire.reader.ui.detail
 
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.quire.reader.data.BookEdits
+import com.quire.reader.data.EditField
+
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -171,7 +180,7 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
   }
 }
 
-/** Quire-side edits: rating and tags. They live in Quire's database and never change Calibre's files. */
+/** Quire-side edits: title, authors, series, cover, rating and tags. They live in Quire's database and never change the book or Calibre's files. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
@@ -179,9 +188,28 @@ private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
   val notesExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { uri ->
     if (uri != null) detail.exportNotes(uri)
   }
-  SheetHost(open, { detail.openEdit(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp)) {
-    Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+  val edit by detail.edits.collectAsStateWithLifecycle(null)
+  val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) detail.setCover(uri) }
+  SheetHost(open, { detail.openEdit(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp).heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.9f).dp)) {
+    Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       QText("Edit in Quire", 17f, weight = 500)
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Kicker("Details")
+        EditRow("Title", book.title, BookEdits.isEdited(edit, EditField.Title), { detail.setEdit(EditField.Title, it) }, { detail.resetEdit(EditField.Title) })
+        EditRow("Authors", book.author, BookEdits.isEdited(edit, EditField.Authors), { detail.setEdit(EditField.Authors, it) }, { detail.resetEdit(EditField.Authors) },
+          hint = "Separate several with & or ;")
+        EditRow("Series", book.series.orEmpty(), BookEdits.isEdited(edit, EditField.Series), { detail.setEdit(EditField.Series, it) }, { detail.resetEdit(EditField.Series) },
+          hint = "Leave empty for no series")
+        EditRow("Number in series", book.seriesNo?.let(::seriesNumber).orEmpty(), BookEdits.isEdited(edit, EditField.SeriesIndex), { detail.setEdit(EditField.SeriesIndex, it.ifBlank { null }) },
+          { detail.resetEdit(EditField.SeriesIndex) }, hint = "2, or 2.5")
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          QText("Cover" + if (edit?.coverPath != null) "  · Edited" else "", 13f, Modifier.weight(1f), color = Nq.neutral300)
+          QButton("Choose image", { coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, size = 12f, height = 36.dp)
+          if (edit?.coverPath != null) QButton("Original", { detail.setCover(null) }, size = 12f, height = 36.dp)
+        }
+        if (edit != null) QButton("Revert all", detail::revertAll, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
+        QText("These stay in Quire: the book file and Calibre's metadata are never changed.", 11.5f, color = Nq.neutral500, lh = 1.4f)
+      }
       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Kicker("Rating")
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -206,3 +234,28 @@ private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
     }
   }
 }
+
+/**
+ * One editable detail: a text field holding the value the library shows. Done on the keyboard, or *Save*, keeps what was
+ * typed; an edited field says so and can go back to the book's own value.
+ */
+@Composable
+private fun EditRow(label: String, value: String, edited: Boolean, onSave: (String) -> Unit, onReset: () -> Unit, hint: String? = null) {
+  var draft by remember(value) { mutableStateOf(value) }
+  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      QText(label, 12f, Modifier.weight(1f), color = Nq.neutral400)
+      if (edited) {
+        QText("Edited", 11f, color = Nq.accent200)
+        QText("Reset", 11.5f, Modifier.padding(start = 10.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onReset).padding(horizontal = 4.dp, vertical = 2.dp), color = Nq.accent)
+      }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Box(Modifier.weight(1f)) { QTextField(draft, { draft = it }, hint ?: label, onSubmit = { if (draft != value) onSave(draft) }) }
+      if (draft != value) QButton("Save", { onSave(draft) }, size = 12f, height = 36.dp)
+    }
+  }
+}
+
+/** 2.0 → "2", 2.5 → "2.5". */
+private fun seriesNumber(n: Double): String = if (n == Math.floor(n)) n.toLong().toString() else n.toString()

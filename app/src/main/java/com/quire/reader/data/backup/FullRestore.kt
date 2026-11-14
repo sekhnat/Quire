@@ -78,7 +78,8 @@ class FullRestore(
       val free = locations.restoreDir.apply { mkdirs() }.usableSpace
       if (free < needed) throw BackupException("Not enough free space to restore: it needs ${humanBytes(needed - free)} more")
       val useIndex = manifest.indexUsable(IndexDatabase.VERSION)
-      if (manifest.contents.covers) staged.stagedCovers.mkdirs()
+      staged.stagedCovers.mkdirs()
+      if (manifest.counts.fonts > 0) staged.stagedFonts.mkdirs()
       val total = manifest.totalBytes.coerceAtLeast(1)
       var done = 0L
       while (true) {
@@ -92,6 +93,7 @@ class FullRestore(
           path == BackupPaths.INDEX_DB -> if (useIndex) staged.stagedIndex else null
           else -> BackupPaths.fileIn(path, BackupPaths.COVERS)?.let { File(staged.stagedCovers, it) }
             ?: BackupPaths.fileIn(path, BackupPaths.IMPORTED)?.let { File(staged.stagedImported, it) }
+            ?: BackupPaths.fileIn(path, BackupPaths.FONTS)?.let { File(staged.stagedFonts, it) }
         } ?: continue
         target.parentFile?.mkdirs()
         target.outputStream().use { out -> copy(zip, out) { n -> done += n; progress((done.toDouble() / total).toFloat().coerceIn(0f, 1f)) } }
@@ -113,6 +115,7 @@ class FullRestore(
       index = indexOk,
       covers = manifest.contents.covers && staged.stagedCovers.isDirectory,
       settings = staged.stagedSettings.isFile,
+      fonts = staged.stagedFonts.isDirectory,
     )
     staged.writeMarker(marker)
     Log.i(TAG, "staged a full restore from ${manifest.createdAt}: ${manifest.counts}, index=${marker.index}, covers=${marker.covers}")
