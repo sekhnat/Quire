@@ -13,6 +13,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Built on Readium 3.4.0 and Coil 3.6.3 (compileSdk 37, Kotlin 2.4). Reading, the library and search work as
   before.
 
+### Fixed
+
+- Read aloud speaks with a voice in the book's language. It used to take the best voice on the device in any
+  language, so an English book could be read with a Spanish voice.
+
 ### Upgrading
 
 - No database migration and no new permissions.

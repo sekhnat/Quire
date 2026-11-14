@@ -45,13 +45,28 @@ class AndroidReadAloudOpener(private val app: Application) : ReadAloudOpener {
     is TtsNavigatorFactory.Error.UnsupportedPublication -> "This book can’t be read aloud."
     is TtsNavigatorFactory.Error.EngineInitialization -> "No text-to-speech engine is available. Install one in Android settings."
   }
+}
 
-  /**
-   * The best voice that works on the device. A voice that needs a connection would send the book's text to a server,
-   * which the app promises never to do, so none is chosen for the person (null leaves it to the engine's own default).
-   */
-  private fun preferredVoice(language: Language?, voices: Set<AndroidTtsEngine.Voice>): AndroidTtsEngine.Voice? =
-    voices.filter { !it.requiresNetwork }.maxByOrNull { it.quality.ordinal }
+/**
+ * The voice to read [language] with, among [voices] (every voice the engine has, in any language): the best one that
+ * works on the device and speaks [language], its region first (en-US), then any region (en-GB for an en-US book, en for
+ * eng). A voice that needs a connection would send the book's text to a server, which the app promises never to do, so
+ * none is chosen for the person. Null, also for an unknown language, leaves it to the engine, which then reads with its
+ * own default voice for [language].
+ */
+@OptIn(ExperimentalReadiumApi::class)
+internal fun preferredVoice(language: Language?, voices: Set<AndroidTtsEngine.Voice>): AndroidTtsEngine.Voice? {
+  if (language == null) return null
+  val offline = voices.filter { !it.requiresNetwork }
+  val candidates = offline.filter { it.language.code.equals(language.code, ignoreCase = true) }
+    .ifEmpty { offline.filter { baseLanguage(it.language) == baseLanguage(language) } }
+  return candidates.maxByOrNull { it.quality.ordinal }
+}
+
+/** The language without its region, as an ISO 639-2 code so that "en" and "eng" compare equal. */
+private fun baseLanguage(language: Language): String {
+  val locale = language.locale
+  return runCatching { locale.isO3Language }.getOrNull()?.takeIf { it.isNotEmpty() } ?: locale.language
 }
 
 @OptIn(ExperimentalReadiumApi::class)
