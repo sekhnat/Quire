@@ -1,5 +1,6 @@
 package com.quire.reader
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.fragment.app.FragmentActivity
@@ -52,5 +53,23 @@ class MainActivity : FragmentActivity(), ReaderKeyHost {
     }
     // So the first book opened does not also pay for starting the WebView engine.
     WebViewWarmup.startWhenIdle(this)
+    // A recreated activity still carries the intent it was started with; that book was opened then.
+    if (savedInstanceState == null) takeExternalOpen(intent)
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    takeExternalOpen(intent)
+  }
+
+  /** Passes a book or message from [OpenBookActivity] on to the app's UI. */
+  private fun takeExternalOpen(intent: Intent?) {
+    intent ?: return
+    val bookId = intent.getLongExtra(OpenBookActivity.EXTRA_BOOK_ID, -1L).takeIf { it > 0 }
+    val message = intent.getStringExtra(OpenBookActivity.EXTRA_MESSAGE)
+    if (bookId == null && message == null) return
+    intent.removeExtra(OpenBookActivity.EXTRA_BOOK_ID)
+    intent.removeExtra(OpenBookActivity.EXTRA_MESSAGE)
+    (application as QuireApplication).externalOpens.value = ExternalOpenRequest(bookId, message)
   }
 }

@@ -150,6 +150,8 @@ internal fun Resource.injectHtml(
                         log: function (m) { if (book) book.log(href, m); },
                         logError: function (m, f, l) { if (book) book.logError(href, m, f, l); },
                         onTap: function (e) { return book ? book.onTap(href, e) : false; },
+                        onLink: function (u) { if (book) book.onLink(href, String(u)); },
+                        onMedia: function (j) { if (book) book.onMedia(href, String(j)); },
                         onDragStart: function (e) { return book ? book.onDrag(href, 'start', e) : false; },
                         onDragMove: function (e) { return book ? book.onDrag(href, 'move', e) : false; },
                         onDragEnd: function (e) { return book ? book.onDrag(href, 'end', e) : false; },
@@ -163,6 +165,12 @@ internal fun Resource.injectHtml(
                     </script>"""
                 )
             }
+
+            injectables.add(ContentScripts.injectable)
+
+            // The user's own fonts, read at serving time so a font added while reading reaches every chapter loaded
+            // after it (the ones already loaded get the same rules from ContentScripts.userFontsScript).
+            injectables.add(ContentScripts.userFontStyle(assetsBaseHref))
 
             injectables.add(
                 script(

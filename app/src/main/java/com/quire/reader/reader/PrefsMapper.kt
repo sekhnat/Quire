@@ -121,10 +121,10 @@ fun ReaderPrefs.toEpubPreferences(layout: Layout): EpubPreferences {
     theme = when (theme) { ReaderTheme.Sepia -> Theme.SEPIA; ReaderTheme.Paper -> Theme.LIGHT; else -> Theme.DARK },
     backgroundColor = Color(theme.bg.toArgb()),
     textColor = Color(theme.fg.toArgb()),
-    fontFamily = FontFamily(ReaderFontList[font.coerceIn(0, ReaderFontList.lastIndex)].name),
+    fontFamily = FontFamily(resolveFont(font).name),
     fontSize = fontSize / BASE_FONT_PX,
     lineHeight = lineHeight.toDouble(),
-    pageMargins = marginFactor(margin),
+    pageMargins = PageFrame.readiumFactor(this),
     // With publisher styles on, the book's own CSS overrides line spacing, alignment and hyphenation.
     publisherStyles = advanced.typographySource == TypographySource.Book,
     scroll = mode == ReadMode.Scroll,

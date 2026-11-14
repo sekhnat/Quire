@@ -42,6 +42,31 @@ class CoverStore(context: Context) {
     out.path
   }.getOrNull()
 
+  /**
+   * Saves a cover the user chose for book [bookId], cropped to the 2:3 shape of a book cover around its centre, under a
+   * new name each time (`user-<id>-<time>.webp`) so no image cache shows the old one. Null when [bytes] is no image.
+   */
+  fun saveUserCover(bytes: ByteArray, bookId: Long, now: Long): String? = runCatching {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    // Big enough to stay sharp on the book page, which shows the cover larger than the library grid.
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= USER_COVER_WIDTH) sample *= 2
+    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+    val (x, y, w, h) = coverCrop(bmp.width, bmp.height)
+    val cropped = Bitmap.createBitmap(bmp, x, y, w, h)
+    val scaled = if (cropped.width > USER_COVER_WIDTH) cropped.scale(USER_COVER_WIDTH, USER_COVER_WIDTH * 3 / 2) else cropped
+    val out = File(dir, "user-$bookId-$now.webp")
+    val tmp = File(out.path + ".tmp")
+    tmp.outputStream().use { scaled.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) }
+    if (!tmp.renameTo(out)) { tmp.delete(); return null }
+    out.path
+  }.getOrNull()
+
+  /** Whether [path] is a cover the user chose (kept in backups), not one read from a book. */
+  fun isUserCover(path: String): Boolean = File(path).name.startsWith("user-")
+
   fun delete(path: String?) { if (path != null) File(path).delete() }
   fun deleteAll(paths: List<String>) = paths.forEach(::delete)
 
@@ -49,5 +74,15 @@ class CoverStore(context: Context) {
 
   private fun md5(s: String) = MessageDigest.getInstance("MD5").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
 
-  companion object { const val TARGET_WIDTH = 360 }
+  companion object {
+    const val TARGET_WIDTH = 360
+    const val USER_COVER_WIDTH = 720
+
+    /** The largest 2:3 (portrait) rectangle in a [width] × [height] image, centred: x, y, width, height. */
+    fun coverCrop(width: Int, height: Int): List<Int> {
+      val w = minOf(width, height * 2 / 3).coerceAtLeast(1)
+      val h = minOf(height, w * 3 / 2).coerceAtLeast(1)
+      return listOf((width - w) / 2, (height - h) / 2, w, h)
+    }
+  }
 }

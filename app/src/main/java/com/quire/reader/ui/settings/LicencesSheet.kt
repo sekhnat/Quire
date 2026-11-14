@@ -46,7 +46,7 @@ internal fun LicencesSheet(visible: Boolean, open: String?, onOpen: (String?) ->
     Column(Modifier.padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
       if (open == null) {
         QText("Open-source licences", 17f, weight = 500, lh = 1.3f)
-        QText("The fonts, icons and reader code Quire is built on, and the licences they come with.", 12.5f, color = Nq.neutral400, lh = 1.5f)
+        QText("The fonts, icons, dictionary and reader code Quire is built on, and the licences they come with.", 12.5f, color = Nq.neutral400, lh = 1.5f)
         Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
           notices.forEach { path ->
             Row(
@@ -92,6 +92,7 @@ internal fun licenceKind(path: String): String = when {
   path.endsWith("-OFL.txt") -> "Font · SIL Open Font License 1.1"
   "readium" in path -> "Reader engine · BSD 3-Clause"
   "phosphor" in path -> "Icons · MIT"
+  "wordnet" in path -> "Dictionary · CC BY 4.0"
   else -> "Licence"
 }
 

@@ -99,6 +99,12 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         @InternalReadiumApi
         fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean = false
 
+        /** A link tapped in the document, as an absolute URL (ContentScripts). Untrusted. */
+        fun onLinkActivated(url: String) {}
+
+        /** An image, SVG or table to show full screen, as ContentScripts' JSON report. Untrusted. */
+        fun onMediaActivated(json: String) {}
+
         @InternalReadiumApi
         fun shouldInterceptRequest(webView: WebView, request: WebResourceRequest): WebResourceResponse? = null
 
@@ -320,6 +326,18 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         }
 
         return runBlocking(uiScope.coroutineContext) { listener?.onTap(event.point) ?: false }
+    }
+
+    /** Called from ContentScripts on a long press on an image, or a table's expand button; [json] comes from book content. */
+    @android.webkit.JavascriptInterface
+    fun onMedia(json: String) {
+        uiScope.launch { listener?.onMediaActivated(json) }
+    }
+
+    /** Called from ContentScripts when a link is tapped; [url] comes from book content. */
+    @android.webkit.JavascriptInterface
+    fun onLink(url: String) {
+        uiScope.launch { listener?.onLinkActivated(url) }
     }
 
     /**

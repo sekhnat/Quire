@@ -21,6 +21,7 @@ class StagedRestoreTest {
       settings = File(root, "files/datastore/settings.preferences_pb"),
       covers = File(root, "files/covers"),
       imported = File(root, "files/imported"),
+      fonts = File(root, "files/fonts/user"),
       snapshot = File(root, "files/backup/user-data.json"),
       pendingRestoreFiles = listOf(File(root, "no_backup/pending-restore.json"), File(root, "no_backup/restore-phase")),
       restoreDir = File(root, "no_backup/full-restore"),
@@ -164,4 +165,29 @@ class StagedRestoreTest {
     restore.swapIfStaged()
     assertEquals("new library", at.libraryDb.readText())
   }
+
+  @Test fun `the backup's fonts replace the current ones, and a format-1 marker leaves them alone`() {
+    current()
+    File(at.fonts, "1-0.ttf").put("old font")
+    val restore = StagedRestore(at)
+    val marker = everything.copy(fonts = true)
+    stage(restore, marker)
+    File(restore.stagedFonts, "3-0.otf").put("backed-up font")
+    restore.swapIfStaged()
+    assertEquals(setOf("3-0.otf"), at.fonts.list()!!.toSet())
+
+    val older = StagedRestore(at)
+    File(at.fonts, "4-0.ttf").put("kept")
+    stage(older, everything)
+    older.swapIfStaged()
+    assertTrue(File(at.fonts, "4-0.ttf").isFile)
+  }
+
+  @Test fun `an older marker without the fonts field still decodes`() {
+    val restore = StagedRestore(at)
+    at.restoreDir.mkdirs()
+    File(at.restoreDir, "restore.json").writeText("""{"phase":"staged","index":true,"covers":true,"settings":true}""")
+    assertEquals(false, restore.marker()!!.fonts)
+  }
 }
+

@@ -1,11 +1,13 @@
 package com.quire.reader.reader
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
 import androidx.core.net.toUri
@@ -21,10 +23,13 @@ import androidx.fragment.app.FragmentContainerView
 import androidx.fragment.app.commitNow
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.DecorableNavigator
+import org.readium.r2.navigator.HyperlinkNavigator
+import org.readium.r2.shared.publication.Link
 import com.quire.reader.navigator.epub.EpubNavigatorFactory
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
 import com.quire.reader.navigator.epub.EpubPreferences
 import com.quire.reader.navigator.epub.ReaderLinkPolicy
+import com.quire.reader.navigator.epub.ReaderMedia
 import com.quire.reader.navigator.epub.css.FontStyle
 import org.readium.r2.navigator.html.HtmlDecorationTemplates
 import org.readium.r2.navigator.input.InputListener
@@ -39,10 +44,21 @@ import timber.log.Timber
 /** What the user picked from the text-selection menu. */
 enum class SelectionAction(val label: String) { Highlight("Highlight"), Note("Note"), Copy("Copy"), LookUp("Look up"), Share("Share"), ReadAloud("Read from here") }
 
-private class SelectionMenu(private val actions: List<SelectionAction>, private val onAction: (SelectionAction) -> Unit) : BaseActionModeCallback() {
+private class SelectionMenu(
+  private val actions: List<SelectionAction>,
+  private val onStarted: () -> Unit,
+  private val onEnded: () -> Unit,
+  private val onAction: (SelectionAction) -> Unit,
+) : BaseActionModeCallback() {
   override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
     actions.forEachIndexed { i, a -> menu.add(Menu.NONE, i, i, a.label).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM) }
+    // A long press made a selection: the definition card may open beside the menu (the menu stays).
+    onStarted()
     return true
+  }
+
+  override fun onDestroyActionMode(mode: ActionMode) {
+    onEnded()
   }
 
   override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
@@ -65,6 +81,13 @@ fun EpubHost(
   onTap: (xFraction: Float) -> Unit,
   onSelectionAction: (SelectionAction) -> Unit,
   onHighlightTapped: (id: Long) -> Unit,
+  /** A link to another place in the book was tapped; returns whether to follow it. */
+  onInternalLink: (Link) -> Boolean,
+  /** An image, SVG or table the reader asked to see full screen. */
+  onMedia: (ReaderMedia) -> Unit,
+  /** A selection was made, and later cleared (the definition card follows it). */
+  onSelectionStarted: () -> Unit = {},
+  onSelectionEnded: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val activity = LocalActivity.current as FragmentActivity
@@ -73,6 +96,10 @@ fun EpubHost(
   val tap by rememberUpdatedState(onTap)
   val selection by rememberUpdatedState(onSelectionAction)
   val tapped by rememberUpdatedState(onHighlightTapped)
+  val internalLink by rememberUpdatedState(onInternalLink)
+  val media by rememberUpdatedState(onMedia)
+  val selectionStarted by rememberUpdatedState(onSelectionStarted)
+  val selectionEnded by rememberUpdatedState(onSelectionEnded)
 
   DisposableEffect(session) {
     onDispose {
@@ -97,6 +124,9 @@ fun EpubHost(
             initialLocator = session.current.value,
             initialPreferences = preferences,
             listener = object : EpubNavigatorFragment.Listener {
+              override fun shouldFollowInternalLink(link: Link, context: HyperlinkNavigator.LinkContext?): Boolean =
+                internalLink(link)
+
               override fun onExternalLinkActivated(url: AbsoluteUrl) {
                 // Only web links may leave the reader. The navigator's policy already
                 // filters; this re-check is defense in depth before the ACTION_VIEW launch.
@@ -104,11 +134,17 @@ fun EpubHost(
                   Timber.w("Rejected external link with unsupported scheme: $url")
                   return
                 }
-                runCatching { activity.startActivity(Intent(Intent.ACTION_VIEW, url.toString().toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                try {
+                  activity.startActivity(Intent(Intent.ACTION_VIEW, url.toString().toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: ActivityNotFoundException) {
+                  Toast.makeText(activity, "No app can open this link", Toast.LENGTH_SHORT).show()
+                } catch (e: RuntimeException) {
+                  Timber.w(e, "Could not open external link")
+                }
               }
             },
             configuration = EpubNavigatorFragment.Configuration {
-              selectionActionModeCallback = SelectionMenu(selectionActions) { selection(it) }
+              selectionActionModeCallback = SelectionMenu(selectionActions, { selectionStarted() }, { selectionEnded() }) { selection(it) }
               // Chapter changes come from the vertical scroll column; sideways swipes
               // must not turn pages.
               disablePageTurnsWhileScrolling = true
@@ -147,6 +183,7 @@ fun EpubHost(
               return true
             }
           })
+          nav.onMedia = { media(it) }
           session.attach(nav)
           session.scope.launch { nav.currentLocator.collect { session.onLocator(it) } }
           // Preference submissions belong to the session: ReaderScreen submits mapped

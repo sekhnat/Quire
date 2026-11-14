@@ -173,3 +173,31 @@ data class ReadingSessionEntity(
   /** How much of the book was read page by page, as a fraction of it: forward steps only, jumps left out. */
   val readProgress: Float,
 )
+
+/**
+ * The user's own title, authors, series and cover for a book, made in Quire. Each field is null while it is not edited,
+ * so the file's (or Calibre's) value shows. Scans never read or write this table: an edit outlives every rescan,
+ * whatever the file later says. The sort keys are worked out from the edited values when they are saved (see
+ * [com.quire.reader.data.BookEdits]), so queries that sort and filter by them need no Kotlin.
+ */
+@Entity(
+  tableName = "book_edit",
+  foreignKeys = [ForeignKey(BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"], onDelete = ForeignKey.CASCADE)],
+)
+data class BookEditEntity(
+  @PrimaryKey val bookId: Long,
+  val title: String? = null,
+  val sortTitle: String? = null,
+  /** Several authors joined with " & ", as the scanner shows them. */
+  val author: String? = null,
+  val primaryAuthor: String? = null,
+  val authorSort: String? = null,
+  /** An empty string is "no series" (the edit took the book out of the one its file names). */
+  val series: String? = null,
+  val seriesIndex: Double? = null,
+  /** A cover the user chose, in the covers folder. */
+  val coverPath: String? = null,
+  val updatedAt: Long = 0,
+) {
+  val isEmpty: Boolean get() = title == null && author == null && series == null && seriesIndex == null && coverPath == null
+}

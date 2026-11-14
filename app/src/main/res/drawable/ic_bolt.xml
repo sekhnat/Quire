@@ -1,0 +1,5 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="256" android:viewportHeight="256">
+    <!-- A plain lightning bolt for the status line's "charging" mark. -->
+    <path android:fillColor="#FF000000" android:pathData="M150,16L52,146H118L102,240L204,106H138Z"/>
+</vector>

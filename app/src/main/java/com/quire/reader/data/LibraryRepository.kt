@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import android.util.Log
 import androidx.tracing.trace
 import androidx.tracing.traceAsync
+import com.quire.reader.data.db.BookEditEntity
 import com.quire.reader.data.db.BookTagEntity
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
@@ -27,6 +28,8 @@ import com.quire.reader.data.index.SearchOrder
 import com.quire.reader.data.index.TextSearcher
 import com.quire.reader.data.mobi.MobiBook
 import com.quire.reader.data.scan.BookFormats
+import com.quire.reader.data.scan.BookIdentity
+import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.data.scan.CoverStore
 import com.quire.reader.data.scan.LibraryScanner
 import com.quire.reader.data.scan.ScanResult
@@ -35,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -138,7 +142,17 @@ class LibraryRepository(
   val missingBooks: Flow<List<MissingBookRow>> = db.books().observeMissing()
 
   /** Deletes missing books and their reading history for good. */
-  suspend fun forgetMissing(ids: List<Long>) = withContext(Dispatchers.IO) { covers.deleteAll(db.books().forgetMissing(ids)) }
+  suspend fun forgetMissing(ids: List<Long>) = withContext(Dispatchers.IO) {
+    val chosen = userCoversOf(ids)
+    covers.deleteAll(db.books().forgetMissing(ids))
+    covers.deleteAll(chosen)
+  }
+
+  /** The covers the user chose for [ids]; their rows go with the books, so the files must be deleted by hand. */
+  private suspend fun userCoversOf(ids: List<Long>): List<String> {
+    val set = ids.toHashSet()
+    return db.edits().all().filter { it.bookId in set }.mapNotNull { it.coverPath }
+  }
 
   /** Copies picked books (EPUB, AZW3, MOBI) into app storage (a folder that is always readable) and scans it. */
   suspend fun importFiles(uris: List<Uri>): Int = withContext(Dispatchers.IO) {
@@ -149,11 +163,7 @@ class LibraryRepository(
         val incoming = File(dir, ".import-${System.currentTimeMillis()}.tmp")
         try {
           app.contentResolver.openInputStream(uri)?.use { input -> incoming.outputStream().use { input.copyTo(it) } } ?: error("cannot open $uri")
-          // A picker may hand over a file without its name; a MOBI then still needs its extension to be found.
-          val ext = if (MobiBook.isMobi(incoming)) "mobi" else "epub"
-          val name = displayName(uri)?.takeIf { BookFormats.isBook(it) } ?: "import-${System.currentTimeMillis()}.$ext"
-          val target = uniqueFile(dir, name.replace(Regex("[\\\\/:*?\"<>|]"), "_"))
-          if (!incoming.renameTo(target)) error("cannot store $name")
+          storeImported(incoming, displayName(uri))
           copied++
         } finally {
           incoming.delete()
@@ -228,6 +238,7 @@ class LibraryRepository(
       runCatching { !file.exists() || file.delete() }.getOrDefault(false).also { if (!it) Log.w(TAG, "cannot delete ${f.path}") }
     }
     if (deleted.isNotEmpty()) {
+      covers.deleteAll(userCoversOf(deleted.map { it.id }))
       covers.deleteAll(db.books().forgetBooks(deleted.map { it.id }))
       settings.restoreRemovedBooks(deleted.map { it.path })
       indexer.sweep()
@@ -257,6 +268,133 @@ class LibraryRepository(
     if (copied > 0 && db.folders().watched().any { path == it.path || path.startsWith(it.path.trimEnd('/') + "/") }) rescan()
     FileOpResult(copied, files.size - copied)
   }
+
+  /**
+   * Moves the copied book [incoming] into the imported-books folder under [name] (sanitised; a generated name when it
+   * has none or no book extension) and returns where it went.
+   */
+  private fun storeImported(incoming: File, name: String?): File {
+    val dir = File(app.filesDir, "imported").apply { mkdirs() }
+    // A picker may hand over a file without its name; a MOBI then still needs its extension to be found.
+    val ext = if (MobiBook.isMobi(incoming)) "mobi" else "epub"
+    val chosen = name?.takeIf { BookFormats.isBook(it) } ?: "import-${System.currentTimeMillis()}.$ext"
+    val target = uniqueFile(dir, chosen.replace(Regex("[\\\\/:*?\"<>|]"), "_"))
+    if (!incoming.renameTo(target)) error("cannot store $chosen")
+    return target
+  }
+
+  // ── the user's own title, authors, series and cover ──────────────────────
+
+  /** The user's edits to one book, or null when there are none. */
+  fun bookEdit(bookId: Long): Flow<BookEditEntity?> = db.edits().observe(bookId)
+  suspend fun bookEditNow(bookId: Long): BookEditEntity? = db.edits().get(bookId)
+
+  /** Sets (or with null, resets) one field of a book; throws [EditRejected] for a value that cannot be saved. */
+  suspend fun setBookEdit(bookId: Long, field: EditField, value: String?) = withContext(Dispatchers.IO) {
+    val current = db.edits().get(bookId) ?: BookEditEntity(bookId)
+    db.edits().save(BookEdits.apply(current, field, value, System.currentTimeMillis()))
+  }
+
+  /**
+   * Gives a book a cover from an image the user picked (cropped to 2:3), from [bytes]; null [bytes] goes back to the
+   * book's own cover. The previous chosen cover's file is deleted. Returns false when the image could not be read.
+   */
+  suspend fun setBookCover(bookId: Long, bytes: ByteArray?): Boolean = withContext(Dispatchers.IO) {
+    val current = db.edits().get(bookId) ?: BookEditEntity(bookId)
+    val path = if (bytes == null) null else covers.saveUserCover(bytes, bookId, System.currentTimeMillis()) ?: return@withContext false
+    db.edits().save(current.copy(coverPath = path, updatedAt = System.currentTimeMillis()))
+    current.coverPath?.takeIf { it != path }?.let(covers::delete)
+    true
+  }
+
+  /** Reads an image the user picked (photo picker) for [setBookCover]; null when it cannot be read or is too large. */
+  suspend fun readPickedImage(uri: Uri): ByteArray? = withContext(Dispatchers.IO) {
+    runCatching {
+      app.contentResolver.openInputStream(uri)?.use { input ->
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        while (true) { val n = input.read(buf); if (n < 0) break; out.write(buf, 0, n); if (out.size() > MAX_PICKED_IMAGE) return@use null }
+        out.toByteArray()
+      }
+    }.getOrNull()
+  }
+
+  /** Resets every edit of a book (*Revert all*), its chosen cover included. */
+  suspend fun revertBookEdits(bookId: Long) = withContext(Dispatchers.IO) {
+    db.edits().get(bookId)?.coverPath?.let(covers::delete)
+    db.edits().clear(bookId)
+  }
+
+  // ── books handed over by other apps ──────────────────────────────────────
+
+  /**
+   * Opens a book file another app handed over ("Open with", tapping a file): the library book it already is, or the
+   * book it becomes once scanned in, restored or copied in (see [ExternalOpenRules]). Quire never opens a book that is
+   * not in its library.
+   */
+  suspend fun openExternal(uri: Uri): ExternalOpenResult = withContext(Dispatchers.IO) {
+    when (val r = addExternal(listOf(uri)).single()) {
+      null -> ExternalOpenResult.Unreadable
+      else -> ExternalOpenResult.Opened(r.first, r.second)
+    }
+  }
+
+  /**
+   * Brings the handed-over files [uris] into the library (the share sheet's "Add to Quire"), with the same matching as
+   * [openExternal] so a book already there is never copied twice. Returns, per file, its book id and whether it was
+   * copied in just now, or null when it is not a book Quire can read. Scans once, after every file is in place.
+   */
+  suspend fun addExternal(uris: List<Uri>): List<Pair<Long, Boolean>?> = withContext(Dispatchers.IO) {
+    val roots = db.folders().watched().map { WatchedRoot(it.path, runCatching { File(it.path).canonicalPath }.getOrDefault(it.path)) }
+    val removed = settings.removedBooks.first()
+    val tmpDir = File(app.cacheDir, "external").apply { mkdirs() }
+    // Per file: a book id now, or the path a scan will give a book (and whether it was copied in), or null.
+    val pending = uris.map { uri ->
+      runCatchingCancellable {
+        val path = StoragePaths.pathOf(app, uri)?.let(::File)?.takeIf { it.isFile && it.canRead() }
+        var temp: File? = null
+        try {
+          val source = path ?: File(tmpDir, ".open-${System.nanoTime()}.tmp").also { t ->
+            temp = t
+            app.contentResolver.openInputStream(uri)?.use { input -> t.outputStream().use { input.copyTo(it) } } ?: error("cannot open $uri")
+          }
+          if (!BookFormats.looksLikeBook(source)) return@runCatchingCancellable null
+          val fingerprint = if (MobiBook.isMobi(source)) BookIdentity.fullFingerprint(source) else BookIdentity.fingerprint(source)
+          val libraryPath = path?.let { ExternalOpenRules.libraryPath(it.canonicalPath, roots) }
+          val plan = ExternalOpenRules.plan(
+            libraryPath = libraryPath,
+            byPath = libraryPath?.let { db.books().byPath(it) }?.takeIf { it.missingSince == null }?.id,
+            byFingerprint = fingerprint?.let { db.books().presentIdByFingerprint(it) },
+            removed = libraryPath != null && libraryPath in removed,
+          )
+          when (plan) {
+            is OpenPlan.Open -> Pending(id = plan.bookId)
+            is OpenPlan.Restore -> { settings.restoreRemovedBooks(listOf(plan.path)); Pending(path = plan.path) }
+            is OpenPlan.ScanThenOpen -> Pending(path = plan.path)
+            OpenPlan.Import -> {
+              val incoming = temp ?: File(tmpDir, ".open-${System.nanoTime()}.tmp").also { t -> source.copyTo(t); temp = t }
+              Pending(path = storeImported(incoming, path?.name ?: displayName(uri)).absolutePath, added = true)
+            }
+          }
+        } finally {
+          temp?.delete()
+        }
+      }.onFailure { Log.w(TAG, "cannot open handed-over $uri", it) }.getOrNull()
+    }
+    if (pending.any { it?.path != null }) {
+      if (pending.any { it?.added == true }) ensureFolder(File(app.filesDir, "imported").absolutePath)
+      rescan()
+    }
+    pending.map { p ->
+      when {
+        p == null -> null
+        p.id != null -> p.id to false
+        else -> db.books().byPath(p.path!!)?.takeIf { it.missingSince == null }?.let { it.id to p.added }
+      }
+    }
+  }
+
+  private class Pending(val id: Long? = null, val path: String? = null, val added: Boolean = false)
 
   private fun displayName(uri: Uri): String? {
     val cursor = app.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null) ?: return null
@@ -415,3 +553,6 @@ class LibraryRepository(
     private const val TAG = "LibraryRepository"
   }
 }
+
+/** Images over this size are not taken as covers (a photo of a cover is a few MB at most). */
+private const val MAX_PICKED_IMAGE = 30 * 1024 * 1024

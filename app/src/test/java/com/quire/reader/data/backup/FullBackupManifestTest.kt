@@ -85,4 +85,13 @@ class FullBackupManifestTest {
     // Keeping zero would delete the backup just written; at least one always stays.
     assertEquals(2, BackupFiles.toPrune(folder.listFiles()!!.toList(), keep = 0).size)
   }
+
+  @Test fun `an archive is format 2 only when it carries fonts, and font entries are allowed`() {
+    assertEquals(1, formatFor(hasFonts = false))
+    assertEquals(2, formatFor(hasFonts = true))
+    assertTrue(BackupPaths.isAllowed("fonts/3-0.otf"))
+    assertFalse(BackupPaths.isAllowed("fonts/../quire.db"))
+    assertFalse(BackupPaths.isAllowed("fonts/sub/3-0.otf"))
+  }
 }
+

@@ -145,14 +145,38 @@ interface FolderDao {
 }
 
 /** The columns of a [CatalogRow] for the books in the library (not missing ones); append an AND clause to narrow it. */
+/**
+ * A book's title, authors, series and cover as the library shows them: the user's edit (`book_edit e`) where there is
+ * one, else the file's. An edited series of "" means no series. Used by every query that shows, sorts or filters books.
+ */
+internal const val EDITED_COLUMNS = """
+    COALESCE(e.title, b.title) AS title, COALESCE(e.sortTitle, b.sortTitle) AS sortTitle, COALESCE(e.author, b.author) AS author,
+    COALESCE(e.primaryAuthor, b.primaryAuthor) AS primaryAuthor, COALESCE(e.authorSort, b.authorSort) AS authorSort,
+    CASE WHEN e.series IS NULL THEN b.series ELSE NULLIF(e.series, '') END AS series,
+    CASE WHEN e.series IS NULL AND e.seriesIndex IS NULL THEN b.seriesIndex WHEN e.series = '' THEN NULL ELSE COALESCE(e.seriesIndex, b.seriesIndex) END AS seriesIndex,
+    COALESCE(e.coverPath, b.coverPath) AS coverPath"""
+
 private const val CATALOG_SQL = """
-    SELECT b.id, b.path, b.folderId, b.title, b.sortTitle, b.author, b.primaryAuthor, b.authorSort, b.series, b.seriesIndex,
-           b.pubYear, b.language, b.description, b.calibreRating, b.sizeBytes, b.addedAt, b.pageEstimate, b.coverPath, b.source,
+    SELECT b.id, b.path, b.folderId, $EDITED_COLUMNS,
+           b.pubYear, b.language, b.description, b.calibreRating, b.sizeBytes, b.addedAt, b.pageEstimate, b.source,
            b.readable, b.wordCount,
            (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' WHEN 'folder' THEN 'f' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
-    FROM book b
+    FROM book b LEFT JOIN book_edit e ON e.bookId = b.id
     WHERE b.missingSince IS NULL
     """
+
+@Dao
+abstract class BookEditDao {
+  @Query("SELECT * FROM book_edit WHERE bookId = :bookId") abstract fun observe(bookId: Long): Flow<BookEditEntity?>
+  @Query("SELECT * FROM book_edit WHERE bookId = :bookId") abstract suspend fun get(bookId: Long): BookEditEntity?
+  @Query("SELECT * FROM book_edit") abstract suspend fun all(): List<BookEditEntity>
+  @Insert(onConflict = OnConflictStrategy.REPLACE) protected abstract suspend fun put(edit: BookEditEntity)
+  @Query("DELETE FROM book_edit WHERE bookId = :bookId") abstract suspend fun clear(bookId: Long)
+
+  /** Saves [edit], or removes the row when nothing in it is edited any more. */
+  @Transaction
+  open suspend fun save(edit: BookEditEntity) { if (edit.isEmpty) clear(edit.bookId) else put(edit) }
+}
 
 @Dao
 abstract class BookDao {
@@ -173,6 +197,10 @@ abstract class BookDao {
   abstract suspend fun knownFiles(): List<KnownFile>
   @Query("SELECT * FROM book WHERE id = :id") abstract suspend fun byId(id: Long): BookEntity?
   @Query("SELECT * FROM book WHERE path = :path") abstract suspend fun byPath(path: String): BookEntity?
+
+  /** A present book whose file has [fingerprint] (see BookIdentity), the newest when copies were added twice. */
+  @Query("SELECT id FROM book WHERE fingerprint = :fingerprint AND missingSince IS NULL ORDER BY addedAt DESC LIMIT 1")
+  abstract suspend fun presentIdByFingerprint(fingerprint: String): Long?
   /** Includes missing rows: a restored snapshot is auto-imported only into an empty library. */
   @Query("SELECT COUNT(*) FROM book") abstract suspend fun totalCount(): Int
 
@@ -378,12 +406,13 @@ abstract class BookDao {
 
   @Query(
     """
-    SELECT b.id, b.title, b.author, b.coverPath, b.missingSince, b.path, s.progress AS progress,
+    SELECT b.id, COALESCE(e.title, b.title) AS title, COALESCE(e.author, b.author) AS author, COALESCE(e.coverPath, b.coverPath) AS coverPath,
+           b.missingSince, b.path, s.progress AS progress,
            (SELECT COUNT(*) FROM bookmark x WHERE x.bookId = b.id) AS bookmarks,
            (SELECT COUNT(*) FROM highlight x WHERE x.bookId = b.id) AS highlights
-    FROM book b LEFT JOIN book_state s ON s.bookId = b.id
+    FROM book b LEFT JOIN book_state s ON s.bookId = b.id LEFT JOIN book_edit e ON e.bookId = b.id
     WHERE b.missingSince IS NOT NULL
-    ORDER BY b.missingSince DESC, b.sortTitle
+    ORDER BY b.missingSince DESC, COALESCE(e.sortTitle, b.sortTitle)
     """,
   )
   abstract fun observeMissing(): Flow<List<MissingBookRow>>
@@ -410,6 +439,10 @@ abstract class BookDao {
 abstract class StateDao {
   @Query("SELECT * FROM book_state WHERE bookId = :bookId") abstract suspend fun get(bookId: Long): BookStateEntity?
   @Query("UPDATE book_state SET prefsJson = NULL WHERE prefsJson IS NOT NULL") abstract suspend fun clearAllPrefs(): Int
+
+  /** Books whose own settings choose the font at [index] (the stored JSON is compact: `"font":10001,`). */
+  @Query("SELECT COUNT(*) FROM book_state WHERE prefsJson LIKE '%\"font\":' || :index || ',%' OR prefsJson LIKE '%\"font\":' || :index || '}%'")
+  abstract suspend fun countUsingFont(index: Int): Int
   @Query("SELECT * FROM book_state WHERE bookId = :bookId") abstract fun observe(bookId: Long): Flow<BookStateEntity?>
   @Query("SELECT bookId, progress, status, lastOpenedAt, userRating FROM book_state") abstract fun observeReading(): Flow<List<ReadingStateRow>>
   @Query("SELECT bookId, progress, status, lastOpenedAt, userRating FROM book_state WHERE bookId IN (:ids)")

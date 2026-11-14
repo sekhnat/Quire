@@ -1,0 +1,3306 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE LexicalResource SYSTEM "http://globalwordnet.github.io/schemas/WN-LMF-1.3.dtd">
+<LexicalResource xmlns:dc="https://globalwordnet.github.io/schemas/dc/">
+  <Lexicon id="oewn"
+           label="Open English Wordnet"
+           language="en"
+           email="english-wordnet@googlegroups.com"
+           license="https://creativecommons.org/licenses/by/4.0"
+           version="2025"
+           url="https://github.com/globalwordnet/english-wordnet">
+        <LexicalEntry id="oewn-big-a">
+      <Lemma writtenForm="big" partOfSpeech="a"/>
+      <Form writtenForm="bigger"/>
+      <Form writtenForm="biggest"/>
+      <Sense id="oewn-big__3.00.01.." synset="oewn-01385012-a">
+        </Sense>
+      <Sense id="oewn-big__5.00.00.important.00" synset="oewn-01279982-s"/>
+      <Sense id="oewn-big__5.00.00.intense.00" synset="oewn-01514159-s"/>
+      <Sense id="oewn-big__5.00.00.loud.00" synset="oewn-01455863-s"/>
+      <Sense id="oewn-big__5.00.00.conspicuous.00" synset="oewn-00581973-s"/>
+      <Sense id="oewn-big__5.00.00.intemperate.00" adjposition="a" synset="oewn-02411163-s"/>
+      <Sense id="oewn-big__5.00.02.proud.00" synset="oewn-01896819-s"/>
+      <Sense id="oewn-big__5.00.00.proud.00" synset="oewn-01896254-s"/>
+      <Sense id="oewn-big__5.00.00.mature.01" synset="oewn-01491979-s"/>
+      <Sense id="oewn-big__5.00.00.heavy.08" synset="oewn-01195323-s"/>
+      <Sense id="oewn-big__5.00.00.generous.02" synset="oewn-01118400-s"/>
+      <Sense id="oewn-big__5.00.00.generous.01" synset="oewn-01115129-s"/>
+      <Sense id="oewn-big__5.00.00.pregnant.00" adjposition="p" synset="oewn-00174652-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-big-r">
+      <Lemma writtenForm="big" partOfSpeech="r"/>
+      <Sense id="oewn-big__4.02.03.." synset="oewn-00227671-r"/>
+      <Sense id="oewn-big__4.02.00.." synset="oewn-00227289-r"/>
+      <Sense id="oewn-big__4.02.02.." synset="oewn-00227509-r">
+        </Sense>
+      <Sense id="oewn-big__4.02.01.." synset="oewn-00227422-r"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-box-n">
+      <Lemma writtenForm="box" partOfSpeech="n"/>
+      <Sense id="oewn-box__1.06.00.." synset="oewn-02886585-n">
+        </Sense>
+      <Sense id="oewn-box__1.06.02.." synset="oewn-02887466-n"/>
+      <Sense id="oewn-box__1.23.00.." synset="oewn-13787764-n"/>
+      <Sense id="oewn-box__1.26.00.." synset="oewn-14432355-n"/>
+      <Sense id="oewn-box__1.25.00.." synset="oewn-13906151-n"/>
+      <Sense id="oewn-box__1.20.00.." synset="oewn-12766866-n"/>
+      <Sense id="oewn-box__1.06.04.." synset="oewn-02887848-n"/>
+      <Sense id="oewn-box__1.06.03.." synset="oewn-02887691-n"/>
+      <Sense id="oewn-box__1.06.01.." synset="oewn-02887252-n"/>
+      <Sense id="oewn-box__1.04.00.." synset="oewn-00135968-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-box-v">
+      <Lemma writtenForm="box" partOfSpeech="v"/>
+      <Sense id="oewn-box__2.35.02.." subcat="vtai" synset="oewn-01487784-v">
+        </Sense>
+      <Sense id="oewn-box__2.35.00.." subcat="vtaa vtai" synset="oewn-01423419-v">
+        </Sense>
+      <Sense id="oewn-box__2.35.01.." subcat="via" synset="oewn-01422636-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cat-n">
+      <Lemma writtenForm="cat" partOfSpeech="n"/>
+      <Sense id="oewn-cat__1.05.00.." synset="oewn-02124272-n"/>
+      <Sense id="oewn-cat__1.18.01.." synset="oewn-10172934-n"/>
+      <Sense id="oewn-cat__1.18.00.." synset="oewn-09919605-n">
+        </Sense>
+      <Sense id="oewn-cat__1.06.02.." synset="oewn-03614083-n"/>
+      <Sense id="oewn-cat__1.06.00.." synset="oewn-02989061-n">
+        </Sense>
+      <Sense id="oewn-cat__1.06.01.." synset="oewn-02986962-n">
+        </Sense>
+      <Sense id="oewn-cat__1.05.02.." synset="oewn-02130460-n"/>
+      <Sense id="oewn-cat__1.05.03.." synset="oewn-02123649-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cat-v">
+      <Lemma writtenForm="cat" partOfSpeech="v"/>
+      <Form writtenForm="catted"/>
+      <Form writtenForm="catting"/>
+      <Sense id="oewn-cat__2.35.00.." subcat="vtaa" synset="oewn-01414524-v">
+        </Sense>
+      <Sense id="oewn-cat__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-child-n">
+      <Lemma writtenForm="child" partOfSpeech="n"/>
+      <Form writtenForm="children"/>
+      <Sense id="oewn-child__1.18.00.." synset="oewn-09937051-n">
+        </Sense>
+      <Sense id="oewn-child__1.18.01.." synset="oewn-09937706-n">
+        </Sense>
+      <Sense id="oewn-child__1.18.06.." synset="oewn-09938012-n">
+        </Sense>
+      <Sense id="oewn-child__1.18.07.." synset="oewn-09938220-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fast-a">
+      <Lemma writtenForm="fast" partOfSpeech="a"/>
+      <Sense id="oewn-fast__3.00.01.." synset="oewn-00979699-a">
+        </Sense>
+      <Sense id="oewn-fast__3.00.03.." synset="oewn-00986764-a">
+        </Sense>
+      <Sense id="oewn-fast__3.00.02.." synset="oewn-00985009-a">
+        </Sense>
+      <Sense id="oewn-fast__5.00.00.smooth.00" synset="oewn-02245246-s"/>
+      <Sense id="oewn-fast__5.00.00.impervious.00" synset="oewn-01778636-s"/>
+      <Sense id="oewn-fast__5.00.00.immoral.00" synset="oewn-01553629-s"/>
+      <Sense id="oewn-fast__5.00.00.hurried.00" synset="oewn-01273596-s">
+        </Sense>
+      <Sense id="oewn-fast__5.00.00.fixed.00" synset="oewn-01063410-s">
+        </Sense>
+      <Sense id="oewn-fast__5.00.00.faithful.00" adjposition="a" synset="oewn-00962433-s"/>
+      <Sense id="oewn-fast__5.00.00.causative.00" synset="oewn-00324771-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fast-n">
+      <Lemma writtenForm="fast" partOfSpeech="n"/>
+      <Sense id="oewn-fast__1.04.00.." synset="oewn-01071904-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fast-r">
+      <Lemma writtenForm="fast" partOfSpeech="r"/>
+      <Sense id="oewn-fast__4.02.01.." synset="oewn-00086488-r"/>
+      <Sense id="oewn-fast__4.02.02.." synset="oewn-00086892-r"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fast-v">
+      <Lemma writtenForm="fast" partOfSpeech="v"/>
+      <Sense id="oewn-fast__2.34.01.." subcat="via" synset="oewn-01192137-v">
+        </Sense>
+      <Sense id="oewn-fast__2.34.00.." subcat="via" synset="oewn-01191960-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-give_up-v">
+      <Lemma writtenForm="give up" partOfSpeech="v"/>
+      <Sense id="oewn-give_up__2.40.02.." subcat="vtai" synset="oewn-02308311-v"/>
+      <Sense id="oewn-give_up__2.40.00.." subcat="vtaa vtai" synset="oewn-02232523-v"/>
+      <Sense id="oewn-give_up__2.33.00.." subcat="via via-pp vtai" synset="oewn-01085437-v"/>
+      <Sense id="oewn-give_up__2.42.00.." subcat="via-ger vtai vtii" synset="oewn-02686624-v"/>
+      <Sense id="oewn-give_up__2.40.05.." subcat="vtai" synset="oewn-02350643-v"/>
+      <Sense id="oewn-give_up__2.40.03.." subcat="vtai vtai-to" synset="oewn-02321284-v"/>
+      <Sense id="oewn-give_up__2.41.05.." subcat="vtai" synset="oewn-02372031-v"/>
+      <Sense id="oewn-give_up__2.40.01.." subcat="vtai vtai-to" synset="oewn-02240011-v"/>
+      <Sense id="oewn-give_up__2.33.01.." subcat="via vtai vtai-to" synset="oewn-01118003-v"/>
+      <Sense id="oewn-give_up__2.31.00.." subcat="vtai" synset="oewn-00614907-v"/>
+      <Sense id="oewn-give_up__2.41.00.." subcat="vtai" synset="oewn-02428446-v"/>
+      <Sense id="oewn-give_up__2.34.00.." subcat="via-ger vtai" synset="oewn-01199057-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-goose-n">
+      <Lemma writtenForm="goose" partOfSpeech="n">
+        <Pronunciation>ˈɡuːs</Pronunciation>
+      </Lemma>
+      <Form writtenForm="geese"/>
+      <Sense id="oewn-goose__1.05.00.." synset="oewn-01858313-n">
+        </Sense>
+      <Sense id="oewn-goose__1.18.00.." synset="oewn-10177319-n">
+        </Sense>
+      <Sense id="oewn-goose__1.13.00.." synset="oewn-07662430-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-goose-v">
+      <Lemma writtenForm="goose" partOfSpeech="v">
+        <Pronunciation>ˈɡuːs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-goose__2.35.00.." subcat="vtaa vtai" synset="oewn-01459708-v"/>
+      <Sense id="oewn-goose__2.35.02.." subcat="vtaa" synset="oewn-01233625-v"/>
+      <Sense id="oewn-goose__2.35.01.." subcat="vtai" synset="oewn-01228431-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-grow-v">
+      <Lemma writtenForm="grow" partOfSpeech="v">
+        <Pronunciation variety="GB">ɡɹəʊ</Pronunciation>
+        <Pronunciation variety="US">ɡɹoʊ</Pronunciation>
+      </Lemma>
+      <Form writtenForm="grew"/>
+      <Form writtenForm="grown"/>
+      <Sense id="oewn-grow__2.30.03.." subcat="vii-adj vii-pp vtii-adj" synset="oewn-00125649-v">
+        </Sense>
+      <Sense id="oewn-grow__2.30.00.." subcat="via vii" synset="oewn-00231172-v">
+        </Sense>
+      <Sense id="oewn-grow__2.30.02.." subcat="vii vii-pp" synset="oewn-00231983-v">
+        </Sense>
+      <Sense id="oewn-grow__2.30.01.." subcat="vtai" synset="oewn-00246343-v">
+        </Sense>
+      <Sense id="oewn-grow__2.30.04.." subcat="via vii" synset="oewn-00251067-v">
+        </Sense>
+      <Sense id="oewn-grow__2.42.00.." subcat="vii" synset="oewn-02630344-v">
+        </Sense>
+      <Sense id="oewn-grow__2.36.00.." subcat="vtai vtii" synset="oewn-01743695-v">
+        </Sense>
+      <Sense id="oewn-grow__2.29.00.." subcat="vtai vtii" synset="oewn-00094214-v"/>
+      <Sense id="oewn-grow__2.30.10.." subcat="via vii" synset="oewn-00544490-v"/>
+      <Sense id="oewn-grow__2.30.14.." subcat="via" synset="oewn-00251425-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-happy-a">
+      <Lemma writtenForm="happy" partOfSpeech="a">
+        <Pronunciation variety="GB">ˈhæpiː</Pronunciation>
+        <Pronunciation variety="US">ˈhæpi</Pronunciation>
+      </Lemma>
+      <Form writtenForm="happier"/>
+      <Form writtenForm="happiest"/>
+      <Sense id="oewn-happy__3.00.00.." synset="oewn-01151786-a">
+        </Sense>
+      <Sense id="oewn-happy__5.00.00.fortunate.00" synset="oewn-01052105-s">
+        </Sense>
+      <Sense id="oewn-happy__5.00.00.willing.00" synset="oewn-02576313-s"/>
+      <Sense id="oewn-happy__5.00.00.felicitous.00" synset="oewn-01003861-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hope-n">
+      <Lemma writtenForm="hope" partOfSpeech="n"/>
+      <Sense id="oewn-hope__1.12.01.." synset="oewn-07526972-n">
+        </Sense>
+      <Sense id="oewn-hope__1.12.00.." synset="oewn-07556441-n">
+        </Sense>
+      <Sense id="oewn-hope__1.09.00.." synset="oewn-05959600-n">
+        </Sense>
+      <Sense id="oewn-hope__1.18.00.." synset="oewn-10204565-n">
+        </Sense>
+      <Sense id="oewn-hope__1.07.00.." synset="oewn-04855493-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hope-v">
+      <Lemma writtenForm="hope" partOfSpeech="v"/>
+      <Sense id="oewn-hope__2.37.01.." subcat="via-that" synset="oewn-01830665-v">
+        </Sense>
+      <Sense id="oewn-hope__2.37.00.." subcat="via via-pp via-that" synset="oewn-01815408-v">
+        </Sense>
+      <Sense id="oewn-hope__2.31.00.." subcat="via-ger vtai" synset="oewn-00707813-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-mature-a">
+      <Lemma writtenForm="mature" partOfSpeech="a"/>
+      <Sense id="oewn-mature__3.00.02.." synset="oewn-01495137-a">
+        </Sense>
+      <Sense id="oewn-mature__5.00.00.developed.00" synset="oewn-00745899-s"/>
+      <Sense id="oewn-mature__3.00.01.." synset="oewn-01491608-a">
+        </Sense>
+      <Sense id="oewn-mature__3.00.06.." synset="oewn-01496321-a">
+        </Sense>
+      <Sense id="oewn-mature__3.00.04.." synset="oewn-01099607-a">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-mature-v">
+      <Lemma writtenForm="mature" partOfSpeech="v"/>
+      <Sense id="oewn-mature__2.30.00.." subcat="via vii" synset="oewn-00251067-v">
+        </Sense>
+      <Sense id="oewn-mature__2.32.00.." subcat="vtai" synset="oewn-00928127-v">
+        </Sense>
+      <Sense id="oewn-mature__2.30.03.." subcat="vii" synset="oewn-00579075-v"/>
+      <Sense id="oewn-mature__2.30.04.." subcat="vtii" synset="oewn-00250855-v">
+        </Sense>
+      <Sense id="oewn-mature__2.30.01.." subcat="via vii" synset="oewn-00248912-v">
+        </Sense>
+      <Sense id="oewn-mature__2.29.04.." subcat="vtai" synset="oewn-00096933-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-run-n">
+      <Lemma writtenForm="run" partOfSpeech="n">
+        <Pronunciation>ɹʌn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-run__1.04.01.." synset="oewn-00190414-n">
+        </Sense>
+      <Sense id="oewn-run__1.04.06.." synset="oewn-00792739-n">
+        </Sense>
+      <Sense id="oewn-run__1.11.02.." synset="oewn-07475061-n">
+        </Sense>
+      <Sense id="oewn-run__1.14.00.." synset="oewn-08477596-n"/>
+      <Sense id="oewn-run__1.04.02.." synset="oewn-00559920-n">
+        </Sense>
+      <Sense id="oewn-run__1.04.04.." synset="oewn-00309697-n">
+        </Sense>
+      <Sense id="oewn-run__1.04.00.." synset="oewn-00294760-n">
+        </Sense>
+      <Sense id="oewn-run__1.28.00.." synset="oewn-15286931-n"/>
+      <Sense id="oewn-run__1.26.00.." synset="oewn-14019420-n">
+        </Sense>
+      <Sense id="oewn-run__1.23.00.." synset="oewn-13782269-n"/>
+      <Sense id="oewn-run__1.17.00.." synset="oewn-09438816-n">
+        </Sense>
+      <Sense id="oewn-run__1.11.03.." synset="oewn-07488069-n">
+        </Sense>
+      <Sense id="oewn-run__1.11.01.." synset="oewn-07457610-n">
+        </Sense>
+      <Sense id="oewn-run__1.11.00.." synset="oewn-07422377-n">
+        </Sense>
+      <Sense id="oewn-run__1.07.00.." synset="oewn-05052992-n"/>
+      <Sense id="oewn-run__1.04.05.." synset="oewn-00309837-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-run-v">
+      <Lemma writtenForm="run" partOfSpeech="v">
+        <Pronunciation>ɹʌn</Pronunciation>
+      </Lemma>
+      <Form writtenForm="ran"/>
+      <Form writtenForm="running"/>
+      <Sense id="oewn-run__2.38.00.." subcat="via via-pp vii" synset="oewn-01930264-v">
+        </Sense>
+      <Sense id="oewn-run__2.38.04.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+      <Sense id="oewn-run__2.42.00.." subcat="vii-pp" synset="oewn-02691775-v">
+        </Sense>
+      <Sense id="oewn-run__2.41.02.." subcat="vtai" synset="oewn-02448714-v">
+        </Sense>
+      <Sense id="oewn-run__2.42.04.." subcat="vii" synset="oewn-02727159-v"/>
+      <Sense id="oewn-run__2.38.01.." subcat="vii vii-pp" synset="oewn-02070867-v">
+        </Sense>
+      <Sense id="oewn-run__2.35.00.." subcat="vii" synset="oewn-01528454-v"/>
+      <Sense id="oewn-run__2.42.07.." subcat="vtii" synset="oewn-02732914-v"/>
+      <Sense id="oewn-run__2.33.06.." subcat="via via-pp" synset="oewn-01096497-v">
+        </Sense>
+      <Sense id="oewn-run__2.36.01.." subcat="vtai vtii" synset="oewn-01721028-v"/>
+      <Sense id="oewn-run__2.38.11.." subcat="via-pp vii-pp" synset="oewn-02104107-v">
+        </Sense>
+      <Sense id="oewn-run__2.42.01.." subcat="via-to-inf" synset="oewn-02725274-v"/>
+      <Sense id="oewn-run__2.35.04.." subcat="vii" synset="oewn-01529078-v">
+        </Sense>
+      <Sense id="oewn-run__2.30.03.." subcat="via-adj vii-adj vtai vtii" synset="oewn-00550143-v"/>
+      <Sense id="oewn-run__2.30.07.." subcat="vtaa vtai" synset="oewn-00518609-v"/>
+      <Sense id="oewn-run__2.42.02.." subcat="vtai" synset="oewn-02726779-v"/>
+      <Sense id="oewn-run__2.42.03.." subcat="vii" synset="oewn-02653599-v"/>
+      <Sense id="oewn-run__2.42.06.." subcat="vii-pp" synset="oewn-02618269-v"/>
+      <Sense id="oewn-run__2.41.00.." subcat="vtai vtii" synset="oewn-02569242-v"/>
+      <Sense id="oewn-run__2.36.02.." subcat="vtai vtii" synset="oewn-01750167-v"/>
+      <Sense id="oewn-run__2.36.00.." subcat="vtai" synset="oewn-01645087-v"/>
+      <Sense id="oewn-run__2.35.01.." subcat="vtai-pp" synset="oewn-01214794-v"/>
+      <Sense id="oewn-run__2.42.08.." subcat="vtai-pp" synset="oewn-02692467-v"/>
+      <Sense id="oewn-run__2.41.01.." subcat="vtai" synset="oewn-02530978-v">
+        </Sense>
+      <Sense id="oewn-run__2.40.06.." subcat="vtai" synset="oewn-02247038-v">
+        </Sense>
+      <Sense id="oewn-run__2.38.10.." subcat="vtai vtii" synset="oewn-02096576-v">
+        </Sense>
+      <Sense id="oewn-run__2.38.08.." subcat="vii" synset="oewn-02064720-v"/>
+      <Sense id="oewn-run__2.38.03.." subcat="via vii" synset="oewn-01931856-v"/>
+      <Sense id="oewn-run__2.38.05.." subcat="vtai" synset="oewn-01918940-v">
+        </Sense>
+      <Sense id="oewn-run__2.42.05.." subcat="vtii" synset="oewn-02654212-v"/>
+      <Sense id="oewn-run__2.41.04.." subcat="vtai" synset="oewn-02427021-v"/>
+      <Sense id="oewn-run__2.38.02.." subcat="vii-pp" synset="oewn-01931700-v"/>
+      <Sense id="oewn-run__2.38.06.." subcat="via" synset="oewn-01931400-v">
+        </Sense>
+      <Sense id="oewn-run__2.38.13.." subcat="via via-pp" synset="oewn-01930937-v">
+        </Sense>
+      <Sense id="oewn-run__2.38.09.." subcat="via-pp vii-pp" synset="oewn-01868024-v">
+        </Sense>
+      <Sense id="oewn-run__2.33.02.." subcat="via vtaa vtai" synset="oewn-01146304-v"/>
+      <Sense id="oewn-run__2.33.01.." subcat="via via-pp" synset="oewn-01088514-v">
+        </Sense>
+      <Sense id="oewn-run__2.30.02.." subcat="via-pp vii-pp" synset="oewn-00540190-v">
+        </Sense>
+      <Sense id="oewn-run__2.30.00.." subcat="vii vtai vtii" synset="oewn-00445584-v"/>
+      <Sense id="oewn-run__2.30.01.." subcat="vii" synset="oewn-00335613-v">
+        </Sense>
+      <Sense id="oewn-run__2.30.04.." subcat="vii" synset="oewn-00333482-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-satyr-n">
+      <Lemma writtenForm="satyr" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈsætə</Pronunciation>
+        <Pronunciation variety="US">ˈseɪtɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-satyr__1.18.01.." synset="oewn-10572408-n">
+        </Sense>
+      <Sense id="oewn-satyr__1.18.00.." synset="oewn-09571240-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-study-n">
+      <Lemma writtenForm="study" partOfSpeech="n"/>
+      <Sense id="oewn-study__1.04.00.." synset="oewn-00645746-n">
+        </Sense>
+      <Sense id="oewn-study__1.09.03.." synset="oewn-05763880-n">
+        </Sense>
+      <Sense id="oewn-study__1.10.00.." synset="oewn-07233130-n"/>
+      <Sense id="oewn-study__1.09.04.." synset="oewn-05713302-n">
+        </Sense>
+      <Sense id="oewn-study__1.06.00.." synset="oewn-04352106-n"/>
+      <Sense id="oewn-study__1.09.02.." synset="oewn-06005806-n">
+        </Sense>
+      <Sense id="oewn-study__1.06.01.." synset="oewn-04234206-n"/>
+      <Sense id="oewn-study__1.09.01.." synset="oewn-05792247-n">
+        </Sense>
+      <Sense id="oewn-study__1.18.00.." synset="oewn-10685903-n"/>
+      <Sense id="oewn-study__1.10.01.." synset="oewn-07062685-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-study-v">
+      <Lemma writtenForm="study" partOfSpeech="v"/>
+      <Form writtenForm="studied"/>
+      <Sense id="oewn-study__2.31.02.." subcat="vtai" synset="oewn-00646245-v">
+        </Sense>
+      <Sense id="oewn-study__2.31.03.." subcat="via vtai" synset="oewn-00608800-v">
+        </Sense>
+      <Sense id="oewn-study__2.39.00.." subcat="via-whether-inf vtaa vtai" synset="oewn-02170904-v">
+        </Sense>
+      <Sense id="oewn-study__2.31.00.." subcat="vtai" synset="oewn-00601387-v">
+        </Sense>
+      <Sense id="oewn-study__2.31.01.." subcat="via vtai" synset="oewn-00608509-v">
+        </Sense>
+      <Sense id="oewn-study__2.31.04.." subcat="via" synset="oewn-00706154-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-turn-n">
+      <Lemma writtenForm="turn" partOfSpeech="n"/>
+      <Sense id="oewn-turn__1.25.00.." synset="oewn-13891966-n"/>
+      <Sense id="oewn-turn__1.04.01.." synset="oewn-00350856-n">
+        </Sense>
+      <Sense id="oewn-turn__1.04.06.." synset="oewn-00458406-n"/>
+      <Sense id="oewn-turn__1.11.01.." synset="oewn-07437965-n">
+        </Sense>
+      <Sense id="oewn-turn__1.11.00.." synset="oewn-07366212-n">
+        </Sense>
+      <Sense id="oewn-turn__1.04.02.." synset="oewn-00347358-n">
+        </Sense>
+      <Sense id="oewn-turn__1.04.07.." synset="oewn-00346280-n">
+        </Sense>
+      <Sense id="oewn-turn__1.28.01.." synset="oewn-15317305-n"/>
+      <Sense id="oewn-turn__1.28.00.." synset="oewn-15281525-n"/>
+      <Sense id="oewn-turn__1.10.00.." synset="oewn-06905066-n"/>
+      <Sense id="oewn-turn__1.04.04.." synset="oewn-01229572-n"/>
+      <Sense id="oewn-turn__1.04.03.." synset="oewn-00293443-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-turn-v">
+      <Lemma writtenForm="turn" partOfSpeech="v"/>
+      <Sense id="oewn-turn__2.38.00.." subcat="via vii vii-pp" synset="oewn-01911251-v">
+        </Sense>
+      <Sense id="oewn-turn__2.30.04.." subcat="via vii" synset="oewn-00145958-v">
+        </Sense>
+      <Sense id="oewn-turn__2.42.00.." subcat="vtaa vtii" synset="oewn-02632685-v">
+        </Sense>
+      <Sense id="oewn-turn__2.38.02.." subcat="vtai" synset="oewn-02094251-v">
+        </Sense>
+      <Sense id="oewn-turn__2.30.00.." subcat="via vii vtai vtia vtii" synset="oewn-00138328-v">
+        </Sense>
+      <Sense id="oewn-turn__2.38.03.." subcat="vtai" synset="oewn-01913805-v">
+        </Sense>
+      <Sense id="oewn-turn__2.30.03.." subcat="vii-adj vii-pp vtii-adj" synset="oewn-00125649-v">
+        </Sense>
+      <Sense id="oewn-turn__2.35.08.." subcat="vtai-pp" synset="oewn-01439155-v"/>
+      <Sense id="oewn-turn__2.38.04.." subcat="vii vii-pp" synset="oewn-02100445-v"/>
+      <Sense id="oewn-turn__2.38.01.." subcat="vtai" synset="oewn-02093687-v">
+        </Sense>
+      <Sense id="oewn-turn__2.38.06.." subcat="vtaa vtai" synset="oewn-01956067-v"/>
+      <Sense id="oewn-turn__2.36.00.." subcat="via vtai" synset="oewn-01745745-v"/>
+      <Sense id="oewn-turn__2.35.06.." subcat="vtai" synset="oewn-01587371-v">
+        </Sense>
+      <Sense id="oewn-turn__2.30.09.." subcat="vii" synset="oewn-00283283-v"/>
+      <Sense id="oewn-turn__2.29.00.." subcat="vtai" synset="oewn-00090876-v"/>
+      <Sense id="oewn-turn__2.42.13.." subcat="vtaa vtai vtia vtii" synset="oewn-02633015-v"/>
+      <Sense id="oewn-turn__2.41.10.." subcat="vtai" synset="oewn-02568340-v">
+        </Sense>
+      <Sense id="oewn-turn__2.40.13.." subcat="vtai" synset="oewn-02216730-v"/>
+      <Sense id="oewn-turn__2.38.13.." subcat="vtaa vtai" synset="oewn-02094702-v"/>
+      <Sense id="oewn-turn__2.38.14.." subcat="via-pp" synset="oewn-01955796-v"/>
+      <Sense id="oewn-turn__2.35.11.." subcat="vii vtai vtii" synset="oewn-01282617-v"/>
+      <Sense id="oewn-turn__2.35.10.." subcat="vtai" synset="oewn-01227779-v"/>
+      <Sense id="oewn-turn__2.33.13.." subcat="vtai" synset="oewn-01154355-v"/>
+      <Sense id="oewn-turn__2.32.14.." subcat="vtaa vtaa-to-inf" synset="oewn-00796302-v"/>
+      <Sense id="oewn-turn__2.30.01.." subcat="vii" synset="oewn-00459426-v"/>
+      <Sense id="oewn-turn__2.30.14.." subcat="via" synset="oewn-00249273-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-well-known-a">
+      <Lemma writtenForm="well-known" partOfSpeech="a">
+        <Pronunciation variety="US">ˌwɛlˈnoʊn</Pronunciation>
+        <Pronunciation variety="GB">ˌwɛlˈnəʊn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-well--known__5.00.00.known.00" synset="oewn-01379631-s"/>
+      <Sense id="oewn-well--known__5.00.00.familiar.00" adjposition="a" synset="oewn-00969356-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-African_tea-n">
+      <Lemma writtenForm="African tea" partOfSpeech="n"/>
+      <Sense id="oewn-african_tea__1.06.00.." synset="oewn-03614083-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-Arabian_tea-n">
+      <Lemma writtenForm="Arabian tea" partOfSpeech="n"/>
+      <Sense id="oewn-arabian_tea__1.06.00.." synset="oewn-03614083-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-Caterpillar-n">
+      <Lemma writtenForm="Caterpillar" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈkætəˌpɪlə</Pronunciation>
+        <Pronunciation variety="US">ˈkætɚˌpɪlɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-caterpillar__1.06.00.." synset="oewn-02986962-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-abandon-v">
+      <Lemma writtenForm="abandon" partOfSpeech="v"/>
+      <Sense id="oewn-abandon__2.40.01.." subcat="vtaa vtai" synset="oewn-02232523-v">
+        </Sense>
+      <Sense id="oewn-abandon__2.31.01.." subcat="vtai" synset="oewn-00614907-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-acquire-v">
+      <Lemma writtenForm="acquire" partOfSpeech="v">
+        <Pronunciation variety="US">əˈkwaɪəɹ</Pronunciation>
+        <Pronunciation variety="GB">əˈkwaɪə</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-acquire__2.29.00.." subcat="vtai vtii" synset="oewn-00094214-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-act-n">
+      <Lemma writtenForm="act" partOfSpeech="n">
+        <Pronunciation>ækt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-act__1.10.02.." synset="oewn-06905066-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-adult-a">
+      <Lemma writtenForm="adult" partOfSpeech="a">
+        <Pronunciation variety="US">əˈdʌlt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-adult__5.00.00.mature.01" synset="oewn-01491979-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-age-v">
+      <Lemma writtenForm="age" partOfSpeech="v">
+        <Pronunciation>eɪd͡ʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-age__2.30.00.." subcat="via vii" synset="oewn-00248912-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-allow-v">
+      <Lemma writtenForm="allow" partOfSpeech="v">
+        <Pronunciation>əˈlaʊ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-allow__2.41.01.." subcat="vtai" synset="oewn-02428446-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-analyse-v">
+      <Lemma writtenForm="analyse" partOfSpeech="v"/>
+      <Sense id="oewn-analyse__2.31.00.." subcat="vtai" synset="oewn-00646245-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-analyze-v">
+      <Lemma writtenForm="analyze" partOfSpeech="v">
+        <Pronunciation>ˈæn.ə.laɪz</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-analyze__2.31.00.." subcat="vtai" synset="oewn-00646245-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-arise-v">
+      <Lemma writtenForm="arise" partOfSpeech="v">
+        <Pronunciation>əˈɹaɪz</Pronunciation>
+      </Lemma>
+      <Form writtenForm="arisen"/>
+      <Form writtenForm="arose"/>
+      <Sense id="oewn-arise__2.42.00.." subcat="vii" synset="oewn-02630344-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-baby-n">
+      <Lemma writtenForm="baby" partOfSpeech="n">
+        <Pronunciation>ˈbeɪbi</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-baby__1.18.03.." synset="oewn-09938012-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bad-a">
+      <Lemma writtenForm="bad" partOfSpeech="a"/>
+      <Form writtenForm="worse"/>
+      <Form writtenForm="worst"/>
+      <Sense id="oewn-bad__5.00.00.intense.00" synset="oewn-01514159-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bailiwick-n">
+      <Lemma writtenForm="bailiwick" partOfSpeech="n">
+        <Pronunciation>ˈbeɪ.lɪ.wɪk</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-bailiwick__1.09.00.." synset="oewn-06005806-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-barf-v">
+      <Lemma writtenForm="barf" partOfSpeech="v">
+        <Pronunciation variety="GB">bɑːf</Pronunciation>
+        <Pronunciation variety="US">bɑɹf</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-barf__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-be_given-v">
+      <Lemma writtenForm="be given" partOfSpeech="v"/>
+      <Sense id="oewn-be_given__2.42.00.." subcat="via-to-inf" synset="oewn-02725274-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-be_sick-v">
+      <Lemma writtenForm="be sick" partOfSpeech="v"/>
+      <Sense id="oewn-be_sick__2.29.01.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-become-v">
+      <Lemma writtenForm="become" partOfSpeech="v">
+        <Pronunciation variety="GB">bɪˈkʌm</Pronunciation>
+        <Pronunciation variety="US">bəˈkʌm</Pronunciation>
+      </Lemma>
+      <Form writtenForm="became"/>
+      <Sense id="oewn-become__2.42.01.." subcat="vtaa vtii" synset="oewn-02632685-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bend-n">
+      <Lemma writtenForm="bend" partOfSpeech="n">
+        <Pronunciation>bɛnd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-bend__1.25.02.." synset="oewn-13891966-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bend-v">
+      <Lemma writtenForm="bend" partOfSpeech="v">
+        <Pronunciation>bɛnd</Pronunciation>
+      </Lemma>
+      <Form writtenForm="bent"/>
+      <Sense id="oewn-bend__2.35.00.." subcat="vii vtai vtii" synset="oewn-01282617-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-big_cat-n">
+      <Lemma writtenForm="big cat" partOfSpeech="n"/>
+      <Sense id="oewn-big_cat__1.05.00.." synset="oewn-02130460-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bighearted-a">
+      <Lemma writtenForm="bighearted" partOfSpeech="a"/>
+      <Sense id="oewn-bighearted__5.00.00.generous.01" synset="oewn-01115129-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bit-n">
+      <Lemma writtenForm="bit" partOfSpeech="n"/>
+      <Sense id="oewn-bit__1.10.00.." synset="oewn-06905066-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-black_market-v">
+      <Lemma writtenForm="black market" partOfSpeech="v"/>
+      <Sense id="oewn-black_market__2.40.00.." subcat="vtai" synset="oewn-02247038-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bleed-v">
+      <Lemma writtenForm="bleed" partOfSpeech="v">
+        <Pronunciation>ˈbliːd</Pronunciation>
+      </Lemma>
+      <Form writtenForm="bled"/>
+      <Sense id="oewn-bleed__2.38.00.." subcat="vii" synset="oewn-02064720-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-boastful-a">
+      <Lemma writtenForm="boastful" partOfSpeech="a"/>
+      <Sense id="oewn-boastful__5.00.00.proud.00" synset="oewn-01896819-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-boastfully-r">
+      <Lemma writtenForm="boastfully" partOfSpeech="r"/>
+      <Sense id="oewn-boastfully__4.02.00.." synset="oewn-00227289-r">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bounteous-a">
+      <Lemma writtenForm="bounteous" partOfSpeech="a">
+        <Pronunciation>ˈbaʊntiəs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-bounteous__5.00.00.generous.01" synset="oewn-01115129-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bountiful-a">
+      <Lemma writtenForm="bountiful" partOfSpeech="a">
+        <Pronunciation>ˈbaʊntɪfəl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-bountiful__5.00.00.generous.01" synset="oewn-01115129-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bout-n">
+      <Lemma writtenForm="bout" partOfSpeech="n"/>
+      <Sense id="oewn-bout__1.28.00.." synset="oewn-15281525-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-box_seat-n">
+      <Lemma writtenForm="box seat" partOfSpeech="n"/>
+      <Sense id="oewn-box_seat__1.06.01.." synset="oewn-02887691-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-boxful-n">
+      <Lemma writtenForm="boxful" partOfSpeech="n"/>
+      <Sense id="oewn-boxful__1.23.00.." synset="oewn-13787764-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-boxwood-n">
+      <Lemma writtenForm="boxwood" partOfSpeech="n"/>
+      <Sense id="oewn-boxwood__1.20.00.." synset="oewn-12766866-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bozo-n">
+      <Lemma writtenForm="bozo" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈbəʊzəʊ</Pronunciation>
+        <Pronunciation variety="US">ˈboʊzoʊ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-bozo__1.18.01.." synset="oewn-10177319-n"/>
+      <Sense id="oewn-bozo__1.18.00.." synset="oewn-10172934-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-braggart-a">
+      <Lemma writtenForm="braggart" partOfSpeech="a">
+        <Pronunciation variety="GB">ˈbɹæɡɑːt</Pronunciation>
+        <Pronunciation variety="US">ˈbɹæɡɚt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-braggart__5.00.00.proud.00" adjposition="a" synset="oewn-01896819-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bragging-a">
+      <Lemma writtenForm="bragging" partOfSpeech="a"/>
+      <Sense id="oewn-bragging__5.00.00.proud.00" adjposition="a" synset="oewn-01896819-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-braggy-a">
+      <Lemma writtenForm="braggy" partOfSpeech="a"/>
+      <Sense id="oewn-braggy__5.00.00.proud.00" synset="oewn-01896819-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-break-v">
+      <Lemma writtenForm="break" partOfSpeech="v"/>
+      <Form writtenForm="broke"/>
+      <Form writtenForm="broken"/>
+      <Sense id="oewn-break__2.42.16.." subcat="vtai vtii" synset="oewn-02686624-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-break_away-v">
+      <Lemma writtenForm="break away" partOfSpeech="v"/>
+      <Sense id="oewn-break_away__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-break_off-v">
+      <Lemma writtenForm="break off" partOfSpeech="v"/>
+      <Sense id="oewn-break_off__2.42.01.." subcat="vtai vtii" synset="oewn-02686624-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-bunk-v">
+      <Lemma writtenForm="bunk" partOfSpeech="v"/>
+      <Sense id="oewn-bunk__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-call_on-v">
+      <Lemma writtenForm="call on" partOfSpeech="v"/>
+      <Sense id="oewn-call_on__2.32.00.." subcat="vtaa vtaa-to-inf" synset="oewn-00796302-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-campaign-n">
+      <Lemma writtenForm="campaign" partOfSpeech="n">
+        <Pronunciation>kæmˈpeɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-campaign__1.11.00.." synset="oewn-07488069-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-campaign-v">
+      <Lemma writtenForm="campaign" partOfSpeech="v">
+        <Pronunciation>kæmˈpeɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-campaign__2.33.01.." subcat="via via-pp" synset="oewn-01096497-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-canvass-v">
+      <Lemma writtenForm="canvass" partOfSpeech="v"/>
+      <Sense id="oewn-canvass__2.31.02.." subcat="vtai" synset="oewn-00646245-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-carry-v">
+      <Lemma writtenForm="carry" partOfSpeech="v">
+        <Pronunciation>ˈkɛ.ɹi</Pronunciation>
+      </Lemma>
+      <Form writtenForm="carried"/>
+      <Sense id="oewn-carry__2.36.00.." subcat="vtai vtii" synset="oewn-01750167-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cast-v">
+      <Lemma writtenForm="cast" partOfSpeech="v">
+        <Pronunciation variety="GB">kɑːst</Pronunciation>
+        <Pronunciation>kast</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-cast__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cat-o-ap--nine-tails-n">
+      <Lemma writtenForm="cat-o&apos;-nine-tails" partOfSpeech="n"/>
+      <Sense id="oewn-cat--o-apos---nine--tails__1.06.00.." synset="oewn-02989061-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cease-v">
+      <Lemma writtenForm="cease" partOfSpeech="v">
+        <Pronunciation>siːs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-cease__2.42.00.." subcat="via-ger via-to-inf vtai vtii" synset="oewn-02686624-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cede-v">
+      <Lemma writtenForm="cede" partOfSpeech="v">
+        <Pronunciation>siːd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-cede__2.40.00.." subcat="vtai vtai-to" synset="oewn-02240011-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-change_by_reversal-v">
+      <Lemma writtenForm="change by reversal" partOfSpeech="v"/>
+      <Sense id="oewn-change_by_reversal__2.30.00.." subcat="via vii vtai vtia vtii" synset="oewn-00138328-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-change_state-v">
+      <Lemma writtenForm="change state" partOfSpeech="v"/>
+      <Sense id="oewn-change_state__2.30.00.." subcat="via vii" synset="oewn-00145958-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-chuck-v">
+      <Lemma writtenForm="chuck" partOfSpeech="v"/>
+      <Sense id="oewn-chuck__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-chuck_up_the_sponge-v">
+      <Lemma writtenForm="chuck up the sponge" partOfSpeech="v"/>
+      <Sense id="oewn-chuck_up_the_sponge__2.33.00.." subcat="via via-pp" synset="oewn-01085437-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cock-a-hoop-a">
+      <Lemma writtenForm="cock-a-hoop" partOfSpeech="a"/>
+      <Sense id="oewn-cock--a--hoop__5.00.00.proud.00" synset="oewn-01896819-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cogitation-n">
+      <Lemma writtenForm="cogitation" partOfSpeech="n">
+        <Pronunciation variety="GB">ˌkɒd͡ʒ.ɪˈteɪ.ʃən</Pronunciation>
+        <Pronunciation variety="US">ˌkɑd͡ʒ.ɪˈteɪ.ʃᵊn̩</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-cogitation__1.09.00.." synset="oewn-05792247-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-consider-v">
+      <Lemma writtenForm="consider" partOfSpeech="v">
+        <Pronunciation variety="GB">kənˈsɪdə</Pronunciation>
+        <Pronunciation variety="US">kənˈsɪdɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-consider__2.39.00.." subcat="via-whether-inf vtaa vtai" synset="oewn-02170904-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-consort-v">
+      <Lemma writtenForm="consort" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈkɒnsɔːt</Pronunciation>
+        <Pronunciation variety="US">ˈkɑnsɔɹt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-consort__2.38.00.." subcat="vii-pp" synset="oewn-01931700-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-contemplate-v">
+      <Lemma writtenForm="contemplate" partOfSpeech="v">
+        <Pronunciation variety="US">ˈkɑn.təmˌpleɪt</Pronunciation>
+        <Pronunciation variety="GB">ˈkɒn.təmˌpleɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-contemplate__2.31.00.." subcat="via" synset="oewn-00706154-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-corner-n">
+      <Lemma writtenForm="corner" partOfSpeech="n">
+        <Pronunciation variety="US">ˈkɔɹnɚ</Pronunciation>
+        <Pronunciation variety="GB">ˈkɔːnə(ɹ)</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-corner__1.26.01.." synset="oewn-14432355-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-course-v">
+      <Lemma writtenForm="course" partOfSpeech="v"/>
+      <Sense id="oewn-course__2.38.00.." subcat="vii vii-pp" synset="oewn-02070867-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-crook-n">
+      <Lemma writtenForm="crook" partOfSpeech="n"/>
+      <Sense id="oewn-crook__1.25.00.." synset="oewn-13891966-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-crowing-a">
+      <Lemma writtenForm="crowing" partOfSpeech="a"/>
+      <Sense id="oewn-crowing__5.00.00.proud.00" synset="oewn-01896819-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-cuckoo-n">
+      <Lemma writtenForm="cuckoo" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈkʊk.uː</Pronunciation>
+        <Pronunciation variety="US">ˈkuː.kuː</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-cuckoo__1.18.00.." synset="oewn-10177319-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-debauched-a">
+      <Lemma writtenForm="debauched" partOfSpeech="a">
+        <Pronunciation variety="GB">dɪˈbɔːtʃt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-debauched__5.00.00.immoral.00" synset="oewn-01553629-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-deform-v">
+      <Lemma writtenForm="deform" partOfSpeech="v">
+        <Pronunciation variety="GB">dɪˈfɔːm</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-deform__2.35.01.." subcat="vii vtai vtii" synset="oewn-01282617-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-degenerate-a">
+      <Lemma writtenForm="degenerate" partOfSpeech="a"/>
+      <Sense id="oewn-degenerate__5.00.00.immoral.00" synset="oewn-01553629-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-degraded-a">
+      <Lemma writtenForm="degraded" partOfSpeech="a">
+        <Pronunciation variety="GB">dɪˈɡɹeɪdəd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-degraded__5.00.00.immoral.00" synset="oewn-01553629-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-deliver-v">
+      <Lemma writtenForm="deliver" partOfSpeech="v">
+        <Pronunciation variety="GB">dɪˈlɪvə(ɹ)</Pronunciation>
+        <Pronunciation variety="US">dɪˈlɪvɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-deliver__2.40.02.." subcat="vtai vtai-to" synset="oewn-02240011-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-desire-v">
+      <Lemma writtenForm="desire" partOfSpeech="v">
+        <Pronunciation variety="GB">dɪˈzaɪə</Pronunciation>
+        <Pronunciation variety="US">dɪˈzaɪɹ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-desire__2.37.02.." subcat="via-that" synset="oewn-01830665-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-develop-v">
+      <Lemma writtenForm="develop" partOfSpeech="v">
+        <Pronunciation>dɪˈvɛl.əp</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-develop__2.29.00.." subcat="vtai vtii" synset="oewn-00094214-v">
+        </Sense>
+      <Sense id="oewn-develop__2.42.00.." subcat="vii" synset="oewn-02630344-v"/>
+      <Sense id="oewn-develop__2.30.10.." subcat="via vii" synset="oewn-00544490-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-die_hard-v">
+      <Lemma writtenForm="die hard" partOfSpeech="v"/>
+      <Sense id="oewn-die_hard__2.42.00.." subcat="vii" synset="oewn-02653599-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-discharge-n">
+      <Lemma writtenForm="discharge" partOfSpeech="n">
+        <Pronunciation>dɪsˈtʃɑɹdʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-discharge__1.11.01.." synset="oewn-07422377-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-discipline-n">
+      <Lemma writtenForm="discipline" partOfSpeech="n">
+        <Pronunciation variety="US">ˈdɪ.sə.plɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-discipline__1.09.00.." synset="oewn-06005806-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-discontinue-v">
+      <Lemma writtenForm="discontinue" partOfSpeech="v">
+        <Pronunciation>dɪskənˈtɪnju</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-discontinue__2.42.00.." subcat="via-ger vtai vtii" synset="oewn-02686624-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-disgorge-v">
+      <Lemma writtenForm="disgorge" partOfSpeech="v">
+        <Pronunciation variety="GB">dɪsˈɡɔːdʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-disgorge__2.29.00.." subcat="via" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-dispense_with-v">
+      <Lemma writtenForm="dispense with" partOfSpeech="v"/>
+      <Sense id="oewn-dispense_with__2.40.01.." subcat="vtai" synset="oewn-02350643-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-dissipated-a">
+      <Lemma writtenForm="dissipated" partOfSpeech="a">
+        <Pronunciation>ˈdɪsɪpeɪtɪd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-dissipated__5.00.00.immoral.00" synset="oewn-01553629-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-dissolute-a">
+      <Lemma writtenForm="dissolute" partOfSpeech="a">
+        <Pronunciation variety="GB">ˈdɪsəljuːt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-dissolute__5.00.00.immoral.00" synset="oewn-01553629-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-draw-v">
+      <Lemma writtenForm="draw" partOfSpeech="v">
+        <Pronunciation variety="GB">dɹɔː</Pronunciation>
+        <Pronunciation variety="US">dɹɔ</Pronunciation>
+      </Lemma>
+      <Form writtenForm="drawn"/>
+      <Form writtenForm="drew"/>
+      <Sense id="oewn-draw__2.35.13.." subcat="vtai-pp" synset="oewn-01214794-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-drop_by_the_wayside-v">
+      <Lemma writtenForm="drop by the wayside" partOfSpeech="v"/>
+      <Sense id="oewn-drop_by_the_wayside__2.33.00.." subcat="via via-pp" synset="oewn-01085437-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-drop_out-v">
+      <Lemma writtenForm="drop out" partOfSpeech="v"/>
+      <Sense id="oewn-drop_out__2.33.00.." subcat="via via-pp" synset="oewn-01085437-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-enceinte-a">
+      <Lemma writtenForm="enceinte" partOfSpeech="a"/>
+      <Sense id="oewn-enceinte__5.00.00.pregnant.00" synset="oewn-00174652-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-endure-v">
+      <Lemma writtenForm="endure" partOfSpeech="v">
+        <Pronunciation variety="GB">ɪnˈdjʊə̯(ɹ)</Pronunciation>
+        <Pronunciation variety="US">ɪnˈd(j)ʊɹ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-endure__2.42.08.." subcat="vii" synset="oewn-02653599-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-escape-v">
+      <Lemma writtenForm="escape" partOfSpeech="v">
+        <Pronunciation>ɪˈskeɪp</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-escape__2.38.02.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-examine-v">
+      <Lemma writtenForm="examine" partOfSpeech="v">
+        <Pronunciation>ɪɡˈzæmɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-examine__2.31.00.." subcat="vtai" synset="oewn-00646245-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-execute-v">
+      <Lemma writtenForm="execute" partOfSpeech="v">
+        <Pronunciation>ˈɛksɪˌkjuːt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-execute__2.41.04.." subcat="vtai vtii" synset="oewn-02569242-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-expectant-a">
+      <Lemma writtenForm="expectant" partOfSpeech="a">
+        <Pronunciation>ɪkˈspɛktənt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-expectant__5.00.00.pregnant.00" synset="oewn-00174652-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-extend-v">
+      <Lemma writtenForm="extend" partOfSpeech="v">
+        <Pronunciation>ɛkˈstɛnd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-extend__2.42.03.." subcat="vii-pp" synset="oewn-02691775-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fall_by_the_wayside-v">
+      <Lemma writtenForm="fall by the wayside" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈfɔːl baɪ ðə ˈweɪsaɪd</Pronunciation>
+        <Pronunciation variety="US">ˈfɔl baɪ ðə ˈweɪˌsaɪd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-fall_by_the_wayside__2.33.00.." subcat="via via-pp" synset="oewn-01085437-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-farm-v">
+      <Lemma writtenForm="farm" partOfSpeech="v"/>
+      <Sense id="oewn-farm__2.36.00.." subcat="vtai vtii" synset="oewn-01743695-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fasting-n">
+      <Lemma writtenForm="fasting" partOfSpeech="n">
+        <Pronunciation variety="US">ˈfæstɪŋ</Pronunciation>
+        <Pronunciation variety="GB">ˈfɑːstɪŋ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-fasting__1.04.00.." synset="oewn-01071904-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fathead-n">
+      <Lemma writtenForm="fathead" partOfSpeech="n"/>
+      <Sense id="oewn-fathead__1.18.00.." synset="oewn-10177319-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-feed-v">
+      <Lemma writtenForm="feed" partOfSpeech="v"/>
+      <Form writtenForm="fed"/>
+      <Form writtenForm="feed"/>
+      <Sense id="oewn-feed__2.38.04.." subcat="vii vii-pp" synset="oewn-02070867-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-felicitous-a">
+      <Lemma writtenForm="felicitous" partOfSpeech="a">
+        <Pronunciation>fəˈlɪsɪtəs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-felicitous__5.00.00.fortunate.00" synset="oewn-01052105-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-felid-n">
+      <Lemma writtenForm="felid" partOfSpeech="n"/>
+      <Sense id="oewn-felid__1.05.00.." synset="oewn-02123649-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-feline-n">
+      <Lemma writtenForm="feline" partOfSpeech="n"/>
+      <Sense id="oewn-feline__1.05.00.." synset="oewn-02123649-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ferment-v">
+      <Lemma writtenForm="ferment" partOfSpeech="v">
+        <Pronunciation variety="GB">fəˈmɛnt</Pronunciation>
+        <Pronunciation variety="US">fɚˈmɛnt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-ferment__2.30.00.." subcat="vii" synset="oewn-00459426-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-field-n">
+      <Lemma writtenForm="field" partOfSpeech="n">
+        <Pronunciation variety="GB">fiːld</Pronunciation>
+        <Pronunciation variety="US">fild</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-field__1.09.00.." synset="oewn-06005806-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-field_of_study-n">
+      <Lemma writtenForm="field of study" partOfSpeech="n"/>
+      <Sense id="oewn-field_of_study__1.09.00.." synset="oewn-06005806-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-firm-a">
+      <Lemma writtenForm="firm" partOfSpeech="a"/>
+      <Sense id="oewn-firm__5.00.00.fixed.00" synset="oewn-01063410-s">
+        </Sense>
+      <Sense id="oewn-firm__5.00.00.faithful.00" synset="oewn-00962433-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fledged-a">
+      <Lemma writtenForm="fledged" partOfSpeech="a">
+        <Pronunciation>flɛdʒd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-fledged__3.00.00.." synset="oewn-01099607-a">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-flex-v">
+      <Lemma writtenForm="flex" partOfSpeech="v">
+        <Pronunciation>flɛks</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-flex__2.35.02.." subcat="vii vtai vtii" synset="oewn-01282617-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-flow-v">
+      <Lemma writtenForm="flow" partOfSpeech="v"/>
+      <Sense id="oewn-flow__2.38.00.." subcat="vii vii-pp" synset="oewn-02070867-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fly_the_coop-v">
+      <Lemma writtenForm="fly the coop" partOfSpeech="v"/>
+      <Sense id="oewn-fly_the_coop__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-flying-a">
+      <Lemma writtenForm="flying" partOfSpeech="a"/>
+      <Sense id="oewn-flying__5.00.00.hurried.00" synset="oewn-01273596-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-foot_race-n">
+      <Lemma writtenForm="foot race" partOfSpeech="n"/>
+      <Sense id="oewn-foot_race__1.11.00.." synset="oewn-07475061-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-footrace-n">
+      <Lemma writtenForm="footrace" partOfSpeech="n"/>
+      <Sense id="oewn-footrace__1.11.00.." synset="oewn-07475061-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-forego-v">
+      <Lemma writtenForm="forego" partOfSpeech="v"/>
+      <Form writtenForm="foregone"/>
+      <Form writtenForm="forewent"/>
+      <Sense id="oewn-forego__2.40.00.." subcat="vtai" synset="oewn-02308311-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-forest_god-n">
+      <Lemma writtenForm="forest god" partOfSpeech="n"/>
+      <Sense id="oewn-forest_god__1.18.00.." synset="oewn-09571240-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-forfeit-v">
+      <Lemma writtenForm="forfeit" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈfɔː.fɪt</Pronunciation>
+        <Pronunciation variety="US">ˈfɔɹ.fɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-forfeit__2.40.00.." subcat="vtai" synset="oewn-02308311-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-forgo-v">
+      <Lemma writtenForm="forgo" partOfSpeech="v">
+        <Pronunciation variety="GB">fɔːˈɡəʊ</Pronunciation>
+        <Pronunciation variety="US">fɔɹˈɡoʊ</Pronunciation>
+      </Lemma>
+      <Form writtenForm="forgone"/>
+      <Form writtenForm="forwent"/>
+      <Sense id="oewn-forgo__2.40.00.." subcat="vtai" synset="oewn-02308311-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-free-v">
+      <Lemma writtenForm="free" partOfSpeech="v">
+        <Pronunciation>fɹiː</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-free__2.40.01.." subcat="vtai vtai-to" synset="oewn-02321284-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-freehanded-a">
+      <Lemma writtenForm="freehanded" partOfSpeech="a"/>
+      <Sense id="oewn-freehanded__5.00.00.generous.01" synset="oewn-01115129-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fry-n">
+      <Lemma writtenForm="fry" partOfSpeech="n"/>
+      <Sense id="oewn-fry__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-full-grown-a">
+      <Lemma writtenForm="full-grown" partOfSpeech="a"/>
+      <Sense id="oewn-full--grown__5.00.00.mature.01" synset="oewn-01491979-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-fully_grown-a">
+      <Lemma writtenForm="fully grown" partOfSpeech="a"/>
+      <Sense id="oewn-fully_grown__5.00.00.mature.01" synset="oewn-01491979-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-function-v">
+      <Lemma writtenForm="function" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈfʌŋ(k)ʃən</Pronunciation>
+        <Pronunciation variety="US">ˈfʌŋkʃən</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-function__2.35.00.." subcat="vii" synset="oewn-01528454-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-get-v">
+      <Lemma writtenForm="get" partOfSpeech="v"/>
+      <Form writtenForm="getting"/>
+      <Form writtenForm="got"/>
+      <Form writtenForm="gotten"/>
+      <Sense id="oewn-get__2.29.01.." subcat="vtai vtii" synset="oewn-00094214-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-get_on-v">
+      <Lemma writtenForm="get on" partOfSpeech="v"/>
+      <Sense id="oewn-get_on__2.30.03.." subcat="via vii" synset="oewn-00248912-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-giving-a">
+      <Lemma writtenForm="giving" partOfSpeech="a">
+        <Pronunciation>ˈɡɪvɪŋ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-giving__5.00.00.generous.01" synset="oewn-01115129-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-glad-a">
+      <Lemma writtenForm="glad" partOfSpeech="a">
+        <Pronunciation>ɡlæd</Pronunciation>
+      </Lemma>
+      <Form writtenForm="gladder"/>
+      <Form writtenForm="gladdest"/>
+      <Sense id="oewn-glad__5.00.00.willing.00" synset="oewn-02576313-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-go-n">
+      <Lemma writtenForm="go" partOfSpeech="n">
+        <Pronunciation variety="GB">ɡəʊ</Pronunciation>
+        <Pronunciation variety="US">ɡoʊ</Pronunciation>
+        <Pronunciation variety="AU">ɡəʉ</Pronunciation>
+        <Pronunciation variety="NZ">ɡɐʉ</Pronunciation>
+      </Lemma>
+      <Form writtenForm="goes"/>
+      <Sense id="oewn-go__1.28.00.." synset="oewn-15317305-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-go-v">
+      <Lemma writtenForm="go" partOfSpeech="v">
+        <Pronunciation variety="GB">ɡəʊ</Pronunciation>
+        <Pronunciation variety="US">ɡoʊ</Pronunciation>
+        <Pronunciation variety="AU">ɡəʉ</Pronunciation>
+        <Pronunciation variety="NZ">ɡɐʉ</Pronunciation>
+      </Lemma>
+      <Form writtenForm="gone"/>
+      <Form writtenForm="went"/>
+      <Sense id="oewn-go__2.42.02.." subcat="vii" synset="oewn-02727159-v"/>
+      <Sense id="oewn-go__2.42.00.." subcat="vii-pp" synset="oewn-02691775-v"/>
+      <Sense id="oewn-go__2.35.00.." subcat="vii" synset="oewn-01528454-v"/>
+      <Sense id="oewn-go__2.30.02.." subcat="via-pp vii-pp" synset="oewn-00540190-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-go_for-v">
+      <Lemma writtenForm="go for" partOfSpeech="v"/>
+      <Sense id="oewn-go_for__2.31.00.." subcat="via-ger vtai" synset="oewn-00707813-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-good_turn-n">
+      <Lemma writtenForm="good turn" partOfSpeech="n"/>
+      <Sense id="oewn-good_turn__1.04.00.." synset="oewn-01229572-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-goof-n">
+      <Lemma writtenForm="goof" partOfSpeech="n">
+        <Pronunciation>ɡuːf</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-goof__1.18.00.." synset="oewn-10177319-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-goofball-n">
+      <Lemma writtenForm="goofball" partOfSpeech="n">
+        <Pronunciation variety="US">ˈɡufˌbɔl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-goofball__1.18.00.." synset="oewn-10177319-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-gravid-a">
+      <Lemma writtenForm="gravid" partOfSpeech="a">
+        <Pronunciation>ˈɡɹævɪd</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-gravid__5.00.00.pregnant.00" synset="oewn-00174652-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-great-a">
+      <Lemma writtenForm="great" partOfSpeech="a">
+        <Pronunciation>ɡɹeɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-great__5.00.00.pregnant.00" adjposition="p" synset="oewn-00174652-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-grown-a">
+      <Lemma writtenForm="grown" partOfSpeech="a">
+        <Pronunciation variety="GB">ɡɹəʊn</Pronunciation>
+        <Pronunciation variety="US">ɡɹoʊn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-grown__5.00.00.mature.01" synset="oewn-01491979-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-grownup-a">
+      <Lemma writtenForm="grownup" partOfSpeech="a"/>
+      <Sense id="oewn-grownup__5.00.00.mature.01" synset="oewn-01491979-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-guide-v">
+      <Lemma writtenForm="guide" partOfSpeech="v"/>
+      <Sense id="oewn-guide__2.35.00.." subcat="vtai-pp" synset="oewn-01214794-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-guy-n">
+      <Lemma writtenForm="guy" partOfSpeech="n"/>
+      <Sense id="oewn-guy__1.18.00.." synset="oewn-10172934-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-handsome-a">
+      <Lemma writtenForm="handsome" partOfSpeech="a">
+        <Pronunciation>ˈhæn.səm</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-handsome__5.00.00.generous.01" synset="oewn-01115129-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-head_for_the_hills-v">
+      <Lemma writtenForm="head for the hills" partOfSpeech="v"/>
+      <Sense id="oewn-head_for_the_hills__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-heavy-a">
+      <Lemma writtenForm="heavy" partOfSpeech="a">
+        <Pronunciation>ˈhɛ.vi</Pronunciation>
+      </Lemma>
+      <Form writtenForm="heavier"/>
+      <Form writtenForm="heaviest"/>
+      <Sense id="oewn-heavy__5.00.02.intemperate.00" adjposition="a" synset="oewn-02411163-s"/>
+      <Sense id="oewn-heavy__5.00.00.pregnant.00" adjposition="p" synset="oewn-00174652-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hightail_it-v">
+      <Lemma writtenForm="hightail it" partOfSpeech="v"/>
+      <Sense id="oewn-hightail_it__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hit_the_books-v">
+      <Lemma writtenForm="hit the books" partOfSpeech="v"/>
+      <Sense id="oewn-hit_the_books__2.31.00.." subcat="via vtai" synset="oewn-00608509-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hombre-n">
+      <Lemma writtenForm="hombre" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈɒmbɹeɪ</Pronunciation>
+        <Pronunciation variety="US">ˈɑmbɹeɪ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-hombre__1.18.00.." synset="oewn-10172934-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-honk-v">
+      <Lemma writtenForm="honk" partOfSpeech="v">
+        <Pronunciation variety="GB">hɒŋk</Pronunciation>
+        <Pronunciation variety="US">hɑŋk</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-honk__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hunt-v">
+      <Lemma writtenForm="hunt" partOfSpeech="v">
+        <Pronunciation>hʌnt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-hunt__2.33.00.." subcat="via vtaa vtai" synset="oewn-01146304-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-hunt_down-v">
+      <Lemma writtenForm="hunt down" partOfSpeech="v"/>
+      <Sense id="oewn-hunt_down__2.33.00.." subcat="via vtaa vtai" synset="oewn-01146304-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-immobile-a">
+      <Lemma writtenForm="immobile" partOfSpeech="a"/>
+      <Sense id="oewn-immobile__5.00.00.fixed.00" synset="oewn-01063410-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-incline-v">
+      <Lemma writtenForm="incline" partOfSpeech="v">
+        <Pronunciation>ɪnˈklaɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-incline__2.42.01.." subcat="via-to-inf" synset="oewn-02725274-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-jackass-n">
+      <Lemma writtenForm="jackass" partOfSpeech="n"/>
+      <Sense id="oewn-jackass__1.18.00.." synset="oewn-10177319-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-kat-n">
+      <Lemma writtenForm="kat" partOfSpeech="n"/>
+      <Sense id="oewn-kat__1.06.00.." synset="oewn-03614083-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-khat-n">
+      <Lemma writtenForm="khat" partOfSpeech="n"/>
+      <Sense id="oewn-khat__1.06.00.." synset="oewn-03614083-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-kick-v">
+      <Lemma writtenForm="kick" partOfSpeech="v"/>
+      <Sense id="oewn-kick__2.34.00.." subcat="via-ger vtai" synset="oewn-01199057-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-kid-n">
+      <Lemma writtenForm="kid" partOfSpeech="n"/>
+      <Sense id="oewn-kid__1.18.00.." synset="oewn-09937051-n"/>
+      <Sense id="oewn-kid__1.18.01.." synset="oewn-09937706-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ladder-n">
+      <Lemma writtenForm="ladder" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈladə</Pronunciation>
+        <Pronunciation variety="US">ˈlædɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-ladder__1.11.00.." synset="oewn-07457610-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ladder-v">
+      <Lemma writtenForm="ladder" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈladə</Pronunciation>
+        <Pronunciation variety="US">ˈlædɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-ladder__2.30.00.." subcat="vii" synset="oewn-00335613-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-lam-v">
+      <Lemma writtenForm="lam" partOfSpeech="v"/>
+      <Form writtenForm="lammed"/>
+      <Form writtenForm="lamming"/>
+      <Sense id="oewn-lam__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-large-a">
+      <Lemma writtenForm="large" partOfSpeech="a">
+        <Pronunciation variety="GB">ˈlɑːd͡ʒ</Pronunciation>
+        <Pronunciation variety="US">ˈlɑɹd͡ʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-large__3.00.00.." synset="oewn-01385012-a">
+        </Sense>
+      <Sense id="oewn-large__5.00.00.generous.02" synset="oewn-01118400-s"/>
+      <Sense id="oewn-large__5.00.00.conspicuous.00" synset="oewn-00581973-s"/>
+      <Sense id="oewn-large__5.00.00.pregnant.00" adjposition="p" synset="oewn-00174652-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-large-r">
+      <Lemma writtenForm="large" partOfSpeech="r">
+        <Pronunciation variety="GB">ˈlɑːd͡ʒ</Pronunciation>
+        <Pronunciation variety="US">ˈlɑɹd͡ʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-large__4.02.02.." synset="oewn-00227289-r"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-lay_off-v">
+      <Lemma writtenForm="lay off" partOfSpeech="v"/>
+      <Sense id="oewn-lay_off__2.42.00.." subcat="via-ger vtai vtii" synset="oewn-02686624-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-lead-v">
+      <Lemma writtenForm="lead" partOfSpeech="v">
+        <Pronunciation>liːd</Pronunciation>
+      </Lemma>
+      <Form writtenForm="led"/>
+      <Sense id="oewn-lead__2.42.00.." subcat="vii-pp" synset="oewn-02691775-v"/>
+      <Sense id="oewn-lead__2.42.02.." subcat="vtai-pp" synset="oewn-02692467-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-lean-v">
+      <Lemma writtenForm="lean" partOfSpeech="v"/>
+      <Form writtenForm="leant"/>
+      <Sense id="oewn-lean__2.42.01.." subcat="via-to-inf" synset="oewn-02725274-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-learn-v">
+      <Lemma writtenForm="learn" partOfSpeech="v"/>
+      <Form writtenForm="learnt"/>
+      <Sense id="oewn-learn__2.31.02.." subcat="vtai" synset="oewn-00601387-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-lech-n">
+      <Lemma writtenForm="lech" partOfSpeech="n">
+        <Pronunciation>lɛtʃ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-lech__1.18.00.." synset="oewn-10572408-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-lecher-n">
+      <Lemma writtenForm="lecher" partOfSpeech="n">
+        <Pronunciation>lɛtʃə(ɹ)</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-lecher__1.18.00.." synset="oewn-10572408-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-letch-n">
+      <Lemma writtenForm="letch" partOfSpeech="n"/>
+      <Sense id="oewn-letch__1.18.00.." synset="oewn-10572408-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-liberal-a">
+      <Lemma writtenForm="liberal" partOfSpeech="a">
+        <Pronunciation variety="GB">ˈlɪbɹəl</Pronunciation>
+        <Pronunciation variety="US">ˈlɪbəɹəl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-liberal__5.00.00.generous.01" synset="oewn-01115129-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-libertine-a">
+      <Lemma writtenForm="libertine" partOfSpeech="a"/>
+      <Sense id="oewn-libertine__5.00.00.immoral.00" synset="oewn-01553629-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-loge-n">
+      <Lemma writtenForm="loge" partOfSpeech="n">
+        <Pronunciation>ləʊʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-loge__1.06.01.." synset="oewn-02887466-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-long-familiar-a">
+      <Lemma writtenForm="long-familiar" partOfSpeech="a"/>
+      <Sense id="oewn-long--familiar__5.00.00.familiar.00" synset="oewn-00969356-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-loyal-a">
+      <Lemma writtenForm="loyal" partOfSpeech="a">
+        <Pronunciation>ˈlɔɪəl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-loyal__5.00.00.faithful.00" synset="oewn-00962433-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-magnanimous-a">
+      <Lemma writtenForm="magnanimous" partOfSpeech="a">
+        <Pronunciation>mæɡˈnæn.ɪ.məs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-magnanimous__5.00.00.generous.02" synset="oewn-01118400-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-maturate-v">
+      <Lemma writtenForm="maturate" partOfSpeech="v">
+        <Pronunciation>ˈmætjʊɹeɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-maturate__2.30.00.." subcat="via vii" synset="oewn-00251067-v">
+        </Sense>
+      <Sense id="oewn-maturate__2.30.01.." subcat="via vii" synset="oewn-00248912-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-matured-a">
+      <Lemma writtenForm="matured" partOfSpeech="a"/>
+      <Sense id="oewn-matured__5.00.00.developed.00" synset="oewn-00745899-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-meditate-v">
+      <Lemma writtenForm="meditate" partOfSpeech="v"/>
+      <Sense id="oewn-meditate__2.31.02.." subcat="via" synset="oewn-00706154-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-melt-v">
+      <Lemma writtenForm="melt" partOfSpeech="v">
+        <Pronunciation>mɛlt</Pronunciation>
+      </Lemma>
+      <Form writtenForm="molten"/>
+      <Sense id="oewn-melt__2.30.01.." subcat="vii vtai vtii" synset="oewn-00445584-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-melt_down-v">
+      <Lemma writtenForm="melt down" partOfSpeech="v"/>
+      <Sense id="oewn-melt_down__2.30.00.." subcat="vii vtai vtii" synset="oewn-00445584-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-minor-n">
+      <Lemma writtenForm="minor" partOfSpeech="n">
+        <Pronunciation>ˈmaɪ.nə(ɹ)</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-minor__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-move-v">
+      <Lemma writtenForm="move" partOfSpeech="v">
+        <Pronunciation>muːv</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-move__2.30.01.." subcat="via-pp vii-pp" synset="oewn-00540190-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-move_around-v">
+      <Lemma writtenForm="move around" partOfSpeech="v"/>
+      <Sense id="oewn-move_around__2.38.03.." subcat="vtai" synset="oewn-01913805-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-nestling-n">
+      <Lemma writtenForm="nestling" partOfSpeech="n">
+        <Pronunciation>ˈnɛstlɪŋ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-nestling__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-nipper-n">
+      <Lemma writtenForm="nipper" partOfSpeech="n">
+        <Pronunciation>ˈnɪpə(ɹ)</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-nipper__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-number-n">
+      <Lemma writtenForm="number" partOfSpeech="n">
+        <Pronunciation>ˈnʌmbə</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-number__1.10.04.." synset="oewn-06905066-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-openhanded-a">
+      <Lemma writtenForm="openhanded" partOfSpeech="a"/>
+      <Sense id="oewn-openhanded__5.00.00.generous.01" synset="oewn-01115129-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-operate-v">
+      <Lemma writtenForm="operate" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈɒpəɹeɪt</Pronunciation>
+        <Pronunciation variety="US">ˈɑpəɹeɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-operate__2.41.00.." subcat="vtai" synset="oewn-02448714-v">
+        </Sense>
+      <Sense id="oewn-operate__2.35.03.." subcat="vii" synset="oewn-01528454-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-originate-v">
+      <Lemma writtenForm="originate" partOfSpeech="v">
+        <Pronunciation>əˈɹɪdʒɪneɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-originate__2.42.00.." subcat="vii" synset="oewn-02630344-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-outpouring-n">
+      <Lemma writtenForm="outpouring" partOfSpeech="n"/>
+      <Sense id="oewn-outpouring__1.11.00.." synset="oewn-07422377-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-package-v">
+      <Lemma writtenForm="package" partOfSpeech="v">
+        <Pronunciation variety="US">ˈpækɪdʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-package__2.35.00.." subcat="vtai" synset="oewn-01487784-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-part_with-v">
+      <Lemma writtenForm="part with" partOfSpeech="v"/>
+      <Sense id="oewn-part_with__2.40.00.." subcat="vtai" synset="oewn-02350643-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-pass-v">
+      <Lemma writtenForm="pass" partOfSpeech="v"/>
+      <Sense id="oewn-pass__2.42.08.." subcat="vii-pp" synset="oewn-02691775-v"/>
+      <Sense id="oewn-pass__2.35.00.." subcat="vtai-pp" synset="oewn-01214794-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-persist-v">
+      <Lemma writtenForm="persist" partOfSpeech="v">
+        <Pronunciation variety="US">pɚˈsɪst</Pronunciation>
+        <Pronunciation variety="GB">pəˈsɪst</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-persist__2.42.00.." subcat="vii" synset="oewn-02653599-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-play-n">
+      <Lemma writtenForm="play" partOfSpeech="n">
+        <Pronunciation>pleɪ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-play__1.04.01.." synset="oewn-00458406-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-play-v">
+      <Lemma writtenForm="play" partOfSpeech="v">
+        <Pronunciation>pleɪ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-play__2.36.05.." subcat="vtai vtii" synset="oewn-01721028-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-plough-v">
+      <Lemma writtenForm="plough" partOfSpeech="v">
+        <Pronunciation>plaʊ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-plough__2.36.00.." subcat="via vtai" synset="oewn-01745745-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-plow-v">
+      <Lemma writtenForm="plow" partOfSpeech="v"/>
+      <Sense id="oewn-plow__2.36.00.." subcat="via vtai" synset="oewn-01745745-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ply-v">
+      <Lemma writtenForm="ply" partOfSpeech="v"/>
+      <Form writtenForm="plied"/>
+      <Sense id="oewn-ply__2.38.00.." subcat="via-pp vii-pp" synset="oewn-01868024-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-political_campaign-n">
+      <Lemma writtenForm="political campaign" partOfSpeech="n"/>
+      <Sense id="oewn-political_campaign__1.11.00.." synset="oewn-07488069-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-prevail-v">
+      <Lemma writtenForm="prevail" partOfSpeech="v">
+        <Pronunciation>pɹɪˈveɪl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-prevail__2.42.00.." subcat="vii" synset="oewn-02653599-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-produce-v">
+      <Lemma writtenForm="produce" partOfSpeech="v">
+        <Pronunciation variety="GB">pɹəˈdjuːs</Pronunciation>
+        <Pronunciation variety="US">pɹəˈdus</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-produce__2.36.05.." subcat="vtai vtii" synset="oewn-01743695-v">
+        </Sense>
+      <Sense id="oewn-produce__2.29.00.." subcat="vtai vtii" synset="oewn-00094214-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-profligate-a">
+      <Lemma writtenForm="profligate" partOfSpeech="a">
+        <Pronunciation variety="US">ˈpɹɑːflɪɡət</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-profligate__5.00.00.immoral.00" synset="oewn-01553629-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-prominent-a">
+      <Lemma writtenForm="prominent" partOfSpeech="a">
+        <Pronunciation variety="US">ˈpɹɑmɪnənt</Pronunciation>
+        <Pronunciation variety="GB">ˈpɹɒmɪnənt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-prominent__5.00.02.conspicuous.00" synset="oewn-00581973-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-promise-n">
+      <Lemma writtenForm="promise" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈpɹɒmɪs</Pronunciation>
+        <Pronunciation variety="US">ˈpɹɑmɪs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-promise__1.09.00.." synset="oewn-05959600-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-puke-v">
+      <Lemma writtenForm="puke" partOfSpeech="v"/>
+      <Sense id="oewn-puke__2.29.00.." subcat="via" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-purge-v">
+      <Lemma writtenForm="purge" partOfSpeech="v">
+        <Pronunciation variety="US">pɝdʒ</Pronunciation>
+        <Pronunciation variety="GB">pɜːdʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-purge__2.29.04.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-qat-n">
+      <Lemma writtenForm="qat" partOfSpeech="n"/>
+      <Sense id="oewn-qat__1.06.00.." synset="oewn-03614083-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-quat-n">
+      <Lemma writtenForm="quat" partOfSpeech="n"/>
+      <Sense id="oewn-quat__1.06.00.." synset="oewn-03614083-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-quick-a">
+      <Lemma writtenForm="quick" partOfSpeech="a">
+        <Pronunciation>kwɪk</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-quick__5.00.00.hurried.00" synset="oewn-01273596-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-quit-v">
+      <Lemma writtenForm="quit" partOfSpeech="v"/>
+      <Form writtenForm="quitted"/>
+      <Form writtenForm="quitting"/>
+      <Sense id="oewn-quit__2.42.04.." subcat="via-ger vtai vtii" synset="oewn-02686624-v"/>
+      <Sense id="oewn-quit__2.33.05.." subcat="via via-pp vtai" synset="oewn-01085437-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-race-v">
+      <Lemma writtenForm="race" partOfSpeech="v"/>
+      <Sense id="oewn-race__2.33.00.." subcat="via via-pp" synset="oewn-01088514-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-raise-v">
+      <Lemma writtenForm="raise" partOfSpeech="v"/>
+      <Sense id="oewn-raise__2.36.03.." subcat="vtai vtii" synset="oewn-01743695-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-range-v">
+      <Lemma writtenForm="range" partOfSpeech="v">
+        <Pronunciation>ɹeɪndʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-range__2.42.01.." subcat="vtii" synset="oewn-02732914-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ravel-n">
+      <Lemma writtenForm="ravel" partOfSpeech="n">
+        <Pronunciation>ˈɹævəl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-ravel__1.11.00.." synset="oewn-07457610-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-read-v">
+      <Lemma writtenForm="read" partOfSpeech="v">
+        <Pronunciation>ɹid</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-read__2.31.05.." subcat="vtai" synset="oewn-00601387-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-regorge-v">
+      <Lemma writtenForm="regorge" partOfSpeech="v">
+        <Pronunciation>ɹɪˈɡɔː(ɹ)d͡ʒ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-regorge__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-regurgitate-v">
+      <Lemma writtenForm="regurgitate" partOfSpeech="v">
+        <Pronunciation variety="US">ɹɪˈɡɝd͡ʒəˌteɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-regurgitate__2.29.00.." subcat="via vtai" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-release-v">
+      <Lemma writtenForm="release" partOfSpeech="v">
+        <Pronunciation>ɹɪˈliːs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-release__2.35.01.." subcat="vtai-pp" synset="oewn-01439155-v">
+        </Sense>
+      <Sense id="oewn-release__2.40.00.." subcat="vtai vtai-to" synset="oewn-02321284-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-relinquish-v">
+      <Lemma writtenForm="relinquish" partOfSpeech="v">
+        <Pronunciation>ɹɪˈlɪŋkwɪʃ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-relinquish__2.40.01.." subcat="vtai vtai-to" synset="oewn-02321284-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-renounce-v">
+      <Lemma writtenForm="renounce" partOfSpeech="v">
+        <Pronunciation>ɹɪˈnaʊns</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-renounce__2.41.00.." subcat="vtai" synset="oewn-02372031-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-report-n">
+      <Lemma writtenForm="report" partOfSpeech="n">
+        <Pronunciation variety="US">ɹɪˈpɔɹt</Pronunciation>
+        <Pronunciation variety="GB">ɹɪˈpɔːt</Pronunciation>
+        <Pronunciation variety="AU">ɹəˈpoːt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-report__1.10.03.." synset="oewn-07233130-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-resign-v">
+      <Lemma writtenForm="resign" partOfSpeech="v">
+        <Pronunciation>ɹɪˈzaɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-resign__2.41.00.." subcat="via vtai" synset="oewn-02372031-v">
+        </Sense>
+      <Sense id="oewn-resign__2.40.04.." subcat="vtai vtai-to" synset="oewn-02321284-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-retch-v">
+      <Lemma writtenForm="retch" partOfSpeech="v"/>
+      <Sense id="oewn-retch__2.29.00.." subcat="via vtai" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-reverse-v">
+      <Lemma writtenForm="reverse" partOfSpeech="v">
+        <Pronunciation variety="GB">ɹɪˈvɜːs</Pronunciation>
+        <Pronunciation variety="US">ɹɪˈvɝs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-reverse__2.30.00.." subcat="via vii vtai vtia vtii" synset="oewn-00138328-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-rick-v">
+      <Lemma writtenForm="rick" partOfSpeech="v"/>
+      <Sense id="oewn-rick__2.29.00.." subcat="vtai" synset="oewn-00090876-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-rill-n">
+      <Lemma writtenForm="rill" partOfSpeech="n">
+        <Pronunciation>ɹɪl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-rill__1.17.00.." synset="oewn-09438816-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-riotous-a">
+      <Lemma writtenForm="riotous" partOfSpeech="a"/>
+      <Sense id="oewn-riotous__5.00.00.immoral.00" synset="oewn-01553629-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ripe-a">
+      <Lemma writtenForm="ripe" partOfSpeech="a"/>
+      <Sense id="oewn-ripe__3.00.00.." synset="oewn-01496321-a">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-ripen-v">
+      <Lemma writtenForm="ripen" partOfSpeech="v">
+        <Pronunciation>ˈɹaɪpən</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-ripen__2.30.01.." subcat="vtii" synset="oewn-00250855-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-rise-v">
+      <Lemma writtenForm="rise" partOfSpeech="v"/>
+      <Form writtenForm="risen"/>
+      <Form writtenForm="rose"/>
+      <Sense id="oewn-rise__2.42.01.." subcat="vii" synset="oewn-02630344-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-rivulet-n">
+      <Lemma writtenForm="rivulet" partOfSpeech="n">
+        <Pronunciation>ˈɹɪv.jə.lət</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-rivulet__1.17.00.." synset="oewn-09438816-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-round-n">
+      <Lemma writtenForm="round" partOfSpeech="n"/>
+      <Sense id="oewn-round__1.28.00.." synset="oewn-15281525-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-routine-n">
+      <Lemma writtenForm="routine" partOfSpeech="n">
+        <Pronunciation>ɹuːˈtiːn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-routine__1.10.01.." synset="oewn-06905066-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-run_away-v">
+      <Lemma writtenForm="run away" partOfSpeech="v"/>
+      <Sense id="oewn-run_away__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-run_for-v">
+      <Lemma writtenForm="run for" partOfSpeech="v"/>
+      <Sense id="oewn-run_for__2.42.00.." subcat="vtii" synset="oewn-02654212-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-runnel-n">
+      <Lemma writtenForm="runnel" partOfSpeech="n">
+        <Pronunciation>ˈɹʌnəl</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-runnel__1.17.00.." synset="oewn-09438816-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-running-n">
+      <Lemma writtenForm="running" partOfSpeech="n">
+        <Pronunciation>ˈɹʌnɪŋ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-running__1.04.03.." synset="oewn-00559920-n">
+        </Sense>
+      <Sense id="oewn-running__1.04.01.." synset="oewn-00294760-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-running_game-n">
+      <Lemma writtenForm="running game" partOfSpeech="n"/>
+      <Sense id="oewn-running_game__1.04.00.." synset="oewn-00559920-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-running_play-n">
+      <Lemma writtenForm="running play" partOfSpeech="n"/>
+      <Sense id="oewn-running_play__1.04.00.." synset="oewn-00559920-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-scarper-v">
+      <Lemma writtenForm="scarper" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈskɑː(ɹ).pə(ɹ)</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-scarper__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-scat-v">
+      <Lemma writtenForm="scat" partOfSpeech="v"/>
+      <Form writtenForm="scatted"/>
+      <Form writtenForm="scatting"/>
+      <Sense id="oewn-scat__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-self-aggrandising-a">
+      <Lemma writtenForm="self-aggrandising" partOfSpeech="a"/>
+      <Sense id="oewn-self--aggrandising__5.00.00.proud.00" synset="oewn-01896819-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-self-aggrandizing-a">
+      <Lemma writtenForm="self-aggrandizing" partOfSpeech="a"/>
+      <Sense id="oewn-self--aggrandizing__5.00.00.proud.00" synset="oewn-01896819-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-senesce-v">
+      <Lemma writtenForm="senesce" partOfSpeech="v">
+        <Pronunciation>səˈnɛs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-senesce__2.30.00.." subcat="via vii" synset="oewn-00248912-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-shaver-n">
+      <Lemma writtenForm="shaver" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈʃeɪvə</Pronunciation>
+        <Pronunciation variety="US">ˈʃeɪvɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-shaver__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-sick-v">
+      <Lemma writtenForm="sick" partOfSpeech="v"/>
+      <Sense id="oewn-sick__2.29.00.." subcat="via" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-sketch-n">
+      <Lemma writtenForm="sketch" partOfSpeech="n">
+        <Pronunciation>skɛtʃ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-sketch__1.06.00.." synset="oewn-04234206-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-small_fry-n">
+      <Lemma writtenForm="small fry" partOfSpeech="n"/>
+      <Sense id="oewn-small_fry__1.18.01.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-sod-n">
+      <Lemma writtenForm="sod" partOfSpeech="n"/>
+      <Sense id="oewn-sod__1.18.01.." synset="oewn-10172934-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-sour-v">
+      <Lemma writtenForm="sour" partOfSpeech="v">
+        <Pronunciation variety="US">ˈsaʊ(ə)ɹ</Pronunciation>
+        <Pronunciation variety="GB">ˈsaʊə</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-sour__2.30.01.." subcat="vii" synset="oewn-00459426-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-spare-v">
+      <Lemma writtenForm="spare" partOfSpeech="v"/>
+      <Sense id="oewn-spare__2.40.00.." subcat="vtai" synset="oewn-02350643-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-spell-n">
+      <Lemma writtenForm="spell" partOfSpeech="n"/>
+      <Sense id="oewn-spell__1.28.00.." synset="oewn-15317305-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-spew-v">
+      <Lemma writtenForm="spew" partOfSpeech="v">
+        <Pronunciation>spjuː</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-spew__2.29.00.." subcat="via" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-sprain-v">
+      <Lemma writtenForm="sprain" partOfSpeech="v">
+        <Pronunciation>spɹeɪn</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-sprain__2.29.00.." subcat="vtai" synset="oewn-00090876-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-spring_up-v">
+      <Lemma writtenForm="spring up" partOfSpeech="v"/>
+      <Sense id="oewn-spring_up__2.42.00.." subcat="vii" synset="oewn-02630344-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-spue-v">
+      <Lemma writtenForm="spue" partOfSpeech="v"/>
+      <Sense id="oewn-spue__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-stop-v">
+      <Lemma writtenForm="stop" partOfSpeech="v"/>
+      <Form writtenForm="stopped"/>
+      <Form writtenForm="stopping"/>
+      <Sense id="oewn-stop__2.42.00.." subcat="via-ger via-to-inf vtai vtii" synset="oewn-02686624-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-streak-n">
+      <Lemma writtenForm="streak" partOfSpeech="n">
+        <Pronunciation>stɹiːk</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-streak__1.14.00.." synset="oewn-08477596-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-streamlet-n">
+      <Lemma writtenForm="streamlet" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈstɹiːmlət</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-streamlet__1.17.00.." synset="oewn-09438816-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-subject-n">
+      <Lemma writtenForm="subject" partOfSpeech="n">
+        <Pronunciation>ˈsʌb.dʒɛkt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-subject__1.09.00.." synset="oewn-06005806-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-subject_area-n">
+      <Lemma writtenForm="subject area" partOfSpeech="n"/>
+      <Sense id="oewn-subject_area__1.09.00.." synset="oewn-06005806-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-subject_field-n">
+      <Lemma writtenForm="subject field" partOfSpeech="n"/>
+      <Sense id="oewn-subject_field__1.09.00.." synset="oewn-06005806-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-suppurate-v">
+      <Lemma writtenForm="suppurate" partOfSpeech="v">
+        <Pronunciation>ˈsʌpjəreɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-suppurate__2.29.01.." subcat="vtai" synset="oewn-00096933-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-surrender-v">
+      <Lemma writtenForm="surrender" partOfSpeech="v">
+        <Pronunciation>səˈɹɛndəɹ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-surrender__2.33.00.." subcat="via vtai vtai-to" synset="oewn-01118003-v">
+        </Sense>
+      <Sense id="oewn-surrender__2.40.00.." subcat="vtai vtai-to" synset="oewn-02240011-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-survey-n">
+      <Lemma writtenForm="survey" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈsɜːveɪ</Pronunciation>
+        <Pronunciation variety="US">ˈsɝveɪ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-survey__1.04.02.." synset="oewn-00645746-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-swelled-a">
+      <Lemma writtenForm="swelled" partOfSpeech="a"/>
+      <Sense id="oewn-swelled__5.00.00.proud.00" synset="oewn-01896254-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-take-v">
+      <Lemma writtenForm="take" partOfSpeech="v">
+        <Pronunciation>teɪk</Pronunciation>
+      </Lemma>
+      <Form writtenForm="taken"/>
+      <Form writtenForm="took"/>
+      <Sense id="oewn-take__2.31.02.." subcat="vtai" synset="oewn-00601387-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-take_to_the_woods-v">
+      <Lemma writtenForm="take to the woods" partOfSpeech="v"/>
+      <Sense id="oewn-take_to_the_woods__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tally-n">
+      <Lemma writtenForm="tally" partOfSpeech="n">
+        <Pronunciation>ˈtæli</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-tally__1.04.01.." synset="oewn-00190414-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tend-v">
+      <Lemma writtenForm="tend" partOfSpeech="v"/>
+      <Sense id="oewn-tend__2.42.01.." subcat="via-to-inf" synset="oewn-02725274-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-test-n">
+      <Lemma writtenForm="test" partOfSpeech="n"/>
+      <Sense id="oewn-test__1.04.00.." synset="oewn-00792739-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-throw_in-v">
+      <Lemma writtenForm="throw in" partOfSpeech="v"/>
+      <Sense id="oewn-throw_in__2.33.00.." subcat="via via-pp" synset="oewn-01085437-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-throw_in_the_towel-v">
+      <Lemma writtenForm="throw in the towel" partOfSpeech="v"/>
+      <Sense id="oewn-throw_in_the_towel__2.33.00.." subcat="via via-pp" synset="oewn-01085437-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-throw_overboard-v">
+      <Lemma writtenForm="throw overboard" partOfSpeech="v"/>
+      <Sense id="oewn-throw_overboard__2.40.00.." subcat="vtai" synset="oewn-02308311-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-throw_up-v">
+      <Lemma writtenForm="throw up" partOfSpeech="v"/>
+      <Sense id="oewn-throw_up__2.29.00.." subcat="via vtai" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tiddler-n">
+      <Lemma writtenForm="tiddler" partOfSpeech="n"/>
+      <Sense id="oewn-tiddler__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tight-r">
+      <Lemma writtenForm="tight" partOfSpeech="r">
+        <Pronunciation>taɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-tight__4.02.00.." synset="oewn-00086892-r"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tike-n">
+      <Lemma writtenForm="tike" partOfSpeech="n"/>
+      <Sense id="oewn-tike__1.18.01.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tour-n">
+      <Lemma writtenForm="tour" partOfSpeech="n"/>
+      <Sense id="oewn-tour__1.28.00.." synset="oewn-15317305-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-track_down-v">
+      <Lemma writtenForm="track down" partOfSpeech="v"/>
+      <Sense id="oewn-track_down__2.33.00.." subcat="via vtaa vtai" synset="oewn-01146304-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-trial-n">
+      <Lemma writtenForm="trial" partOfSpeech="n"/>
+      <Sense id="oewn-trial__1.04.00.." synset="oewn-00792739-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-true_cat-n">
+      <Lemma writtenForm="true cat" partOfSpeech="n"/>
+      <Sense id="oewn-true_cat__1.05.00.." synset="oewn-02124272-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-truehearted-a">
+      <Lemma writtenForm="truehearted" partOfSpeech="a"/>
+      <Sense id="oewn-truehearted__5.00.00.faithful.00" synset="oewn-00962433-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-trust-v">
+      <Lemma writtenForm="trust" partOfSpeech="v">
+        <Pronunciation>trʌst</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-trust__2.37.00.." subcat="via-that" synset="oewn-01830665-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-turn_of_events-n">
+      <Lemma writtenForm="turn of events" partOfSpeech="n"/>
+      <Sense id="oewn-turn_of_events__1.11.00.." synset="oewn-07437965-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-turn_over-v">
+      <Lemma writtenForm="turn over" partOfSpeech="v"/>
+      <Sense id="oewn-turn_over__2.38.09.." subcat="vtai" synset="oewn-02093687-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-turn_tail-v">
+      <Lemma writtenForm="turn tail" partOfSpeech="v"/>
+      <Sense id="oewn-turn_tail__2.38.00.." subcat="via via-pp vii" synset="oewn-02079296-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-turning-n">
+      <Lemma writtenForm="turning" partOfSpeech="n">
+        <Pronunciation>ˈtɜɹ.nɪŋ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-turning__1.04.00.." synset="oewn-00350856-n">
+        </Sense>
+      <Sense id="oewn-turning__1.11.00.." synset="oewn-07366212-n">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-twat-n">
+      <Lemma writtenForm="twat" partOfSpeech="n">
+        <Pronunciation variety="US">twɑt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-twat__1.18.00.." synset="oewn-10177319-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-twist-n">
+      <Lemma writtenForm="twist" partOfSpeech="n">
+        <Pronunciation>twɪst</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-twist__1.11.00.." synset="oewn-07437965-n"/>
+      <Sense id="oewn-twist__1.25.01.." synset="oewn-13891966-n"/>
+      <Sense id="oewn-twist__1.04.03.." synset="oewn-00346280-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-twist-v">
+      <Lemma writtenForm="twist" partOfSpeech="v">
+        <Pronunciation>twɪst</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-twist__2.35.02.." subcat="vii vtai vtii" synset="oewn-01282617-v"/>
+      <Sense id="oewn-twist__2.29.00.." subcat="vtai" synset="oewn-00090876-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-tyke-n">
+      <Lemma writtenForm="tyke" partOfSpeech="n">
+        <Pronunciation>taɪk</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-tyke__1.18.01.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-unravel-v">
+      <Lemma writtenForm="unravel" partOfSpeech="v">
+        <Pronunciation>ʌnˈɹævəl</Pronunciation>
+      </Lemma>
+      <Form writtenForm="unravelled"/>
+      <Form writtenForm="unravelling"/>
+      <Sense id="oewn-unravel__2.30.01.." subcat="vii" synset="oewn-00333482-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-upchuck-v">
+      <Lemma writtenForm="upchuck" partOfSpeech="v"/>
+      <Sense id="oewn-upchuck__2.29.00.." subcat="via" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-uprise-v">
+      <Lemma writtenForm="uprise" partOfSpeech="v"/>
+      <Form writtenForm="uprisen"/>
+      <Form writtenForm="uprose"/>
+      <Sense id="oewn-uprise__2.42.02.." subcat="vii" synset="oewn-02630344-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-vacate-v">
+      <Lemma writtenForm="vacate" partOfSpeech="v"/>
+      <Sense id="oewn-vacate__2.41.00.." subcat="via vtai" synset="oewn-02372031-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-vainglorious-a">
+      <Lemma writtenForm="vainglorious" partOfSpeech="a">
+        <Pronunciation>ˌveɪnˈɡlɔː.ɹi.əs</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-vainglorious__5.00.00.proud.00" synset="oewn-01896254-s">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-vauntingly-r">
+      <Lemma writtenForm="vauntingly" partOfSpeech="r"/>
+      <Sense id="oewn-vauntingly__4.02.00.." synset="oewn-00227289-r"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-vomit-v">
+      <Lemma writtenForm="vomit" partOfSpeech="v">
+        <Pronunciation variety="GB">ˈvɒmɪt</Pronunciation>
+        <Pronunciation variety="US">ˈvɑmɪt</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-vomit__2.29.00.." subcat="via" synset="oewn-00076153-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-vomit_up-v">
+      <Lemma writtenForm="vomit up" partOfSpeech="v"/>
+      <Sense id="oewn-vomit_up__2.29.00.." subcat="via vtai" synset="oewn-00076153-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-waive-v">
+      <Lemma writtenForm="waive" partOfSpeech="v"/>
+      <Sense id="oewn-waive__2.40.00.." subcat="vtai" synset="oewn-02308311-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-well-chosen-a">
+      <Lemma writtenForm="well-chosen" partOfSpeech="a"/>
+      <Sense id="oewn-well--chosen__5.00.00.felicitous.00" synset="oewn-01003861-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-with_child-a">
+      <Lemma writtenForm="with child" partOfSpeech="a"/>
+      <Sense id="oewn-with_child__5.00.00.pregnant.00" adjposition="p" synset="oewn-00174652-s"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-work-n">
+      <Lemma writtenForm="work" partOfSpeech="n"/>
+      <Sense id="oewn-work__1.09.00.." synset="oewn-05763880-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-work-v">
+      <Lemma writtenForm="work" partOfSpeech="v"/>
+      <Form writtenForm="wrought"/>
+      <Sense id="oewn-work__2.35.02.." subcat="vii" synset="oewn-01528454-v"/>
+      <Sense id="oewn-work__2.30.13.." subcat="vii" synset="oewn-00459426-v"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-wrench-v">
+      <Lemma writtenForm="wrench" partOfSpeech="v"/>
+      <Sense id="oewn-wrench__2.29.00.." subcat="vtai" synset="oewn-00090876-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-wrick-v">
+      <Lemma writtenForm="wrick" partOfSpeech="v"/>
+      <Sense id="oewn-wrick__2.29.00.." subcat="vtai" synset="oewn-00090876-v">
+        </Sense>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-written_report-n">
+      <Lemma writtenForm="written report" partOfSpeech="n"/>
+      <Sense id="oewn-written_report__1.10.00.." synset="oewn-07233130-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-youngster-n">
+      <Lemma writtenForm="youngster" partOfSpeech="n">
+        <Pronunciation variety="GB">ˈjʌŋstə</Pronunciation>
+        <Pronunciation variety="US">ˈjʌŋstɚ</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-youngster__1.18.00.." synset="oewn-09937051-n"/>
+    </LexicalEntry>
+    <LexicalEntry id="oewn-zany-n">
+      <Lemma writtenForm="zany" partOfSpeech="n">
+        <Pronunciation>ˈzeɪni</Pronunciation>
+      </Lemma>
+      <Sense id="oewn-zany__1.18.01.." synset="oewn-10177319-n">
+        </Sense>
+    </LexicalEntry>
+    <Synset id="oewn-00076153-v" ili="i22154" members="oewn-vomit-v oewn-vomit_up-v oewn-purge-v oewn-cast-v oewn-sick-v oewn-cat-v oewn-be_sick-v oewn-disgorge-v oewn-regorge-v oewn-retch-v oewn-puke-v oewn-barf-v oewn-spew-v oewn-spue-v oewn-chuck-v oewn-upchuck-v oewn-honk-v oewn-regurgitate-v oewn-throw_up-v" partOfSpeech="v" lexfile="verb.body">
+      <Definition>eject the contents of the stomach through the mouth</Definition>
+      <Example>After drinking too much, the students vomited</Example>
+      <Example>He purged continuously</Example>
+      <Example>The patient regurgitated the food we gave him last night</Example>
+    </Synset>
+    <Synset id="oewn-00086488-r" ili="i18665" members="oewn-fast-r" partOfSpeech="r" lexfile="adv.all">
+      <Definition>quickly or rapidly (often used as a combining form)</Definition>
+      <Example>how fast can he get here?</Example>
+      <Example>ran as fast as he could</Example>
+      <Example>needs medical help fast</Example>
+      <Example>fast-running rivers</Example>
+      <Example>fast-breaking news</Example>
+      <Example>fast-opening (or fast-closing) shutters</Example>
+    </Synset>
+    <Synset id="oewn-00086892-r" ili="i18667" members="oewn-fast-r oewn-tight-r" partOfSpeech="r" lexfile="adv.all">
+      <Definition>firmly or closely</Definition>
+      <Example>held fast to the rope</Example>
+      <Example>her foot was stuck fast</Example>
+      <Example>held tight</Example>
+    </Synset>
+    <Synset id="oewn-00090876-v" ili="i22227" members="oewn-twist-v oewn-sprain-v oewn-wrench-v oewn-turn-v oewn-wrick-v oewn-rick-v" partOfSpeech="v" lexfile="verb.body">
+      <Definition>twist suddenly so as to sprain</Definition>
+      <Example>wrench one&apos;s ankle</Example>
+      <Example>The wrestler twisted his shoulder</Example>
+      <Example>the hikers sprained their ankles when they fell</Example>
+      <Example>I turned my ankle and couldn&apos;t walk for several days</Example>
+    </Synset>
+    <Synset id="oewn-00094214-v" ili="i22243" members="oewn-grow-v oewn-develop-v oewn-produce-v oewn-get-v oewn-acquire-v" partOfSpeech="v" lexfile="verb.body">
+      <Definition>come to have or undergo a change of (physical features and attributes)</Definition>
+      <Example>He grew a beard</Example>
+      <Example>The patient developed abdominal pains</Example>
+      <Example>I got funny spots all over my body</Example>
+      <Example>Well-developed breasts</Example>
+    </Synset>
+    <Synset id="oewn-00096933-v" ili="i22258" members="oewn-suppurate-v oewn-mature-v" partOfSpeech="v" lexfile="verb.body">
+      <Definition>cause to ripen and discharge pus</Definition>
+      <Example>The oil suppurates the pustules</Example>
+    </Synset>
+    <Synset id="oewn-00125649-v" ili="i22387" members="oewn-turn-v oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>pass into a condition gradually, take on a specific property or attribute; become</Definition>
+      <Example>The weather turned nasty</Example>
+      <Example>She grew angry</Example>
+    </Synset>
+    <Synset id="oewn-00135968-n" ili="i36124" members="oewn-box-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>a blow with the hand (usually on the ear)</Definition>
+      <Example>I gave him a good box on the ear</Example>
+    </Synset>
+    <Synset id="oewn-00138328-v" ili="i22413" members="oewn-change_by_reversal-v oewn-turn-v oewn-reverse-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>change to the contrary</Definition>
+      <Example>The trend was reversed</Example>
+      <Example>the tides turned against him</Example>
+      <Example>public opinion turned when it was revealed that the president had an affair with a White House intern</Example>
+    </Synset>
+    <Synset id="oewn-00145958-v" ili="i22450" members="oewn-change_state-v oewn-turn-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>undergo a transformation or a change of position or action</Definition>
+      <Example>We turned from Socialism to Capitalism</Example>
+      <Example>The people turned against the President when he stole the election</Example>
+    </Synset>
+    <Synset id="oewn-00174652-s" ili="i935" members="oewn-big-a oewn-enceinte-a oewn-expectant-a oewn-gravid-a oewn-great-a oewn-large-a oewn-heavy-a oewn-with_child-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>in an advanced stage of pregnancy</Definition>
+      <Example>was big with child</Example>
+      <Example>was great with child</Example>
+    </Synset>
+    <Synset id="oewn-00190414-n" ili="i36409" members="oewn-run-n oewn-tally-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>a score in baseball made by a runner touching all four bases safely</Definition>
+      <Example>the Yankees scored 3 runs in the bottom of the 9th</Example>
+      <Example>their first tally came in the 3rd inning</Example>
+    </Synset>
+    <Synset id="oewn-00227289-r" ili="i19688" members="oewn-boastfully-r oewn-vauntingly-r oewn-big-r oewn-large-r" partOfSpeech="r" lexfile="adv.all">
+      <Definition>in a boastful manner</Definition>
+      <Example>he talked big all evening</Example>
+    </Synset>
+    <Synset id="oewn-00227422-r" ili="i19689" members="oewn-big-r" partOfSpeech="r" lexfile="adv.all">
+      <Definition>in a major way</Definition>
+      <Example>the play failed big at the box office</Example>
+    </Synset>
+    <Synset id="oewn-00227509-r" ili="i19690" members="oewn-big-r" partOfSpeech="r" lexfile="adv.all">
+      <Definition>on a grand scale</Definition>
+      <Example>think big</Example>
+    </Synset>
+    <Synset id="oewn-00227671-r" ili="i19692" members="oewn-big-r" partOfSpeech="r" lexfile="adv.all">
+      <Definition>extremely well</Definition>
+      <Example>his performance went over big</Example>
+    </Synset>
+    <Synset id="oewn-00231172-v" ili="i22874" members="oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>become larger, greater, or bigger; expand or gain</Definition>
+      <Example>The problem grew too large for me</Example>
+      <Example>Her business grew fast</Example>
+    </Synset>
+    <Synset id="oewn-00231983-v" ili="i22877" members="oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>increase in size by natural process</Definition>
+      <Example>Corn doesn&apos;t grow here</Example>
+      <Example>In these forests, mushrooms grow under the trees</Example>
+      <Example>her hair doesn&apos;t grow much anymore</Example>
+    </Synset>
+    <Synset id="oewn-00246343-v" ili="i22944" members="oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>cause to grow or develop</Definition>
+      <Example>He grows vegetables in his backyard</Example>
+    </Synset>
+    <Synset id="oewn-00248912-v" ili="i22958" members="oewn-senesce-v oewn-age-v oewn-get_on-v oewn-mature-v oewn-maturate-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>grow old or older</Definition>
+      <Example>She aged gracefully</Example>
+      <Example>we age every day — what a depressing thought!</Example>
+      <Example>Young men senesce</Example>
+    </Synset>
+    <Synset id="oewn-00249273-v" ili="i22959" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>become officially one year older</Definition>
+      <Example>She is turning 50 this year</Example>
+    </Synset>
+    <Synset id="oewn-00250855-v" ili="i22968" members="oewn-ripen-v oewn-mature-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>cause to ripen or develop fully</Definition>
+      <Example>The sun ripens the fruit</Example>
+      <Example>Age matures a good wine</Example>
+    </Synset>
+    <Synset id="oewn-00251067-v" ili="i22969" members="oewn-mature-v oewn-maturate-v oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>develop and reach maturity; undergo maturation</Definition>
+      <Example>He matured fast</Example>
+      <Example>The child grew fast</Example>
+    </Synset>
+    <Synset id="oewn-00251425-v" ili="i22970" members="oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>become attached by or as if by the process of growth</Definition>
+      <Example>The tree trunks had grown together</Example>
+    </Synset>
+    <Synset id="oewn-00283283-v" ili="i23129" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>change color</Definition>
+      <Example>In Vermont, the leaves turn early</Example>
+    </Synset>
+    <Synset id="oewn-00293443-n" ili="i36937" members="oewn-turn-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>taking a short walk out and back</Definition>
+      <Example>we took a turn in the park</Example>
+    </Synset>
+    <Synset id="oewn-00294760-n" ili="i36946" members="oewn-run-n oewn-running-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>the act of running; traveling on foot at a fast pace</Definition>
+      <Example>he broke into a run</Example>
+      <Example>his daily run keeps him fit</Example>
+    </Synset>
+    <Synset id="oewn-00309697-n" ili="i37027" members="oewn-run-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>a regular trip</Definition>
+      <Example>the ship made its run in record time</Example>
+    </Synset>
+    <Synset id="oewn-00309837-n" ili="i37028" members="oewn-run-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>a short trip</Definition>
+      <Example>take a run into town</Example>
+    </Synset>
+    <Synset id="oewn-00324771-s" ili="i1799" members="oewn-fast-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>(of a photographic lens or emulsion) causing a shortening of exposure time</Definition>
+      <Example>a fast lens</Example>
+    </Synset>
+    <Synset id="oewn-00333482-v" ili="i23397" members="oewn-run-v oewn-unravel-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>become undone</Definition>
+      <Example>the sweater unraveled</Example>
+    </Synset>
+    <Synset id="oewn-00335613-v" ili="i23408" members="oewn-ladder-v oewn-run-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>come unraveled or undone as if by snagging</Definition>
+      <Example>Her nylons were running</Example>
+    </Synset>
+    <Synset id="oewn-00346280-n" ili="i37225" members="oewn-twist-n oewn-turn-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>turning or twisting around (in place)</Definition>
+      <Example>with a quick twist of his head he surveyed the room</Example>
+    </Synset>
+    <Synset id="oewn-00347358-n" ili="i37231" members="oewn-turn-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>the act of turning away or in the opposite direction</Definition>
+      <Example>he made an abrupt turn away from her</Example>
+    </Synset>
+    <Synset id="oewn-00350856-n" ili="i37251" members="oewn-turn-n oewn-turning-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>the act of changing or reversing the direction of the course</Definition>
+      <Example>he took a turn to the right</Example>
+    </Synset>
+    <Synset id="oewn-00445584-v" ili="i23944" members="oewn-melt-v oewn-run-v oewn-melt_down-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>reduce or cause to be reduced from a solid to a liquid state, usually by heating</Definition>
+      <Example>melt butter</Example>
+      <Example>melt down gold</Example>
+      <Example>The wax melted in the sun</Example>
+    </Synset>
+    <Synset id="oewn-00458406-n" ili="i37819" members="oewn-turn-n oewn-play-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>(game) the activity of doing something in an agreed succession</Definition>
+      <Example>it is my turn</Example>
+      <Example>it is still my play</Example>
+    </Synset>
+    <Synset id="oewn-00459426-v" ili="i24013" members="oewn-sour-v oewn-turn-v oewn-ferment-v oewn-work-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>go sour or spoil</Definition>
+      <Example>The milk has soured</Example>
+      <Example>The wine worked</Example>
+      <Example>The cream has turned — we have to throw it out</Example>
+    </Synset>
+    <Synset id="oewn-00518609-v" ili="i24303" members="oewn-run-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>cause to perform</Definition>
+      <Example>run a subject</Example>
+      <Example>run a process</Example>
+    </Synset>
+    <Synset id="oewn-00540190-v" ili="i24430" members="oewn-move-v oewn-go-v oewn-run-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>progress by being changed</Definition>
+      <Example>The speech has to go through several more drafts</Example>
+      <Example>run through your presentation before the meeting</Example>
+    </Synset>
+    <Synset id="oewn-00544490-v" ili="i24452" members="oewn-develop-v oewn-grow-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>grow emotionally or mature</Definition>
+      <Example>The child developed beautifully in her new kindergarten</Example>
+      <Example>When he spent a summer at camp, the boy grew noticeably and no longer showed some of his old adolescent behavior</Example>
+    </Synset>
+    <Synset id="oewn-00550143-v" ili="i24487" members="oewn-run-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>change from one state to another</Definition>
+      <Example>run amok</Example>
+      <Example>run rogue</Example>
+      <Example>run riot</Example>
+    </Synset>
+    <Synset id="oewn-00559920-n" ili="i38329" members="oewn-run-n oewn-running-n oewn-running_play-n oewn-running_game-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>(American football) a play in which a player attempts to carry the ball through or past the opposing team</Definition>
+      <Example>the defensive line braced to stop the run</Example>
+      <Example>the coach put great emphasis on running</Example>
+    </Synset>
+    <Synset id="oewn-00579075-v" ili="i24643" members="oewn-mature-v" partOfSpeech="v" lexfile="verb.change">
+      <Definition>become due for repayment</Definition>
+      <Example>These bonds mature in 2005</Example>
+    </Synset>
+    <Synset id="oewn-00581973-s" ili="i3230" members="oewn-big-a oewn-large-a oewn-prominent-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>conspicuous in position or importance</Definition>
+      <Example>a big figure in the movement</Example>
+      <Example>big man on campus</Example>
+      <Example>he&apos;s very large in financial circles</Example>
+      <Example>a prominent citizen</Example>
+    </Synset>
+    <Synset id="oewn-00601387-v" ili="i24760" members="oewn-learn-v oewn-study-v oewn-read-v oewn-take-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>be a student of a certain subject</Definition>
+      <Example>She is reading for the bar exam</Example>
+    </Synset>
+    <Synset id="oewn-00608509-v" ili="i24796" members="oewn-study-v oewn-hit_the_books-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>learn by reading books</Definition>
+      <Example>He is studying geology in his room</Example>
+      <Example>I have an exam next week: I must hit the books now</Example>
+    </Synset>
+    <Synset id="oewn-00608800-v" ili="i24797" members="oewn-study-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>be a student; follow a course of study; be enrolled at an institute of learning</Definition>
+    </Synset>
+    <Synset id="oewn-00614907-v" ili="i24825" members="oewn-abandon-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>stop maintaining or insisting on; of ideas or claims</Definition>
+      <Example>He abandoned the thought of asking for her hand in marriage</Example>
+      <Example>Both sides have to give up some claims in these negotiations</Example>
+    </Synset>
+    <Synset id="oewn-00645746-n" ili="i38813" members="oewn-survey-n oewn-study-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>a detailed critical inspection</Definition>
+    </Synset>
+    <Synset id="oewn-00646245-v" ili="i24957" members="oewn-analyze-v oewn-analyse-v oewn-study-v oewn-examine-v oewn-canvass-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>consider in detail and subject to an analysis in order to discover essential features or meaning</Definition>
+      <Example>analyze a sonnet by Shakespeare</Example>
+      <Example>analyze the evidence in a criminal trial</Example>
+      <Example>analyze your real motives</Example>
+    </Synset>
+    <Synset id="oewn-00706154-v" ili="i25229" members="oewn-study-v oewn-meditate-v oewn-contemplate-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>think intently and at length, as for spiritual purposes</Definition>
+      <Example>He is meditating in his study</Example>
+    </Synset>
+    <Synset id="oewn-00707813-v" ili="i25236" members="oewn-hope-v oewn-go_for-v" partOfSpeech="v" lexfile="verb.cognition">
+      <Definition>intend with some possibility of fulfilment</Definition>
+      <Example>I hope to have finished this work by tomorrow evening</Example>
+    </Synset>
+    <Synset id="oewn-00745899-s" ili="i4113" members="oewn-mature-a oewn-matured-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>fully considered and perfected</Definition>
+      <Example>mature plans</Example>
+    </Synset>
+    <Synset id="oewn-00792739-n" ili="i39567" members="oewn-test-n oewn-trial-n oewn-run-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>the act of testing something</Definition>
+      <Example>in the experimental trials the amount of carbon was measured separately</Example>
+      <Example>he called each flip of the coin a new trial</Example>
+    </Synset>
+    <Synset id="oewn-00796302-v" ili="i25652" members="oewn-call_on-v oewn-turn-v" partOfSpeech="v" lexfile="verb.communication">
+      <Definition>have recourse to or make an appeal or request for help or information to</Definition>
+      <Example>She called on her Representative to help her</Example>
+      <Example>She turned to her relatives for help</Example>
+    </Synset>
+    <Synset id="oewn-00928127-v" ili="i26241" members="oewn-mature-v" partOfSpeech="v" lexfile="verb.communication">
+      <Definition>develop and work out fully in one&apos;s mind</Definition>
+      <Example>I need to mature my thoughts</Example>
+    </Synset>
+    <Synset id="oewn-00962433-s" ili="i5259" members="oewn-firm-a oewn-loyal-a oewn-truehearted-a oewn-fast-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>unwavering in devotion to friend or vow or cause</Definition>
+      <Example>a firm ally</Example>
+      <Example>loyal supporters</Example>
+      <Example dc:source="Campaign song for William Henry Harrison">the true-hearted soldier … of Tippecanoe</Example>
+      <Example>fast friends</Example>
+    </Synset>
+    <Synset id="oewn-00969356-s" ili="i5293" members="oewn-long-familiar-a oewn-well-known-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>frequently experienced; known closely or intimately</Definition>
+      <Example>a long-familiar face</Example>
+      <Example>a well-known voice reached her ears</Example>
+    </Synset>
+    <Synset id="oewn-00979699-a" ili="i5342" members="oewn-fast-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>acting or moving or capable of acting or moving quickly</Definition>
+      <Example>fast film</Example>
+      <Example>on the fast track in school</Example>
+      <Example>set a fast pace</Example>
+      <Example>a fast car</Example>
+    </Synset>
+    <Synset id="oewn-00985009-a" ili="i5370" members="oewn-fast-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>at a rapid tempo</Definition>
+      <Example>the band played a fast fox trot</Example>
+    </Synset>
+    <Synset id="oewn-00986764-a" ili="i5386" members="oewn-fast-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>(used of timepieces) indicating a time ahead of or later than the correct time</Definition>
+      <Example>my watch is fast</Example>
+    </Synset>
+    <Synset id="oewn-01003861-s" ili="i5477" members="oewn-happy-a oewn-well-chosen-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>well expressed and to the point</Definition>
+      <Example>a happy turn of phrase</Example>
+      <Example>a few well-chosen words</Example>
+    </Synset>
+    <Synset id="oewn-01052105-s" ili="i5739" members="oewn-felicitous-a oewn-happy-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>marked by good fortune</Definition>
+      <Example>a felicitous life</Example>
+      <Example>a happy outcome</Example>
+    </Synset>
+    <Synset id="oewn-01063410-s" ili="i5807" members="oewn-fast-a oewn-firm-a oewn-immobile-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>securely fixed in place</Definition>
+      <Example>the post was still firm after being hit by the car</Example>
+    </Synset>
+    <Synset id="oewn-01071904-n" ili="i41021" members="oewn-fast-n oewn-fasting-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>abstaining from food</Definition>
+    </Synset>
+    <Synset id="oewn-01085437-v" ili="i27006" members="oewn-drop_out-v oewn-give_up-v oewn-fall_by_the_wayside-v oewn-drop_by_the_wayside-v oewn-throw_in-v oewn-throw_in_the_towel-v oewn-quit-v oewn-chuck_up_the_sponge-v" partOfSpeech="v" lexfile="verb.competition">
+      <Definition>give up in the face of defeat of lacking hope; admit defeat</Definition>
+      <Example>In the second round, the challenger gave up</Example>
+    </Synset>
+    <Synset id="oewn-01088514-v" ili="i27023" members="oewn-race-v oewn-run-v" partOfSpeech="v" lexfile="verb.competition">
+      <Definition>compete in a race</Definition>
+      <Example>he is running the Marathon this year</Example>
+      <Example>let&apos;s race and see who gets there first</Example>
+    </Synset>
+    <Synset id="oewn-01096497-v" ili="i27063" members="oewn-campaign-v oewn-run-v" partOfSpeech="v" lexfile="verb.competition">
+      <Definition>run, stand, or compete for an office or a position</Definition>
+      <Example>Who&apos;s running for treasurer this year?</Example>
+    </Synset>
+    <Synset id="oewn-01099607-a" ili="i6021" members="oewn-fledged-a oewn-mature-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>(of birds) having developed feathers or plumage; often used in combination</Definition>
+    </Synset>
+    <Synset id="oewn-01115129-s" ili="i6104" members="oewn-big-a oewn-bighearted-a oewn-bounteous-a oewn-bountiful-a oewn-freehanded-a oewn-handsome-a oewn-giving-a oewn-liberal-a oewn-openhanded-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>given or giving freely</Definition>
+      <Example>was a big tipper</Example>
+      <Example>the bounteous goodness of God</Example>
+      <Example>bountiful compliments</Example>
+      <Example>a freehanded host</Example>
+      <Example>a handsome allowance</Example>
+      <Example>Saturday&apos;s child is loving and giving</Example>
+      <Example>a liberal backer of the arts</Example>
+      <Example>a munificent gift</Example>
+      <Example>her fond and openhanded grandfather</Example>
+    </Synset>
+    <Synset id="oewn-01118003-v" ili="i27176" members="oewn-surrender-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.competition">
+      <Definition>give up or agree to forgo to the power or possession of another</Definition>
+      <Example>The last Taleban fighters finally surrendered</Example>
+    </Synset>
+    <Synset id="oewn-01118400-s" ili="i6116" members="oewn-big-a oewn-large-a oewn-magnanimous-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>generous and understanding and tolerant</Definition>
+      <Example>a heart big enough to hold no grudges</Example>
+      <Example>that&apos;s very big of you to be so forgiving</Example>
+      <Example>a large and generous spirit</Example>
+      <Example>a large heart</Example>
+      <Example>magnanimous toward his enemies</Example>
+    </Synset>
+    <Synset id="oewn-01146304-v" ili="i27338" members="oewn-hunt-v oewn-run-v oewn-hunt_down-v oewn-track_down-v" partOfSpeech="v" lexfile="verb.competition">
+      <Definition>pursue for food or sport (as of wild animals)</Definition>
+      <Example>Goering often hunted wild boars in Poland</Example>
+      <Example>The dogs are running deer</Example>
+      <Example>The Duke hunted in these woods</Example>
+    </Synset>
+    <Synset id="oewn-01151786-a" ili="i6282" members="oewn-happy-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>enjoying or showing or marked by joy or pleasure</Definition>
+      <Example>a happy smile</Example>
+      <Example>spent many happy days on the beach</Example>
+      <Example>a happy marriage</Example>
+    </Synset>
+    <Synset id="oewn-01154355-v" ili="i27382" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.competition">
+      <Definition>direct at someone</Definition>
+      <Example>She turned a smile on me</Example>
+      <Example>They turned their flashlights on the car</Example>
+    </Synset>
+    <Synset id="oewn-01191960-v" ili="i27565" members="oewn-fast-v" partOfSpeech="v" lexfile="verb.consumption">
+      <Definition>abstain from eating</Definition>
+      <Example>Before the medical exam, you must fast</Example>
+    </Synset>
+    <Synset id="oewn-01192137-v" ili="i27566" members="oewn-fast-v" partOfSpeech="v" lexfile="verb.consumption">
+      <Definition>abstain from certain foods, as for religious or medical reasons</Definition>
+      <Example>Catholics sometimes fast during Lent</Example>
+    </Synset>
+    <Synset id="oewn-01195323-s" ili="i6518" members="oewn-big-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>marked by intense physical force</Definition>
+      <Example>a big wind</Example>
+    </Synset>
+    <Synset id="oewn-01199057-v" ili="i27602" members="oewn-kick-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.consumption">
+      <Definition>stop consuming</Definition>
+      <Example>kick a habit</Example>
+      <Example>give up alcohol</Example>
+    </Synset>
+    <Synset id="oewn-01214794-v" ili="i27684" members="oewn-guide-v oewn-run-v oewn-draw-v oewn-pass-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>pass over, across, or through</Definition>
+      <Example>He ran his eyes over her body</Example>
+      <Example>She ran her fingers along the carved figurine</Example>
+      <Example>He drew her hair through his fingers</Example>
+    </Synset>
+    <Synset id="oewn-01227779-v" ili="i27748" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>alter the functioning or setting of</Definition>
+      <Example>turn the dial to 10</Example>
+      <Example>turn the heat down</Example>
+    </Synset>
+    <Synset id="oewn-01228431-v" ili="i27753" members="oewn-goose-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>give a spurt of fuel to</Definition>
+      <Example>goose the car</Example>
+    </Synset>
+    <Synset id="oewn-01229572-n" ili="i41817" members="oewn-turn-n oewn-good_turn-n" partOfSpeech="n" lexfile="noun.act">
+      <Definition>a favor for someone</Definition>
+      <Example>he did me a good turn</Example>
+    </Synset>
+    <Synset id="oewn-01233625-v" ili="i27777" members="oewn-goose-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>prod into action</Definition>
+    </Synset>
+    <Synset id="oewn-01273596-s" ili="i6938" members="oewn-flying-a oewn-quick-a oewn-fast-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>hurried and brief</Definition>
+      <Example>paid a flying visit</Example>
+      <Example>took a flying glance at the book</Example>
+      <Example>a quick inspection</Example>
+      <Example>a fast visit</Example>
+    </Synset>
+    <Synset id="oewn-01279982-s" ili="i6972" members="oewn-big-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>significant</Definition>
+      <Example>graduation was a big day in his life</Example>
+    </Synset>
+    <Synset id="oewn-01282617-v" ili="i28064" members="oewn-flex-v oewn-bend-v oewn-deform-v oewn-twist-v oewn-turn-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>cause (an object) to assume a crooked or angular form</Definition>
+      <Example>bend the rod</Example>
+      <Example>twist the dough into a braid</Example>
+      <Example>the strong man could turn an iron bar</Example>
+    </Synset>
+    <Synset id="oewn-01379631-s" ili="i7498" members="oewn-well-known-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>widely or fully known</Definition>
+      <Example>a well-known politician</Example>
+      <Example>well-known facts</Example>
+      <Example>a politician who is well known</Example>
+      <Example>these facts are well known</Example>
+    </Synset>
+    <Synset id="oewn-01385012-a" ili="i7530" members="oewn-large-a oewn-big-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>above average in size or number or quantity or magnitude or extent</Definition>
+      <Example>a large city</Example>
+      <Example>set out for the big city</Example>
+      <Example>a large sum</Example>
+      <Example>a big (or large) barn</Example>
+      <Example>a large family</Example>
+      <Example>big businesses</Example>
+      <Example>a big expenditure</Example>
+      <Example>a large number of newspapers</Example>
+      <Example>a big group of scientists</Example>
+      <Example>large areas of the world</Example>
+    </Synset>
+    <Synset id="oewn-01414524-v" ili="i28783" members="oewn-cat-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>beat with a cat-o&apos;-nine-tails</Definition>
+    </Synset>
+    <Synset id="oewn-01422636-v" ili="i28830" members="oewn-box-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>engage in a boxing match</Definition>
+    </Synset>
+    <Synset id="oewn-01423419-v" ili="i28835" members="oewn-box-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>hit with the fist</Definition>
+      <Example>I&apos;ll box your ears!</Example>
+    </Synset>
+    <Synset id="oewn-01439155-v" ili="i28910" members="oewn-turn-v oewn-release-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>let (something) fall or spill from a container</Definition>
+      <Example>turn the flour onto a plate</Example>
+    </Synset>
+    <Synset id="oewn-01455863-s" ili="i7946" members="oewn-big-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>loud and firm</Definition>
+      <Example>a big voice</Example>
+      <Example>big bold piano sounds</Example>
+    </Synset>
+    <Synset id="oewn-01459708-v" ili="i29008" members="oewn-goose-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>pinch in the buttocks</Definition>
+      <Example>he goosed the unsuspecting girl</Example>
+    </Synset>
+    <Synset id="oewn-01487784-v" ili="i29144" members="oewn-box-v oewn-package-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>put into a box</Definition>
+      <Example>box the gift, please</Example>
+    </Synset>
+    <Synset id="oewn-01491608-a" ili="i8162" members="oewn-mature-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>having reached full natural growth or development</Definition>
+      <Example>a mature cell</Example>
+    </Synset>
+    <Synset id="oewn-01491979-s" ili="i8163" members="oewn-adult-a oewn-big-a oewn-full-grown-a oewn-fully_grown-a oewn-grown-a oewn-grownup-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>(of animals) fully developed</Definition>
+      <Example>an adult animal</Example>
+      <Example>a grown woman</Example>
+    </Synset>
+    <Synset id="oewn-01495137-a" ili="i8181" members="oewn-mature-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>characteristic of maturity</Definition>
+      <Example>mature for her age</Example>
+    </Synset>
+    <Synset id="oewn-01496321-a" ili="i8189" members="oewn-ripe-a oewn-mature-a" partOfSpeech="a" lexfile="adj.all">
+      <Definition>fully developed or matured and ready to be eaten or used</Definition>
+      <Example>ripe peaches</Example>
+      <Example>full-bodied mature wines</Example>
+    </Synset>
+    <Synset id="oewn-01514159-s" ili="i8290" members="oewn-bad-a oewn-big-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>serious or severe</Definition>
+      <Example>a bad headache</Example>
+      <Example>in a big rage</Example>
+      <Example>had a big (or bad) shock</Example>
+      <Example>a bad earthquake</Example>
+      <Example>a bad storm</Example>
+    </Synset>
+    <Synset id="oewn-01528454-v" ili="i29358" members="oewn-function-v oewn-work-v oewn-operate-v oewn-go-v oewn-run-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>perform as expected when applied</Definition>
+      <Example>The washing machine won&apos;t go unless it&apos;s plugged in</Example>
+      <Example>Does this old car still run well?</Example>
+      <Example>This old radio doesn&apos;t work anymore</Example>
+    </Synset>
+    <Synset id="oewn-01529078-v" ili="i29360" members="oewn-run-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>be operating, running or functioning</Definition>
+      <Example>The car is still running — turn it off!</Example>
+    </Synset>
+    <Synset id="oewn-01553629-s" ili="i8510" members="oewn-debauched-a oewn-degenerate-a oewn-degraded-a oewn-dissipated-a oewn-dissolute-a oewn-libertine-a oewn-profligate-a oewn-riotous-a oewn-fast-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>unrestrained by convention or morality</Definition>
+      <Example>Congreve draws a debauched aristocratic society</Example>
+      <Example>deplorably dissipated and degraded</Example>
+      <Example>riotous living</Example>
+      <Example>fast women</Example>
+    </Synset>
+    <Synset id="oewn-01587371-v" ili="i29651" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.contact">
+      <Definition>shape by rotating on a lathe or cutting device or a wheel</Definition>
+      <Example>turn the legs of the table</Example>
+      <Example>turn the clay on the wheel</Example>
+    </Synset>
+    <Synset id="oewn-01645087-v" ili="i29946" members="oewn-run-v" partOfSpeech="v" lexfile="verb.creation">
+      <Definition>conduct to completion</Definition>
+      <Example>run an errand</Example>
+    </Synset>
+    <Synset id="oewn-01721028-v" ili="i30329" members="oewn-play-v oewn-run-v" partOfSpeech="v" lexfile="verb.creation">
+      <Definition>cause to emit recorded audio or video</Definition>
+      <Example>They ran the tapes over and over again</Example>
+      <Example>I&apos;ll play you my favorite record</Example>
+      <Example>He never tires of playing that video</Example>
+    </Synset>
+    <Synset id="oewn-01743695-v" ili="i30436" members="oewn-grow-v oewn-raise-v oewn-farm-v oewn-produce-v" partOfSpeech="v" lexfile="verb.creation">
+      <Definition>cultivate by growing, often involving improvements by means of agricultural techniques</Definition>
+      <Example>The Bordeaux region produces great red wines</Example>
+      <Example>They produce good ham in Parma</Example>
+      <Example>We grow wheat here</Example>
+      <Example>We raise hogs here</Example>
+    </Synset>
+    <Synset id="oewn-01745745-v" ili="i30444" members="oewn-plow-v oewn-plough-v oewn-turn-v" partOfSpeech="v" lexfile="verb.creation">
+      <Definition>to break and turn over earth especially with a plow</Definition>
+      <Example>Farmer Jones plowed his east field last week</Example>
+      <Example>turn the earth in the spring</Example>
+    </Synset>
+    <Synset id="oewn-01750167-v" ili="i30464" members="oewn-carry-v oewn-run-v" partOfSpeech="v" lexfile="verb.creation">
+      <Definition>include as the content; broadcast or publicize</Definition>
+      <Example>We ran the ad three times</Example>
+      <Example>This paper carries a restaurant review</Example>
+      <Example>All major networks carried the press conference</Example>
+    </Synset>
+    <Synset id="oewn-01778636-s" ili="i9730" members="oewn-fast-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>resistant to destruction or fading</Definition>
+      <Example>fast colors</Example>
+    </Synset>
+    <Synset id="oewn-01815408-v" ili="i30784" members="oewn-hope-v" partOfSpeech="v" lexfile="verb.emotion">
+      <Definition>be optimistic; be full of hope; have hopes</Definition>
+      <Example>I am still hoping that all will turn out well</Example>
+    </Synset>
+    <Synset id="oewn-01830665-v" ili="i30859" members="oewn-hope-v oewn-trust-v oewn-desire-v" partOfSpeech="v" lexfile="verb.emotion">
+      <Definition>expect and wish</Definition>
+      <Example>I trust you will behave better from now on</Example>
+      <Example>I hope she understands that she cannot expect a raise</Example>
+    </Synset>
+    <Synset id="oewn-01858313-n" ili="i45102" members="oewn-goose-n" partOfSpeech="n" lexfile="noun.animal">
+      <Definition>web-footed long-necked typically gregarious migratory aquatic birds usually larger and less aquatic than ducks</Definition>
+    </Synset>
+    <Synset id="oewn-01868024-v" ili="i31022" members="oewn-ply-v oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>travel a route regularly</Definition>
+      <Example>Ships ply the waters near the coast</Example>
+    </Synset>
+    <Synset id="oewn-01896254-s" ili="i10368" members="oewn-big-a oewn-swelled-a oewn-vainglorious-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>feeling self-importance</Definition>
+      <Example>too big for his britches</Example>
+      <Example>had a swelled head</Example>
+      <Example>he was swelled with pride</Example>
+    </Synset>
+    <Synset id="oewn-01896819-s" ili="i10370" members="oewn-boastful-a oewn-braggart-a oewn-bragging-a oewn-braggy-a oewn-big-a oewn-cock-a-hoop-a oewn-crowing-a oewn-self-aggrandizing-a oewn-self-aggrandising-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>exhibiting self-importance</Definition>
+      <Example>big talk</Example>
+    </Synset>
+    <Synset id="oewn-01911251-v" ili="i31251" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>to change orientation or direction</Definition>
+      <Example>Turn towards me</Example>
+      <Example>The mugger turned and fled before I could see his face</Example>
+    </Synset>
+    <Synset id="oewn-01913805-v" ili="i31263" members="oewn-turn-v oewn-move_around-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>pass to the other side of</Definition>
+      <Example>turn the corner</Example>
+      <Example>move around the obstacle</Example>
+    </Synset>
+    <Synset id="oewn-01918940-v" ili="i31289" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>cover by running; run a certain distance</Definition>
+      <Example>She ran 10 miles that day</Example>
+    </Synset>
+    <Synset id="oewn-01930264-v" ili="i31347" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>move fast by using one&apos;s feet, with one foot off the ground at any given time</Definition>
+      <Example>Don&apos;t run — you&apos;ll be out of breath</Example>
+      <Example>The children ran to the store</Example>
+    </Synset>
+    <Synset id="oewn-01930937-v" ili="i31349" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>travel rapidly, by any (unspecified) means</Definition>
+      <Example>Run to the store!</Example>
+      <Example>She always runs to Italy, because she has a lover there</Example>
+    </Synset>
+    <Synset id="oewn-01931400-v" ili="i31352" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>run with the ball; in such sports as football</Definition>
+    </Synset>
+    <Synset id="oewn-01931700-v" ili="i31354" members="oewn-run-v oewn-consort-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>keep company</Definition>
+      <Example>the heifers run with the bulls to produce offspring</Example>
+    </Synset>
+    <Synset id="oewn-01931856-v" ili="i31355" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>sail before the wind</Definition>
+    </Synset>
+    <Synset id="oewn-01955796-v" ili="i31487" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>channel one&apos;s attention, interest, thought, or attention toward or away from something</Definition>
+      <Example>The pedophile turned to boys for satisfaction</Example>
+      <Example>people turn to mysticism at the turn of a millennium</Example>
+    </Synset>
+    <Synset id="oewn-01956067-v" ili="i31488" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>to send or let go</Definition>
+      <Example>They turned away the crowd at the gate of the governor&apos;s mansion</Example>
+    </Synset>
+    <Synset id="oewn-02064720-v" ili="i32049" members="oewn-run-v oewn-bleed-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>be diffused</Definition>
+      <Example>These dyes and colors are guaranteed not to run</Example>
+    </Synset>
+    <Synset id="oewn-02070867-v" ili="i32080" members="oewn-run-v oewn-flow-v oewn-feed-v oewn-course-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>move along, of liquids</Definition>
+      <Example>Water flowed into the cave</Example>
+      <Example>the Missouri feeds into the Mississippi</Example>
+    </Synset>
+    <Synset id="oewn-02079296-v" ili="i32121" members="oewn-scat-v oewn-run-v oewn-scarper-v oewn-turn_tail-v oewn-lam-v oewn-run_away-v oewn-hightail_it-v oewn-bunk-v oewn-head_for_the_hills-v oewn-take_to_the_woods-v oewn-escape-v oewn-fly_the_coop-v oewn-break_away-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>flee; take to one&apos;s heels; cut and run</Definition>
+      <Example>If you see this man, run!</Example>
+      <Example>The burglars escaped before the police showed up</Example>
+    </Synset>
+    <Synset id="oewn-02093687-v" ili="i32199" members="oewn-turn-v oewn-turn_over-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>cause to move around a center so as to show another side of</Definition>
+      <Example>turn a page of a book</Example>
+    </Synset>
+    <Synset id="oewn-02094251-v" ili="i32202" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>cause to move around or rotate</Definition>
+      <Example>turn a key</Example>
+      <Example>turn your palm this way</Example>
+    </Synset>
+    <Synset id="oewn-02094702-v" ili="i32204" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>cause to move along an axis or into a new direction</Definition>
+      <Example>turn your face to the wall</Example>
+      <Example>turn the car around</Example>
+      <Example>turn your dance partner around</Example>
+    </Synset>
+    <Synset id="oewn-02096576-v" ili="i32214" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>cause an animal to move fast</Definition>
+      <Example>run the dogs</Example>
+    </Synset>
+    <Synset id="oewn-02100445-v" ili="i32237" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>move around an axis or a center</Definition>
+      <Example>The wheels are turning</Example>
+    </Synset>
+    <Synset id="oewn-02104107-v" ili="i32261" members="oewn-run-v" partOfSpeech="v" lexfile="verb.motion">
+      <Definition>move about freely and without restraint, or act as if running around in an uncontrolled way</Definition>
+      <Example>who are these people running around in the building?</Example>
+      <Example>She runs around telling everyone of her troubles</Example>
+      <Example>let the dogs run free</Example>
+    </Synset>
+    <Synset id="oewn-02123649-n" ili="i46591" members="oewn-feline-n oewn-felid-n oewn-cat-n" partOfSpeech="n" lexfile="noun.animal">
+      <Definition>any of various lithe-bodied roundheaded fissiped mammals, many with retractile claws</Definition>
+    </Synset>
+    <Synset id="oewn-02124272-n" ili="i46593" members="oewn-cat-n oewn-true_cat-n" partOfSpeech="n" lexfile="noun.animal">
+      <Definition>feline mammal usually having thick soft fur and no ability to roar</Definition>
+    </Synset>
+    <Synset id="oewn-02130460-n" ili="i46635" members="oewn-big_cat-n oewn-cat-n" partOfSpeech="n" lexfile="noun.animal">
+      <Definition>any of several large cats typically able to roar and living in the wild</Definition>
+    </Synset>
+    <Synset id="oewn-02170904-v" ili="i32586" members="oewn-study-v oewn-consider-v" partOfSpeech="v" lexfile="verb.perception">
+      <Definition>give careful consideration to</Definition>
+      <Example>consider the possibility of moving</Example>
+    </Synset>
+    <Synset id="oewn-02216730-v" ili="i32804" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>get by buying and selling</Definition>
+      <Example>the company turned a good profit after a year</Example>
+    </Synset>
+    <Synset id="oewn-02232523-v" ili="i32883" members="oewn-abandon-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>give up with the intent of never claiming again</Definition>
+      <Example>Abandon your life to God</Example>
+      <Example>She gave up her children to her ex-husband when she moved to Tahiti</Example>
+      <Example>We gave the drowning victim up for dead</Example>
+    </Synset>
+    <Synset id="oewn-02240011-v" ili="i32917" members="oewn-surrender-v oewn-cede-v oewn-deliver-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>relinquish possession or control over</Definition>
+      <Example>The squatters had to surrender the building after the police moved in</Example>
+    </Synset>
+    <Synset id="oewn-02245246-s" ili="i12368" members="oewn-fast-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>(of surfaces) conducive to rapid speeds</Definition>
+      <Example>a fast road</Example>
+      <Example>grass courts are faster than clay</Example>
+    </Synset>
+    <Synset id="oewn-02247038-v" ili="i32952" members="oewn-run-v oewn-black_market-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>deal in illegally, such as arms or liquor</Definition>
+    </Synset>
+    <Synset id="oewn-02308311-v" ili="i33248" members="oewn-forfeit-v oewn-give_up-v oewn-throw_overboard-v oewn-waive-v oewn-forgo-v oewn-forego-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>lose (something) or lose the right to (something) by some error, offense, or crime</Definition>
+      <Example>you&apos;ve forfeited your right to name your successor</Example>
+      <Example>forfeited property</Example>
+    </Synset>
+    <Synset id="oewn-02321284-v" ili="i33317" members="oewn-release-v oewn-relinquish-v oewn-resign-v oewn-free-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>part with a possession or right</Definition>
+      <Example>I am relinquishing my bedroom to the long-term house guest</Example>
+      <Example>resign a claim to the throne</Example>
+    </Synset>
+    <Synset id="oewn-02350643-v" ili="i33468" members="oewn-spare-v oewn-give_up-v oewn-part_with-v oewn-dispense_with-v" partOfSpeech="v" lexfile="verb.possession">
+      <Definition>give up what is not strictly needed</Definition>
+      <Example>he asked if they could spare one of their horses to speed his journey</Example>
+    </Synset>
+    <Synset id="oewn-02372031-v" ili="i33602" members="oewn-vacate-v oewn-resign-v oewn-renounce-v oewn-give_up-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>leave (a job, post, or position) voluntarily</Definition>
+      <Example>She vacated the position when she got pregnant</Example>
+      <Example>The chairman resigned when he was found to have misappropriated funds</Example>
+    </Synset>
+    <Synset id="oewn-02411163-s" ili="i13298" members="oewn-big-a oewn-heavy-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>prodigious</Definition>
+      <Example>big spender</Example>
+      <Example>big eater</Example>
+      <Example>heavy investor</Example>
+    </Synset>
+    <Synset id="oewn-02427021-v" ili="i33843" members="oewn-run-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>set animals loose to graze</Definition>
+    </Synset>
+    <Synset id="oewn-02428446-v" ili="i33852" members="oewn-give_up-v oewn-allow-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>allow the other (baseball) team to score</Definition>
+      <Example>give up a run</Example>
+    </Synset>
+    <Synset id="oewn-02448714-v" ili="i33943" members="oewn-operate-v oewn-run-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>direct or control; projects, businesses, etc.</Definition>
+      <Example>She is running a relief operation in the Sudan</Example>
+    </Synset>
+    <Synset id="oewn-02530978-v" ili="i34334" members="oewn-run-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>make without a miss</Definition>
+    </Synset>
+    <Synset id="oewn-02568340-v" ili="i34502" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>accomplish by rotating</Definition>
+      <Example>turn a somersault</Example>
+      <Example>turn cartwheels</Example>
+    </Synset>
+    <Synset id="oewn-02569242-v" ili="i34507" members="oewn-run-v oewn-execute-v" partOfSpeech="v" lexfile="verb.social">
+      <Definition>carry out a process or program, as on a computer or a machine</Definition>
+      <Example>Run the dishwasher</Example>
+      <Example>run a new program on the Mac</Example>
+      <Example>the computer executed the instruction</Example>
+    </Synset>
+    <Synset id="oewn-02576313-s" ili="i14235" members="oewn-glad-a oewn-happy-a" partOfSpeech="s" lexfile="adj.all">
+      <Definition>eagerly disposed to act or to be of service</Definition>
+      <Example>glad to help</Example>
+    </Synset>
+    <Synset id="oewn-02618269-v" ili="i34733" members="oewn-run-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>occur persistently</Definition>
+      <Example>Musical talent runs in the family</Example>
+    </Synset>
+    <Synset id="oewn-02630344-v" ili="i34794" members="oewn-originate-v oewn-arise-v oewn-rise-v oewn-develop-v oewn-uprise-v oewn-spring_up-v oewn-grow-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>come into existence; take on form or shape</Definition>
+      <Example>A new religious movement originated in that country</Example>
+      <Example>a love that sprang up from friendship</Example>
+      <Example>the idea for the book grew out of a short story</Example>
+      <Example>An interesting phenomenon uprose</Example>
+    </Synset>
+    <Synset id="oewn-02632685-v" ili="i34806" members="oewn-become-v oewn-turn-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>undergo a change or development</Definition>
+      <Example>The water turned into ice</Example>
+      <Example>Her former friend became her worst enemy</Example>
+      <Example>He turned traitor</Example>
+    </Synset>
+    <Synset id="oewn-02633015-v" ili="i34807" members="oewn-turn-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>cause to change or turn into something different;assume new characteristics</Definition>
+      <Example>The princess turned the frog into a prince by kissing him</Example>
+      <Example>The alchemists tried to turn lead into gold</Example>
+    </Synset>
+    <Synset id="oewn-02653599-v" ili="i34905" members="oewn-prevail-v oewn-persist-v oewn-die_hard-v oewn-run-v oewn-endure-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>continue to exist</Definition>
+      <Example>These stories die hard</Example>
+      <Example>The legend of Elvis endures</Example>
+    </Synset>
+    <Synset id="oewn-02654212-v" ili="i34908" members="oewn-run-v oewn-run_for-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>extend or continue for a certain period of time</Definition>
+      <Example>The film runs 5 hours</Example>
+    </Synset>
+    <Synset id="oewn-02686624-v" ili="i35062" members="oewn-discontinue-v oewn-stop-v oewn-cease-v oewn-give_up-v oewn-quit-v oewn-lay_off-v oewn-break-v oewn-break_off-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>put an end to a state or an activity</Definition>
+      <Example>Quit teasing your little brother</Example>
+    </Synset>
+    <Synset id="oewn-02691775-v" ili="i35084" members="oewn-run-v oewn-go-v oewn-pass-v oewn-lead-v oewn-extend-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>stretch out over a distance, space, time, or scope; run or extend between two points or beyond a certain point</Definition>
+      <Example>Service runs all the way to Cranbury</Example>
+      <Example>His knowledge doesn&apos;t go very far</Example>
+      <Example>My memory extends back to my fourth year of life</Example>
+      <Example>The facts extend beyond a consideration of her personal assets</Example>
+    </Synset>
+    <Synset id="oewn-02692467-v" ili="i35086" members="oewn-run-v oewn-lead-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>cause something to pass or lead somewhere</Definition>
+      <Example>Run the wire behind the cabinet</Example>
+    </Synset>
+    <Synset id="oewn-02725274-v" ili="i35262" members="oewn-tend-v oewn-be_given-v oewn-lean-v oewn-incline-v oewn-run-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>have a tendency or disposition to do or be something; be inclined</Definition>
+      <Example>She tends to be nervous before her lectures</Example>
+      <Example>These dresses run small</Example>
+      <Example>He inclined to corpulence</Example>
+    </Synset>
+    <Synset id="oewn-02726779-v" ili="i35269" members="oewn-run-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>be affected by; be subjected to</Definition>
+      <Example>run a temperature</Example>
+      <Example>run a risk</Example>
+    </Synset>
+    <Synset id="oewn-02727159-v" ili="i35271" members="oewn-run-v oewn-go-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>have a particular form</Definition>
+      <Example>the story or argument runs as follows</Example>
+      <Example>as the saying goes …</Example>
+    </Synset>
+    <Synset id="oewn-02732914-v" ili="i35302" members="oewn-range-v oewn-run-v" partOfSpeech="v" lexfile="verb.stative">
+      <Definition>change or be different within limits</Definition>
+      <Example>Estimates for the losses in the earthquake range as high as $2 billion</Example>
+      <Example>Interest rates run from 5 to 10 percent</Example>
+      <Example>The instruments ranged from tuba to cymbals</Example>
+      <Example>My students range from very bright to dull</Example>
+    </Synset>
+    <Synset id="oewn-02886585-n" ili="i51036" members="oewn-box-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>a (usually rectangular) container; may have a lid</Definition>
+      <Example>he rummaged through a box of spare parts</Example>
+    </Synset>
+    <Synset id="oewn-02887252-n" ili="i51037" members="oewn-box-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>separate partitioned area in a public place for a few people</Definition>
+      <Example>the sentry stayed in his box to avoid the cold</Example>
+    </Synset>
+    <Synset id="oewn-02887466-n" ili="i51038" members="oewn-box-n oewn-loge-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>private area in a theater or grandstand where a small group can watch the performance</Definition>
+      <Example>the royal box was empty</Example>
+    </Synset>
+    <Synset id="oewn-02887691-n" ili="i51039" members="oewn-box-n oewn-box_seat-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>the driver&apos;s seat on a coach</Definition>
+      <Example>an armed guard sat in the box with the driver</Example>
+    </Synset>
+    <Synset id="oewn-02887848-n" ili="i51040" members="oewn-box-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>any one of several designated areas on a ball field where the batter or catcher or coaches are positioned</Definition>
+      <Example>the umpire warned the batter to stay in the batter&apos;s box</Example>
+    </Synset>
+    <Synset id="oewn-02986962-n" ili="i51642" members="oewn-Caterpillar-n oewn-cat-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>a large tracked vehicle that is propelled by two endless metal belts; frequently used for moving earth in construction and farm work</Definition>
+    </Synset>
+    <Synset id="oewn-02989061-n" ili="i51653" members="oewn-cat-o-ap--nine-tails-n oewn-cat-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>a whip with nine knotted cords</Definition>
+      <Example>British sailors feared the cat</Example>
+    </Synset>
+    <Synset id="oewn-03614083-n" ili="i55335" members="oewn-kat-n oewn-khat-n oewn-qat-n oewn-quat-n oewn-cat-n oewn-Arabian_tea-n oewn-African_tea-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>the leaves of the shrub Catha edulis which are chewed like tobacco or used to make tea; has the effect of a euphoric stimulant</Definition>
+      <Example>in Yemen, kat is used daily by 85% of adults</Example>
+    </Synset>
+    <Synset id="oewn-04234206-n" ili="i58990" members="oewn-sketch-n oewn-study-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>preliminary drawing for later elaboration</Definition>
+      <Example>he made several studies before starting to paint</Example>
+    </Synset>
+    <Synset id="oewn-04352106-n" ili="i59720" members="oewn-study-n" partOfSpeech="n" lexfile="noun.artifact">
+      <Definition>a room used for reading and writing and studying</Definition>
+      <Example>he knocked lightly on the closed door of the study</Example>
+    </Synset>
+    <Synset id="oewn-04855493-n" ili="i62466" members="oewn-hope-n" partOfSpeech="n" lexfile="noun.attribute">
+      <Definition>one of the three Christian virtues</Definition>
+    </Synset>
+    <Synset id="oewn-05052992-n" ili="i63517" members="oewn-run-n" partOfSpeech="n" lexfile="noun.attribute">
+      <Definition>an unbroken chronological sequence</Definition>
+      <Example>the play had a long run on Broadway</Example>
+      <Example>the team enjoyed a brief run of victories</Example>
+    </Synset>
+    <Synset id="oewn-05713302-n" ili="i66891" members="oewn-study-n" partOfSpeech="n" lexfile="noun.cognition">
+      <Definition>a state of deep mental absorption</Definition>
+      <Example>she is in a deep study</Example>
+    </Synset>
+    <Synset id="oewn-05763880-n" ili="i67148" members="oewn-study-n oewn-work-n" partOfSpeech="n" lexfile="noun.cognition">
+      <Definition>applying the mind to learning and understanding a subject (especially by reading)</Definition>
+      <Example>mastering a second language requires a lot of work</Example>
+      <Example>no schools offer graduate study in interior design</Example>
+    </Synset>
+    <Synset id="oewn-05792247-n" ili="i67286" members="oewn-cogitation-n oewn-study-n" partOfSpeech="n" lexfile="noun.cognition">
+      <Definition>attentive consideration and meditation</Definition>
+      <Example>after much cogitation he rejected the offer</Example>
+    </Synset>
+    <Synset id="oewn-05959600-n" ili="i68093" members="oewn-promise-n oewn-hope-n" partOfSpeech="n" lexfile="noun.cognition">
+      <Definition>grounds for feeling hopeful about the future</Definition>
+      <Example>there is little or no promise that he will recover</Example>
+    </Synset>
+    <Synset id="oewn-06005806-n" ili="i68324" members="oewn-discipline-n oewn-subject-n oewn-subject_area-n oewn-subject_field-n oewn-field-n oewn-field_of_study-n oewn-study-n oewn-bailiwick-n" partOfSpeech="n" lexfile="noun.cognition">
+      <Definition>a branch of knowledge</Definition>
+      <Example>in what discipline is his doctorate?</Example>
+      <Example>teachers should be well trained in their subject</Example>
+      <Example>anthropology is the study of human beings</Example>
+    </Synset>
+    <Synset id="oewn-06905066-n" ili="i72718" members="oewn-act-n oewn-routine-n oewn-number-n oewn-turn-n oewn-bit-n" partOfSpeech="n" lexfile="noun.communication">
+      <Definition>a short performance that is part of a longer program</Definition>
+      <Example>he did his act three times every evening</Example>
+      <Example>she had a catchy little routine</Example>
+      <Example>it was one of the best numbers he ever did</Example>
+    </Synset>
+    <Synset id="oewn-07062685-n" ili="i73708" members="oewn-study-n" partOfSpeech="n" lexfile="noun.communication">
+      <Definition>a composition intended to develop one aspect of the performer&apos;s technique</Definition>
+      <Example>a study in spiccato bowing</Example>
+    </Synset>
+    <Synset id="oewn-07233130-n" ili="i74593" members="oewn-report-n oewn-study-n oewn-written_report-n" partOfSpeech="n" lexfile="noun.communication">
+      <Definition>a written document describing the findings of some individual or group</Definition>
+      <Example>this accords with the recent study by Hill and Dale</Example>
+    </Synset>
+    <Synset id="oewn-07366212-n" ili="i75327" members="oewn-turning-n oewn-turn-n" partOfSpeech="n" lexfile="noun.event">
+      <Definition>a movement in a new direction</Definition>
+      <Example>the turning of the wind</Example>
+    </Synset>
+    <Synset id="oewn-07422377-n" ili="i75635" members="oewn-discharge-n oewn-outpouring-n oewn-run-n" partOfSpeech="n" lexfile="noun.event">
+      <Definition>the pouring forth of a fluid</Definition>
+    </Synset>
+    <Synset id="oewn-07437965-n" ili="i75723" members="oewn-turn-n oewn-turn_of_events-n oewn-twist-n" partOfSpeech="n" lexfile="noun.event">
+      <Definition>an unforeseen development</Definition>
+      <Example>events suddenly took an awkward turn</Example>
+    </Synset>
+    <Synset id="oewn-07457610-n" ili="i75826" members="oewn-run-n oewn-ladder-n oewn-ravel-n" partOfSpeech="n" lexfile="noun.event">
+      <Definition>a row of unravelled stitches</Definition>
+      <Example>she got a run in her stocking</Example>
+    </Synset>
+    <Synset id="oewn-07475061-n" ili="i75920" members="oewn-footrace-n oewn-foot_race-n oewn-run-n" partOfSpeech="n" lexfile="noun.event">
+      <Definition>a race run on foot</Definition>
+      <Example>she broke the record for the half-mile run</Example>
+    </Synset>
+    <Synset id="oewn-07488069-n" ili="i76002" members="oewn-political_campaign-n oewn-campaign-n oewn-run-n" partOfSpeech="n" lexfile="noun.event">
+      <Definition>a race between candidates for elective office</Definition>
+      <Example>I managed his campaign for governor</Example>
+      <Example>he is raising money for a Senate run</Example>
+    </Synset>
+    <Synset id="oewn-07526972-n" ili="i76226" members="oewn-hope-n" partOfSpeech="n" lexfile="noun.feeling">
+      <Definition>a specific instance of feeling hopeful</Definition>
+      <Example>it revived their hope of winning the pennant</Example>
+    </Synset>
+    <Synset id="oewn-07556441-n" ili="i76382" members="oewn-hope-n" partOfSpeech="n" lexfile="noun.feeling">
+      <Definition>the general feeling that some desire will be fulfilled</Definition>
+      <Example>in spite of his troubles he never gave up hope</Example>
+    </Synset>
+    <Synset id="oewn-07662430-n" ili="i77078" members="oewn-goose-n" partOfSpeech="n" lexfile="noun.food">
+      <Definition>flesh of a goose (domestic or wild)</Definition>
+    </Synset>
+    <Synset id="oewn-08477596-n" ili="i81514" members="oewn-streak-n oewn-run-n" partOfSpeech="n" lexfile="noun.group">
+      <Definition>an unbroken series of events</Definition>
+      <Example>had a streak of bad luck</Example>
+      <Example>Nicklaus had a run of birdies</Example>
+    </Synset>
+    <Synset id="oewn-09438816-n" ili="i86082" members="oewn-rivulet-n oewn-rill-n oewn-run-n oewn-runnel-n oewn-streamlet-n" partOfSpeech="n" lexfile="noun.object">
+      <Definition>a small stream</Definition>
+    </Synset>
+    <Synset id="oewn-09571240-n" ili="i86839" members="oewn-satyr-n oewn-forest_god-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>one of a class of woodland deities; attendant on Bacchus; identified with Roman fauns</Definition>
+    </Synset>
+    <Synset id="oewn-09919605-n" ili="i88860" members="oewn-cat-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>a spiteful woman gossip</Definition>
+      <Example>what a cat she is!</Example>
+    </Synset>
+    <Synset id="oewn-09937051-n" ili="i88964" members="oewn-child-n oewn-kid-n oewn-youngster-n oewn-minor-n oewn-shaver-n oewn-nipper-n oewn-small_fry-n oewn-tiddler-n oewn-tike-n oewn-tyke-n oewn-fry-n oewn-nestling-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>a young person of either sex</Definition>
+      <Example>she writes books for children</Example>
+      <Example>they&apos;re just kids</Example>
+      <Example>‘tiddler’ is a British term for youngster</Example>
+    </Synset>
+    <Synset id="oewn-09937706-n" ili="i88965" members="oewn-child-n oewn-kid-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>a human offspring (son or daughter) of any age</Definition>
+      <Example>they had three children</Example>
+      <Example>they were able to send their kids to college</Example>
+    </Synset>
+    <Synset id="oewn-09938012-n" ili="i88966" members="oewn-child-n oewn-baby-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>an immature childish person</Definition>
+      <Example>he remained a child in practical matters as long as he lived</Example>
+      <Example>stop being a baby!</Example>
+    </Synset>
+    <Synset id="oewn-09938220-n" ili="i88967" members="oewn-child-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>a member of a clan or tribe</Definition>
+      <Example>the children of Israel</Example>
+    </Synset>
+    <Synset id="oewn-10172934-n" ili="i93129" members="oewn-guy-n oewn-cat-n oewn-hombre-n oewn-bozo-n oewn-sod-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>an informal term for a youth or man</Definition>
+      <Example>a nice guy</Example>
+      <Example>the guy&apos;s only doing it for some doll</Example>
+      <Example>the poor sod couldn&apos;t even buy a drink</Example>
+    </Synset>
+    <Synset id="oewn-10177319-n" ili="i90393" members="oewn-fathead-n oewn-goof-n oewn-goofball-n oewn-bozo-n oewn-jackass-n oewn-goose-n oewn-cuckoo-n oewn-twat-n oewn-zany-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>a man who is a stupid incompetent fool</Definition>
+    </Synset>
+    <Synset id="oewn-10204565-n" ili="i90564" members="oewn-hope-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>someone (or something) on which expectations are centered</Definition>
+      <Example>he was their best hope for a victory</Example>
+    </Synset>
+    <Synset id="oewn-10572408-n" ili="i92719" members="oewn-satyr-n oewn-lecher-n oewn-lech-n oewn-letch-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>man with strong sexual desires</Definition>
+    </Synset>
+    <Synset id="oewn-10685903-n" ili="i93385" members="oewn-study-n" partOfSpeech="n" lexfile="noun.person">
+      <Definition>someone who memorizes quickly and easily (as the lines for a part in a play)</Definition>
+      <Example>he is a quick study</Example>
+    </Synset>
+    <Synset id="oewn-12766866-n" ili="i103816" members="oewn-box-n oewn-boxwood-n" partOfSpeech="n" lexfile="noun.plant">
+      <Definition>evergreen shrubs or small trees</Definition>
+    </Synset>
+    <Synset id="oewn-13782269-n" ili="i109188" members="oewn-run-n" partOfSpeech="n" lexfile="noun.quantity">
+      <Definition>the production achieved during a continuous period of operation (of a machine or factory etc.)</Definition>
+      <Example>a daily run of 100,000 gallons of paint</Example>
+    </Synset>
+    <Synset id="oewn-13787764-n" ili="i109222" members="oewn-box-n oewn-boxful-n" partOfSpeech="n" lexfile="noun.quantity">
+      <Definition>the quantity contained in a box</Definition>
+      <Example>he gave her a box of chocolates</Example>
+    </Synset>
+    <Synset id="oewn-13891966-n" ili="i109810" members="oewn-bend-n oewn-crook-n oewn-twist-n oewn-turn-n" partOfSpeech="n" lexfile="noun.shape">
+      <Definition>a circular segment of a curve</Definition>
+      <Example>a bend in the road</Example>
+      <Example>a crook in the path</Example>
+    </Synset>
+    <Synset id="oewn-13906151-n" ili="i109894" members="oewn-box-n" partOfSpeech="n" lexfile="noun.shape">
+      <Definition>a rectangular drawing</Definition>
+      <Example>the flowchart contained many boxes</Example>
+    </Synset>
+    <Synset id="oewn-14019420-n" ili="i110484" members="oewn-run-n" partOfSpeech="n" lexfile="noun.state">
+      <Definition>unrestricted freedom to use</Definition>
+      <Example>he has the run of the house</Example>
+    </Synset>
+    <Synset id="oewn-14432355-n" ili="i112727" members="oewn-corner-n oewn-box-n" partOfSpeech="n" lexfile="noun.state">
+      <Definition>a predicament from which a skillful or graceful escape is impossible</Definition>
+      <Example>his lying got him into a tight corner</Example>
+    </Synset>
+    <Synset id="oewn-15281525-n" ili="i117420" members="oewn-turn-n oewn-bout-n oewn-round-n" partOfSpeech="n" lexfile="noun.time">
+      <Definition>(sports) a division of a game during which one team is on the offensive</Definition>
+    </Synset>
+    <Synset id="oewn-15286931-n" ili="i117447" members="oewn-run-n" partOfSpeech="n" lexfile="noun.time">
+      <Definition>the continuous period of time during which something (a machine or a factory) operates or continues in operation</Definition>
+      <Example>the assembly line was on a 12-hour run</Example>
+    </Synset>
+    <Synset id="oewn-15317305-n" ili="i117610" members="oewn-go-n oewn-spell-n oewn-tour-n oewn-turn-n" partOfSpeech="n" lexfile="noun.time">
+      <Definition>a time period for working (after which you will be relieved by someone else)</Definition>
+      <Example>it&apos;s my go</Example>
+      <Example>a spell of work</Example>
+    </Synset>
+  </Lexicon>
+</LexicalResource>

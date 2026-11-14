@@ -150,6 +150,27 @@ class ShellWindowPolicyTest {
     assertEquals(listOf(10, 9, 8, 7), plan.mount)
   }
 
+  // ── adaptive: auto-scroll ─────────────────────────────────────────────────
+
+  @Test fun `a long auto-scroll at its fastest never reaches a document that is not loaded`() {
+    // 60 lines a minute of 30 px text at 1.85 line spacing: about 56 CSS px a second, the fastest auto-scroll.
+    val speed = 60 * 30 * 1.85 / 60
+    val slots = book(40).toMutableList()
+    var at = y
+    // Ten slots' worth, re-planned every eighth of a viewport (about two seconds of scrolling at this speed).
+    while (at < y + 10 * vp) {
+      val plan = plan(slots, velocity = speed, direction = 1, at = at)
+      plan.unmount.forEach { slots[it] = slot() }
+      // Loads finish before the next plan: two seconds is far more than the 300 ms a load takes.
+      plan.mount.forEach { slots[it] = slot(state = "live") }
+      val bottom = ((at + vp) / vp).toInt().coerceAtMost(slots.lastIndex)
+      val next = (bottom + 1).coerceAtMost(slots.lastIndex)
+      assertEquals("slot $bottom under the viewport at y=$at", "live", slots[bottom].getString("state"))
+      assertEquals("slot $next ahead of the viewport at y=$at", "live", slots[next].getString("state"))
+      at += vp / 8
+    }
+  }
+
   // ── adaptive: weight ──────────────────────────────────────────────────────
 
   @Test fun `over the budget the heavy far document goes before the light near one`() {
@@ -218,9 +239,10 @@ class ShellWindowPolicyTest {
     loadMs: Double = 300.0,
     budget: Double = 192 * mb,
     preparing: Boolean = false,
+    at: Double = y,
   ): Plan {
     val input = JSONObject()
-      .put("slots", JSONArray(slots)).put("y", y).put("vp", vp).put("policy", policy).put("tier", tier)
+      .put("slots", JSONArray(slots)).put("y", at).put("vp", vp).put("policy", policy).put("tier", tier)
       .put("velocity", velocity).put("direction", direction).put("stop", stop ?: JSONObject.NULL).put("stopIn", stopIn ?: JSONObject.NULL)
       .put("loadMs", loadMs).put("budget", budget).put("preparing", preparing)
     val raw = evaluate("JSON.stringify(QuireShellHost.planWindow($input))")

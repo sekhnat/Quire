@@ -3,6 +3,7 @@ package com.quire.reader.ui
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.quire.reader.ExternalOpenRequest
 import com.quire.reader.QuireApplication
 import com.quire.reader.data.scan.StoragePaths
 import com.quire.reader.ui.library.LibraryState
@@ -40,24 +41,50 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
 
   private var lastForegroundScan = 0L
 
+  /**
+   * Set when a book handed over by another app was opened before onboarding was finished: leaving that reader goes to
+   * onboarding, not to the library.
+   */
+  private var onboardingAfterReader = false
+
   init {
     viewModelScope.launch {
       // Restore detection runs first: on a restored install it overrides the backed-up onboarding
       // flag and applies the snapshot's settings, which the rest of routing and scanning then follow.
       app.restore.prepare()
-      val done = app.settings.onboardingDone.first()
-      val useCalibre = app.settings.useCalibre.first()
-      val access = StoragePaths.hasAllFilesAccess()
-      // A library of folder books is unreadable without all-files access, which no restore can carry over: ask for it first.
-      val needsAccess = done && !access && app.library.hasWatchedFolders()
-      if (done && !needsAccess) navigate(Destination.Library)
-      else openOnboarding(
-        OnboardingUiState(
-          onboardStep = if (needsAccess) OnboardStep.Access else OnboardStep.Welcome,
-          accessForLibrary = needsAccess, hasAccess = access, useCalibre = useCalibre,
-        ),
-      )
+      startingPoint()?.let(::openOnboarding) ?: navigate(Destination.Library)
+      // Books handed over by other apps (OpenBookActivity), once the app knows where it starts.
+      app.externalOpens.collect { request ->
+        if (request == null) return@collect
+        app.externalOpens.value = null
+        openExternal(request)
+      }
     }
+  }
+
+  /** Where the app starts: null for the library, or the onboarding to go through first. */
+  private suspend fun startingPoint(): OnboardingUiState? {
+    val done = app.settings.onboardingDone.first()
+    val useCalibre = app.settings.useCalibre.first()
+    val access = StoragePaths.hasAllFilesAccess()
+    // A library of folder books is unreadable without all-files access, which no restore can carry over: ask for it first.
+    val needsAccess = done && !access && app.library.hasWatchedFolders()
+    if (done && !needsAccess) return null
+    return OnboardingUiState(
+      onboardStep = if (needsAccess) OnboardStep.Access else OnboardStep.Welcome,
+      accessForLibrary = needsAccess, hasAccess = access, useCalibre = useCalibre,
+    )
+  }
+
+  /** A book another app handed over is in the library now: open it (even before onboarding), or show the message. */
+  private suspend fun openExternal(request: ExternalOpenRequest) {
+    request.message?.let(toaster::show)
+    if (request.bookId == null) {
+      if (startingPoint() == null) navigate(Destination.Library)
+      return
+    }
+    if (startingPoint() != null) onboardingAfterReader = true
+    openReader(ReaderRequest(request.bookId))
   }
 
   // ── navigation ───────────────────────────────────────────────────────────
@@ -86,7 +113,11 @@ class QuireViewModel(private val app: QuireApplication) : ViewModel(), AppNaviga
   private fun openOnboarding(initial: OnboardingUiState) =
     navigate { Destination.Onboard(features.onboarding(initial, restore, this, toaster, viewModelScope.childScope(), viewModelScope)) }
 
-  override fun openLibrary() = navigate(Destination.Library)
+  override fun openLibrary() {
+    if (!onboardingAfterReader) return navigate(Destination.Library)
+    onboardingAfterReader = false
+    viewModelScope.launch { startingPoint()?.let(::openOnboarding) ?: navigate(Destination.Library) }
+  }
 
   override fun openLibraryScope(scope: Scope) { library.setScope(scope); navigate(Destination.Library) }
 

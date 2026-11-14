@@ -48,6 +48,69 @@
             </intent-filter>
         </activity>
 
+        <!--
+          Book files from other apps: "Open with" and tapping a file (VIEW), and the share sheet's "Add to Quire" (SEND).
+          No UI; see OpenBookActivity. Only book types are claimed, never */*, so Quire is not offered for every file.
+          No task affinity: a file Quire cannot open leaves the user where they were instead of bringing up Quire's task.
+        -->
+        <activity
+            android:name=".OpenBookActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/x-mobipocket-ebook" />
+                <data android:mimeType="application/vnd.amazon.ebook" />
+                <data android:mimeType="application/vnd.amazon.mobi8-ebook" />
+                <data android:mimeType="application/x-mobi8-ebook" />
+            </intent-filter>
+            <!-- File managers often send books as octet-stream; matched by the name at the end of the URI (best effort).
+                 pathPattern rather than pathSuffix, which API 30 ignores (the filter would then claim every such file). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\..*\\.epub" />
+                <data android:pathPattern=".*\\..*\\..*\\.epub" />
+                <data android:pathPattern=".*\\.EPUB" />
+                <data android:pathPattern=".*\\..*\\.EPUB" />
+                <data android:pathPattern=".*\\..*\\..*\\.EPUB" />
+                <data android:pathPattern=".*\\.mobi" />
+                <data android:pathPattern=".*\\..*\\.mobi" />
+                <data android:pathPattern=".*\\..*\\..*\\.mobi" />
+                <data android:pathPattern=".*\\.MOBI" />
+                <data android:pathPattern=".*\\..*\\.MOBI" />
+                <data android:pathPattern=".*\\..*\\..*\\.MOBI" />
+                <data android:pathPattern=".*\\.azw3" />
+                <data android:pathPattern=".*\\..*\\.azw3" />
+                <data android:pathPattern=".*\\..*\\..*\\.azw3" />
+                <data android:pathPattern=".*\\.AZW3" />
+                <data android:pathPattern=".*\\..*\\.AZW3" />
+                <data android:pathPattern=".*\\..*\\..*\\.AZW3" />
+            </intent-filter>
+            <intent-filter android:label="@string/add_to_quire">
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/epub+zip" />
+                <data android:mimeType="application/x-mobipocket-ebook" />
+                <data android:mimeType="application/vnd.amazon.ebook" />
+                <data android:mimeType="application/vnd.amazon.mobi8-ebook" />
+                <data android:mimeType="application/x-mobi8-ebook" />
+            </intent-filter>
+        </activity>
+
         <!-- Media session for read aloud; only the system and this app are given the session (see ReadAloudService). -->
         <service
             android:name=".reader.ReadAloudService"

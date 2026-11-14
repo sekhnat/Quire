@@ -1,5 +1,9 @@
 package com.quire.reader.data.backup
 
+import com.quire.reader.data.BookEdits
+import com.quire.reader.data.EditField
+import com.quire.reader.data.db.BookEditEntity
+
 import androidx.room.withTransaction
 import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.db.BookEntity
@@ -96,6 +100,7 @@ class SnapshotImporter(
       bookmarks += mergeBookmarks(bookId, entry.bookmarks)
       highlights += mergeHighlights(bookId, entry.highlights)
       sessions += mergeSessions(bookId, entry.sessions)
+      entry.edits?.let { mergeEdits(bookId, it) }
     }
     return ImportResult(matched, tombstoned, states, bookmarks, highlights, tags, sessions)
   }
@@ -130,6 +135,24 @@ class SnapshotImporter(
       missingSince = entry.missingSince ?: now,
     )
     return db.books().upsert(book)
+  }
+
+  /**
+   * Takes the snapshot's edits for the fields this device has not edited itself; a local edit wins. The derived sort
+   * keys are worked out again here, so they always follow the rules of this build.
+   */
+  private suspend fun mergeEdits(bookId: Long, incoming: SnapshotEdits) {
+    var edit = db.edits().get(bookId) ?: BookEditEntity(bookId)
+    val now = clock()
+    fun take(field: EditField, value: String?) {
+      if (value == null || BookEdits.isEdited(edit, field)) return
+      edit = runCatching { BookEdits.apply(edit, field, value, now) }.getOrDefault(edit)
+    }
+    take(EditField.Title, incoming.title)
+    take(EditField.Authors, incoming.author)
+    take(EditField.Series, incoming.series)
+    take(EditField.SeriesIndex, incoming.seriesIndex?.toString())
+    db.edits().save(edit)
   }
 
   private suspend fun mergeTags(bookId: Long, incoming: List<String>): Int {

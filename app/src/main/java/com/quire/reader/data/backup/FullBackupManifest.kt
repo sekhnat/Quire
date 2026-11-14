@@ -8,8 +8,14 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/** The full-backup archive format this build writes; archives with a newer format are refused. */
-const val FULL_BACKUP_FORMAT_VERSION = 1
+/**
+ * The newest full-backup archive format this build reads; archives with a newer format are refused. Format 2 adds the
+ * user's fonts (`fonts/`); an archive without fonts is still written as format 1, so older builds can restore it.
+ */
+const val FULL_BACKUP_FORMAT_VERSION = 2
+
+/** The format an archive is written in: 2 only when it carries fonts, which format 1 readers would refuse. */
+fun formatFor(hasFonts: Boolean): Int = if (hasFonts) 2 else 1
 
 /** What a full backup holds besides the library database, the settings and the portable snapshot, which it always has. */
 @Serializable
@@ -27,6 +33,7 @@ data class BackupCounts(
   val indexedBooks: Int = 0,
   val covers: Int = 0,
   val importedBooks: Int = 0,
+  val fonts: Int = 0,
 )
 
 /** One archive entry after the manifest, with its uncompressed size. */
@@ -92,6 +99,8 @@ object BackupPaths {
   const val SETTINGS = "settings/settings.preferences_pb"
   const val COVERS = "covers/"
   const val IMPORTED = "imported/"
+  /** The user's font files (format 2). */
+  const val FONTS = "fonts/"
 
   private val FIXED = setOf(MANIFEST, SNAPSHOT, LIBRARY_DB, INDEX_DB, SETTINGS)
 
@@ -100,7 +109,8 @@ object BackupPaths {
    * `imported/`. Anything else (another folder, `..`, an absolute path) is refused, so an archive can never write outside
    * the places it is restored to.
    */
-  fun isAllowed(path: String): Boolean = path in FIXED || fileIn(path, COVERS) != null || fileIn(path, IMPORTED) != null
+  fun isAllowed(path: String): Boolean =
+    path in FIXED || fileIn(path, COVERS) != null || fileIn(path, IMPORTED) != null || fileIn(path, FONTS) != null
 
   /** The file name of [path] when it is a plain file directly inside [folder], else null. */
   fun fileIn(path: String, folder: String): String? =

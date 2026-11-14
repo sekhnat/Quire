@@ -15,6 +15,7 @@ import com.quire.reader.data.backup.BackupInterval
 import com.quire.reader.data.backup.SnapshotSettings
 import com.quire.reader.data.scan.StoragePaths
 import kotlinx.coroutines.flow.Flow
+import com.quire.reader.data.fonts.UserFontList
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -96,6 +97,10 @@ class SettingsStore(context: Context) {
   suspend fun setAdvancedReadingEnabled(v: Boolean) = store.edit { it[ADVANCED_READING_ENABLED] = v }
 
   /** How the reader behaves around the page: volume keys, screen-on, orientation. */
+  /** The fonts the user added (see UserFontLibrary). */
+  val userFonts: Flow<UserFontList> = store.data.map { UserFontList.fromJson(it[USER_FONTS]) ?: UserFontList() }
+  suspend fun setUserFonts(list: UserFontList) = store.edit { it[USER_FONTS] = list.toJson() }
+
   val readerControls: Flow<ReaderControls> = store.data.map { ReaderControls.fromJson(it[READER_CONTROLS]) ?: ReaderControls() }
   suspend fun setReaderControls(controls: ReaderControls) = store.edit { it[READER_CONTROLS] = controls.toJson() }
 
@@ -164,6 +169,7 @@ class SettingsStore(context: Context) {
       textSearchOrder = SearchOrder.entries.firstOrNull { it.name == prefs[TEXT_SEARCH_ORDER] }?.name ?: SearchOrder.Relevance.name,
       hiddenTags = prefs[HIDDEN_TAGS].orEmpty().sorted(),
       showWordCount = prefs[SHOW_WORD_COUNT] ?: false,
+      userFonts = UserFontList.fromJson(prefs[USER_FONTS]),
     )
   }
 
@@ -181,6 +187,8 @@ class SettingsStore(context: Context) {
     s.textSearchOrder?.let { setTextSearchOrder(SearchOrder.valueOf(it)) }
     s.hiddenTags?.let { setHiddenTags(it.toSet()) }
     s.showWordCount?.let { setShowWordCount(it) }
+    // Only the list travels in a snapshot; fonts whose files did not come back are skipped by the reader.
+    s.userFonts?.let { setUserFonts(it) }
   }
 
   companion object {
@@ -209,6 +217,7 @@ class SettingsStore(context: Context) {
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")
     private val ADVANCED_READING_ENABLED = booleanPreferencesKey("advanced_reading_enabled")
     private val READER_CONTROLS = stringPreferencesKey("reader_controls")
+    private val USER_FONTS = stringPreferencesKey("user_fonts")
     private val READ_ALOUD = stringPreferencesKey("read_aloud")
     private val LAST_HIGHLIGHT_COLOR = intPreferencesKey("last_highlight_color")
     private val BRIGHTNESS = intPreferencesKey("brightness")

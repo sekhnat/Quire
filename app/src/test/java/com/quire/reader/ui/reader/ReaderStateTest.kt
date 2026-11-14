@@ -219,10 +219,25 @@ class ReaderStateTest {
     assertEquals(1, indexer.requests)
   }
 
-  @Test fun `sharing a selection sends it as a quote with its book`() = runTest(dispatcher) {
-    reader().onSelectedText(session(), SelectionAction.Share, "It is a truth universally acknowledged")
+  @Test fun `sharing a selection opens the quote sheet with its book`() = runTest(dispatcher) {
+    val reader = reader()
+    reader.onSelectedText(session(), SelectionAction.Share, "It is a truth universally acknowledged")
+    val quote = reader.ui.value.quote!!
+    assertEquals("It is a truth universally acknowledged", quote.text)
+    assertEquals("Emma", quote.title)
+    assertEquals("Jane Austen", quote.author)
+    assertTrue(shared.isEmpty() && lookedUp.isEmpty())
+    // The sheet's Share text sends the plain quote, as Share always did.
+    reader.shareQuoteText(shareQuote(quote.text, quote.title, quote.author))
     assertEquals(listOf("“It is a truth universally acknowledged”\n— Emma, Jane Austen"), shared)
-    assertTrue(lookedUp.isEmpty())
+  }
+
+  @Test fun `a selection too long for a card is shared as text straight away`() = runTest(dispatcher) {
+    val reader = reader()
+    val long = "word ".repeat(300).trim()
+    reader.onSelectedText(session(), SelectionAction.Share, long)
+    assertEquals(null, reader.ui.value.quote)
+    assertEquals(1, shared.size)
   }
 
   @Test fun `looking up a selection hands over the bare text`() = runTest(dispatcher) {

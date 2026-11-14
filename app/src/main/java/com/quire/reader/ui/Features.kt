@@ -24,6 +24,7 @@ import com.quire.reader.QuireApplication
 import com.quire.reader.data.AdvancedReaderPrefs
 import com.quire.reader.data.ReadAloudPrefs
 import com.quire.reader.data.ReaderControls
+import com.quire.reader.ui.reader.UserFontsPort
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.db.BookmarkEntity
 import com.quire.reader.data.db.HighlightEntity
@@ -133,6 +134,11 @@ class Features(private val app: QuireApplication) {
   }
 
   private val bookEditor = object : BookEditor {
+    override fun edits(bookId: Long) = repo.bookEdit(bookId)
+    override suspend fun setEdit(bookId: Long, field: com.quire.reader.data.EditField, value: String?) = repo.setBookEdit(bookId, field, value)
+    override suspend fun setCover(bookId: Long, image: android.net.Uri?): Boolean =
+      repo.setBookCover(bookId, image?.let { repo.readPickedImage(it) ?: return false })
+    override suspend fun revertEdits(bookId: Long) = repo.revertBookEdits(bookId)
     override suspend fun setFinished(bookId: Long, finished: Boolean) = repo.setFinished(bookId, finished)
     override suspend fun setUserRating(bookId: Long, rating: Int?) = repo.setUserRating(bookId, rating)
     override suspend fun addTag(bookId: Long, tag: String) = repo.addTag(bookId, tag)
@@ -176,6 +182,7 @@ class Features(private val app: QuireApplication) {
     override val lastHighlightColor get() = repo.lastHighlightColor
     override suspend fun setLastHighlightColor(color: Int) { repo.setLastHighlightColor(color) }
     override val readerControls get() = repo.readerControls
+    override suspend fun setReaderControls(controls: ReaderControls) { repo.setReaderControls(controls) }
     override val readAloudPrefs get() = repo.readAloudPrefs
     override suspend fun setReadAloudPrefs(prefs: ReadAloudPrefs) { repo.setReadAloudPrefs(prefs) }
     override val brightness get() = repo.brightness
@@ -202,6 +209,13 @@ class Features(private val app: QuireApplication) {
     if (app.packageManager.queryIntentActivities(lookUpIntent(""), 0).isEmpty()) null
     else { text -> launchOutside(Intent.createChooser(lookUpIntent(text), "Look up")) }
 
+  private val userFontsPort = object : UserFontsPort {
+    override val fonts get() = app.userFonts.fonts
+    override suspend fun add(uris: List<android.net.Uri>) = app.userFonts.add(uris)
+    override suspend fun remove(id: Int) = app.userFonts.remove(id)
+    override suspend fun booksUsing(font: com.quire.reader.data.fonts.UserFont) = app.userFonts.booksUsing(font)
+  }
+
   private val readAloudSupport = ReadAloudSupport(
     AndroidReadAloudOpener(app),
     installVoices = { launchOutside(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA)) },
@@ -209,7 +223,8 @@ class Features(private val app: QuireApplication) {
 
   /** A reader for [request]; it starts opening the book at once. */
   fun reader(request: ReaderRequest, library: StateFlow<LibraryData>, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
-    ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, ::shareText, lookUp(), scope, persist, app.appScope, readAloudSupport = readAloudSupport)
+    ReaderState(request, readerStore, library, app.publicationLoader::open, indexer, nav, toasts, ::copyToClipboard, ::shareText, lookUp(), scope, persist, app.appScope, readAloudSupport = readAloudSupport, userFonts = userFontsPort,
+      wordLookup = com.quire.reader.data.dictionary.BundledWordLookup(app))
 
   private val statsStore = object : StatsStore {
     override val sessions get() = repo.readingSessions
@@ -330,7 +345,7 @@ class Features(private val app: QuireApplication) {
   fun restore(toasts: Toasts, scope: CoroutineScope) = RestoreState(restoreService, toasts, scope, app.appScope)
 
   fun settings(restore: RestoreState, notes: NotesExport, nav: AppNavigator, toasts: Toasts, scope: CoroutineScope, persist: CoroutineScope) =
-    SettingsState(librarySettings, indexer, notes, BackupState(backupService, toasts, scope, persist), restore, nav, toasts, scope, persist, app.appScope)
+    SettingsState(librarySettings, indexer, notes, BackupState(backupService, toasts, scope, persist), restore, nav, toasts, scope, persist, app.appScope, userFontsPort)
 
   private val onboardingStore = object : OnboardingStore {
     override val scan get() = repo.scanner.progress

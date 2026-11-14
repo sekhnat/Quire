@@ -9,6 +9,8 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+/qdict/build
+/qdict-tool/build
 /captures
 .externalNativeBuild
 .cxx

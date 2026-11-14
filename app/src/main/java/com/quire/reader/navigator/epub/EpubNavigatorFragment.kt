@@ -359,6 +359,34 @@ public class EpubNavigatorFragment internal constructor(
         viewModel.submitPreferences(preferences)
     }
 
+    /** Quire: called with an image, SVG or table the reader asked to see full screen. */
+    public var onMedia: ((ReaderMedia) -> Unit)? = null
+
+    private fun onMediaReport(json: String) {
+        val media = ReaderMediaParser.parse(
+            json,
+            linkOf = { viewModel.internalLinkFromUrl(it) },
+            isReaderUrl = { it.host?.lowercase() == WebViewServer.PACKAGE_HOSTNAME },
+        ) ?: return
+        onMedia?.invoke(media)
+    }
+
+    /** Quire: serves a full-screen viewer's requests (the book's styles and images) the way the reader does. */
+    public fun interceptViewerRequest(request: WebResourceRequest): WebResourceResponse? =
+        viewModel.shouldInterceptRequest(request)
+
+    /** Quire: scroll mode scrolls itself at [cssPxPerSecond] (auto-scroll); null stops it. False outside scroll mode. */
+    public fun setAutoScroll(cssPxPerSecond: Double?): Boolean {
+        val book = continuousBook ?: return false
+        book.setAutoScroll(cssPxPerSecond)
+        return true
+    }
+
+    /** Quire: brings the user fonts' `@font-face` rules up to date in every loaded document. */
+    public fun refreshUserFonts() {
+        run(RunScriptCommand(ContentScripts.userFontsScript(WebViewServer.assetsBaseHref), RunScriptCommand.Scope.LoadedResources))
+    }
+
     /**
      * Evaluates the given JavaScript on the currently visible HTML resource.
      *
@@ -448,6 +476,11 @@ public class EpubNavigatorFragment internal constructor(
 
             override fun shouldOverrideUrlLoading(request: WebResourceRequest): Boolean =
                 ReaderLinkPolicy.shouldOverrideNavigation(request) { viewModel.navigateToUrl(it) }
+
+            override fun onLinkActivated(url: String) =
+                ReaderLinkPolicy.onLinkActivated(url) { viewModel.navigateToUrl(it) }
+
+            override fun onMediaActivated(json: String) = this@EpubNavigatorFragment.onMediaReport(json)
 
             override fun onResourceLoaded(link: Link) {
                 // Same per-resource initialization the paged fragment runs after a page
@@ -1383,6 +1416,11 @@ public class EpubNavigatorFragment internal constructor(
          */
         override fun shouldOverrideUrlLoading(webView: WebView, request: WebResourceRequest): Boolean =
             ReaderLinkPolicy.shouldOverrideNavigation(request) { viewModel.navigateToUrl(it) }
+
+        override fun onLinkActivated(url: String) =
+            ReaderLinkPolicy.onLinkActivated(url) { viewModel.navigateToUrl(it) }
+
+        override fun onMediaActivated(json: String) = this@EpubNavigatorFragment.onMediaReport(json)
 
         override fun onFootnoteLinkActivated(
             url: AbsoluteUrl,

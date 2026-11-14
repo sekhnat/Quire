@@ -1,0 +1,6 @@
+oewn-2025-slice.xml is a small extract of Open English WordNet, release 2025
+(https://github.com/globalwordnet/english-wordnet), made with the slice script described in
+qdict/src/test/kotlin/com/quire/qdict/DictionaryTest.kt: a few lemmas, their synsets and the entries of those
+synsets, with relations removed. Open English WordNet is licensed under the Creative Commons Attribution 4.0
+International License (https://creativecommons.org/licenses/by/4.0/). It is based on Princeton WordNet 3.0,
+Copyright 2006 by Princeton University.

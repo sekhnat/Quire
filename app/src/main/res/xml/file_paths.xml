@@ -6,4 +6,6 @@
 <paths>
     <root-path name="storage" path="storage/" />
     <files-path name="imported" path="imported/" />
+    <!-- Quote images being shared; rewritten for each share. -->
+    <cache-path name="share" path="share/" />
 </paths>

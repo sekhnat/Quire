@@ -169,6 +169,12 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse?
         fun shouldOverrideUrlLoading(request: WebResourceRequest): Boolean
 
+        /** A link tapped in a frame, as an absolute URL (ContentScripts). Untrusted. */
+        fun onLinkActivated(url: String)
+
+        /** An image, SVG or table to show full screen, as ContentScripts' JSON report. Untrusted. */
+        fun onMediaActivated(json: String)
+
         /**
          * The per-resource Readium initialization for a frame whose document just loaded:
          * current CSS properties, decoration templates and any saved decorations. The paged
@@ -787,6 +793,13 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         return true
     }
 
+    /** Scrolls steadily at [cssPxPerSecond] (auto-scroll), or stops when it is null or not above zero. */
+    fun setAutoScroll(cssPxPerSecond: Double?) {
+        if (disposed) return
+        val script = if (cssPxPerSecond != null && cssPxPerSecond > 0) "QuireShellHost.autoScroll($cssPxPerSecond)" else "QuireShellHost.stopAutoScroll()"
+        shell.evaluateJavascript("window.QuireShellHost && $script;", null)
+    }
+
     /** One reader-viewport step forwards within the prepared book. */
     fun pageForward(): Boolean = pageBy(1)
 
@@ -1008,9 +1021,26 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
             val host = navigator.bookHost
             val event = runCatching { com.quire.reader.navigator.R2BasicWebView.TapEvent.fromJSON(eventJson) }.getOrNull() ?: return false
             if (event.defaultPrevented) return false
+            // A tap on a link (or another interactive element) is not a page tap: returning
+            // false lets the click go on to navigate, which reaches the shell's
+            // shouldOverrideUrlLoading and ReaderLinkPolicy, as R2BasicWebView.onTap does
+            // in paged mode. Without this the tap zones swallowed every link tap.
+            if (event.interactiveElement != null) return false
             // Tap points are frame-local; convert once into shell coordinates.
             val point = framePointToShell(href, event.point)
             return host.onTap(point)
+        }
+
+        @JavascriptInterface
+        fun onLink(href: String, url: String) {
+            canonical(href) ?: return
+            post { navigator.bookHost.onLinkActivated(url) }
+        }
+
+        @JavascriptInterface
+        fun onMedia(href: String, json: String) {
+            canonical(href) ?: return
+            post { navigator.bookHost.onMediaActivated(json) }
         }
 
         @JavascriptInterface

@@ -1,6 +1,8 @@
 package com.quire.reader.data.scan
 
+import com.quire.reader.data.mobi.MobiBook
 import java.io.File
+import java.util.zip.ZipFile
 
 /**
  * The book files Quire reads: EPUB, and MOBI and AZW3, which are converted to EPUB to be read (see
@@ -22,6 +24,13 @@ object BookFormats {
 
   /** Whether [file] is a MOBI-family book, which Readium cannot open without conversion. */
   fun isMobi(file: File): Boolean = rank(file.name) > 0
+
+  /**
+   * Whether [file]'s content is a book Quire can try to read, whatever it is called: a MOBI-family file, or a ZIP with an
+   * EPUB container. Files handed over by other apps often come without a usable name.
+   */
+  fun looksLikeBook(file: File): Boolean =
+    MobiBook.isMobi(file) || runCatching { ZipFile(file).use { it.getEntry("META-INF/container.xml") != null } }.getOrDefault(false)
 
   /** The format's display name: "EPUB", "AZW3" or "MOBI". */
   fun label(path: String): String = path.substringAfterLast('.', "").uppercase().takeIf { isBook(path) } ?: "EPUB"

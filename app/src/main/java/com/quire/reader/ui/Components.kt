@@ -147,6 +147,7 @@ object Ic {
   val Trash = R.drawable.ph_trash
   val Tag = R.drawable.ph_tag
   val Info = R.drawable.ph_info
+  val Bolt = R.drawable.ic_bolt
   val MinusCircle = R.drawable.ph_minus_circle
 }
 

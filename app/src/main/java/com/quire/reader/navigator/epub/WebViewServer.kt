@@ -13,6 +13,8 @@
 
 package com.quire.reader.navigator.epub
 
+import com.quire.reader.reader.UserFontRegistry
+
 import android.app.Application
 import android.os.PatternMatcher
 import android.util.Log
@@ -378,6 +380,7 @@ internal class WebViewServer(
             .setDomain(ASSETS_HOSTNAME)
             // Quire: the UI fonts are kept once, in res/font, and answered at their reading-font
             // paths; any other path falls through to the assets.
+            .addPathHandler("/fonts/user/", UserFontPathHandler)
             .addPathHandler("/fonts/", ResourceFontPathHandler(application, ReaderFontResources))
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(application))
             .build()
@@ -394,6 +397,18 @@ internal class ResourceFontPathHandler(
     override fun handle(path: String): WebResourceResponse? {
         val id = resources["fonts/$path"] ?: return null
         return WebResourceResponse("font/ttf", null, application.resources.openRawResource(id))
+    }
+}
+
+/**
+ * Answers `fonts/user/<name>` with a font the user added, only for a file [UserFontRegistry] lists by that exact name;
+ * the request path is never joined onto the file system, so book content cannot reach any other file.
+ */
+internal object UserFontPathHandler : WebViewAssetLoader.PathHandler {
+    override fun handle(path: String): WebResourceResponse? {
+        if (path.isEmpty() || '/' in path || '\\' in path || path.startsWith(".")) return null
+        val file = UserFontRegistry.file(path) ?: return null
+        return WebResourceResponse(UserFontRegistry.mimeType(path), null, file.inputStream())
     }
 }
 

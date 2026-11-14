@@ -74,7 +74,7 @@ class LibraryQueriesTest : DbTestCase() {
     assertEquals(setOf("Other", "Private"), after.getValue(b).tagList.toSet())
   }
 
-  @Test fun `removing books keeps those with history as missing, and forgetting them deletes it all`() = runBlocking {
+  @Test fun `removing books keeps those with history as missing and forgetting them deletes it all`() = runBlocking {
     val db = open()
     val folderId = folder(db)
     val read = db.books().upsert(bookEntity(folderId, "Read").copy(path = "/lib/read.epub"))

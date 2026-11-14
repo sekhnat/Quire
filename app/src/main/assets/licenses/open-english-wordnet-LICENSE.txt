@@ -1,0 +1,15 @@
+Open English WordNet
+
+The built-in dictionary is made from Open English WordNet (https://github.com/globalwordnet/english-wordnet),
+release 2025, by the Open English WordNet team and contributors, based on Princeton WordNet 3.0 (© Princeton
+University). Quire converts it into its own compact format; the definitions, examples and word lists are unchanged.
+
+It is licensed under the Creative Commons Attribution 4.0 International License (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+Princeton WordNet licence: WordNet Release 3.0. Copyright 2006 by Princeton University. All rights reserved.
+Permission to use, copy, modify and distribute this software and database and its documentation for any purpose and
+without fee or royalty is hereby granted, provided that you agree to comply with the following copyright notice and
+statements, including the disclaimer, and that the same appear on ALL copies of the software, database and
+documentation, including modifications that you make for internal use or for distribution. THIS SOFTWARE AND DATABASE
+IS PROVIDED "AS IS" AND PRINCETON UNIVERSITY MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR IMPLIED.
