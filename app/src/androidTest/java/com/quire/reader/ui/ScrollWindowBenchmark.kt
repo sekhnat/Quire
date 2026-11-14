@@ -60,6 +60,9 @@ class ScrollWindowBenchmark {
 
   @Before fun setUp() = runBlocking {
     assumeTrue("scroll telemetry is compiled into benchmark builds only", BuildConfig.SCROLL_TELEMETRY)
+    // Connect UiAutomation here, once: getUiAutomation() is not thread-safe, and the renderer sampler's first shell
+    // call would otherwise race the test thread's ("Already connected") whenever the book is already copied.
+    instrumentation.uiAutomation
     val dir = File(app.filesDir, "bench-books").apply { mkdirs() }
     val copy = File(dir, "ORV.epub")
     if (!copy.isFile || copy.length() == 0L) {
