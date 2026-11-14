@@ -6,6 +6,17 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Built on Readium 3.4.0 and Coil 3.6.3 (compileSdk 37, Kotlin 2.4). Reading, the library and search work as
+  before.
+
+### Upgrading
+
+- No database migration and no new permissions.
+
 ## [1.15.1] - 2026-11-14
 
 Choose a cover from the book's own pictures, and frame it yourself.
