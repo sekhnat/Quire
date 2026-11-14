@@ -72,7 +72,8 @@ the package and import lines, and blank-line changes.
 - `WebViewServer` refuses any origin but the publication's and the assets' own, and anything that is not https.
 - Every WebView gets `hardenForReaderContent()` (`ReaderWebViewSecurity`).
 - `R2BasicWebView` documents that its `@JavascriptInterface` methods face untrusted content.
-- Upstream's `allowCors` is kept.
+- Upstream's `allowCors` is kept, but accepts a response with no header map, as `WebViewAssetLoader` returns: upstream
+  3.4.0 throws on it and crashes the reader on its first asset.
 
 **Search (1754335, 013a8ef).**
 - `evaluateJavascript(script, href)` runs a script in a given chapter.
