@@ -361,7 +361,9 @@ internal class WebViewServer(
      * from any origin, including the package domain.
      */
     private fun WebResourceResponse.allowCors() {
-        responseHeaders = responseHeaders + mapOf("Access-Control-Allow-Origin" to "*")
+        // WebViewAssetLoader's responses have no header map (null); upstream 3.4.0 throws on them.
+        val headers: Map<String, String>? = responseHeaders
+        responseHeaders = headers.orEmpty() + ("Access-Control-Allow-Origin" to "*")
     }
 
     private fun serveErrorResponse(): WebResourceResponse {
