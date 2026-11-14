@@ -17,6 +17,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Read aloud speaks with a voice in the book's language. It used to take the best voice on the device in any
   language, so an English book could be read with a Spanish voice.
+- In fixed-layout books, tapping a link follows it and swiping turns the page. A tap used to show the menu instead,
+  and a swipe did nothing; tapping the edges of the page still turns it.
 - When the system stops the page renderer, usually to reclaim memory, the reader now rebuilds the page where you were.
   This used to close the app in paged mode, in fixed-layout books and in the image viewer; scroll mode already
   recovered. If it happens again within 30 seconds, a message asks you to close the book and open it again.

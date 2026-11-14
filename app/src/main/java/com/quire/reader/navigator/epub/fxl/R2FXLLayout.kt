@@ -836,8 +836,11 @@ internal class R2FXLLayout : FrameLayout {
             internal set
         var y: Float = 0.toFloat()
             internal set
-        private var relativeX: Float = 0.toFloat()
-        private var relativeY: Float = 0.toFloat()
+        // Quire: readable, so a fixed-layout tap can be placed inside the page's WebView (R2FXLPageFragment).
+        internal var relativeX: Float = 0.toFloat()
+            private set
+        internal var relativeY: Float = 0.toFloat()
+            private set
         private var percentX: Float = 0.toFloat()
         private var percentY: Float = 0.toFloat()
         private var isContentClicked: Boolean = false

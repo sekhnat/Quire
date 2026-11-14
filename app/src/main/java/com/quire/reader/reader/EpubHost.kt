@@ -1,6 +1,7 @@
 package com.quire.reader.reader
 
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.view.ActionMode
 import android.view.Menu
@@ -115,7 +116,7 @@ fun EpubHost(
   key(session) {
     AndroidView(
       modifier = modifier,
-      factory = { ctx -> FrameLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) } },
+      factory = { ctx -> NavigatorHostLayout(ctx).apply { addView(FragmentContainerView(ctx).apply { id = containerId }, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) } },
       update = { container ->
         val fm = activity.supportFragmentManager
         if (fm.findFragmentByTag(tag) == null) {
@@ -192,5 +193,18 @@ fun EpubHost(
         }
       },
     )
+  }
+}
+
+/**
+ * The navigator's root inside Compose. A view below it that hands a gesture back to its parents
+ * (`requestDisallowInterceptTouchEvent(false)`, as a fixed-layout page does when a drag cannot pan it, so the pager can
+ * turn the page) must not reach Compose's AndroidView interop: the interop then dispatches the rest of the gesture in a
+ * later pass, finds the events already consumed (by its own earlier dispatch) and cancels the gesture under the pager.
+ * The views below still get the hand-back; nothing in Compose above the reader intercepts touches.
+ */
+private class NavigatorHostLayout(context: Context) : FrameLayout(context) {
+  override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+    if (disallowIntercept) super.requestDisallowInterceptTouchEvent(true)
   }
 }
