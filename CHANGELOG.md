@@ -6,7 +6,10 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.15.0] - 2026-11-14
+
+A built-in dictionary, auto-scroll, your own fonts, quote images, zoomable images and tables, a configurable status line,
+custom margins, warm light, editable book details, and opening books from other apps.
 
 ### Added
 
@@ -77,7 +80,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Upgrading
 
 - The library database moves to version 9 (a new table for the details you edit), automatically on first start. A
-  full backup made with this version cannot be restored by an earlier one.
+  full backup made with 1.15.0 cannot be restored by an earlier version.
 - A full backup made with your own fonts in it is written in a newer backup format (2), which earlier versions of
   Quire refuse to restore ("newer than this app"). Backups without fonts are unchanged and still restore anywhere.
 
