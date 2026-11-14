@@ -30,11 +30,13 @@ import androidx.fragment.app.viewModels
 import androidx.webkit.WebViewClientCompat
 import com.quire.reader.R
 import com.quire.reader.navigator.R2BasicWebView
+import com.quire.reader.navigator.epub.ContentScripts
 import com.quire.reader.navigator.epub.EpubNavigatorFragment
 import com.quire.reader.navigator.hardenForReaderContent
 import com.quire.reader.navigator.epub.EpubNavigatorViewModel
 import com.quire.reader.navigator.epub.fxl.R2FXLLayout
 import com.quire.reader.navigator.epub.fxl.R2FXLOnDoubleTapListener
+import org.json.JSONTokener
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.util.Url
 
@@ -87,9 +89,8 @@ internal class R2FXLPageFragment : Fragment() {
 
             r2FXLLayout.addOnDoubleTapListener(R2FXLOnDoubleTapListener(true))
             r2FXLLayout.addOnTapListener(object : R2FXLLayout.OnTapListener {
-                override fun onTap(view: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean {
-                    return left.listener?.onTap(PointF(info.x, info.y), targetElement = null) ?: false
-                }
+                override fun onTap(view: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean =
+                    onPageTap(view, info)
             })
 
             return view
@@ -106,13 +107,55 @@ internal class R2FXLPageFragment : Fragment() {
 
             r2FXLLayout.addOnDoubleTapListener(R2FXLOnDoubleTapListener(true))
             r2FXLLayout.addOnTapListener(object : R2FXLLayout.OnTapListener {
-                override fun onTap(view: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean {
-                    return webview.listener?.onTap(PointF(info.x, info.y), targetElement = null) ?: false
-                }
+                override fun onTap(view: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean =
+                    onPageTap(view, info)
             })
 
             return view
         }
+    }
+
+    /**
+     * A tap on the page. The zoomable layout takes every touch, so the page never sees a click: a link under the tap is
+     * found by asking the page ([ContentScripts.linkAtPoint]) and followed like a link tapped in a reflowable page, and any
+     * other tap goes on as a tap (menu, page turns).
+     */
+    private fun onPageTap(layout: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean {
+        val point = PointF(info.x, info.y)
+        val content = layout.getChildAt(0)
+        val hit = content?.let { c ->
+            webViews.firstNotNullOfOrNull { wv ->
+                pointIn(wv, c, info.relativeX, info.relativeY)
+                    ?.takeIf { it.x >= 0 && it.y >= 0 && it.x < wv.width && it.y < wv.height }
+                    ?.let { wv to it }
+            }
+        }
+        if (hit == null) return webViews.firstOrNull()?.listener?.onTap(point, targetElement = null) ?: false
+        val (webView, at) = hit
+        webView.evaluateJavascript(ContentScripts.linkAtPoint(at.x, at.y, webView.width)) { result ->
+            val listener = webView.listener ?: return@evaluateJavascript
+            val url = result?.let { runCatching { JSONTokener(it).nextValue() as? String }.getOrNull() }
+            if (url != null) listener.onLinkActivated(url) else listener.onTap(point, targetElement = null)
+        }
+        return true
+    }
+
+    /** ([x], [y]) in [ancestor]'s coordinates, in [view]'s own; null when [view] is not inside [ancestor]. */
+    private fun pointIn(view: View, ancestor: View, x: Float, y: Float): PointF? {
+        val chain = mutableListOf<View>()
+        var v = view
+        while (v !== ancestor) {
+            chain += v
+            v = v.parent as? View ?: return null
+        }
+        var px = x
+        var py = y
+        for (child in chain.asReversed()) {
+            val parent = child.parent as View
+            px -= child.left - parent.scrollX
+            py -= child.top - parent.scrollY
+        }
+        return PointF(px, py)
     }
 
     override fun onDetach() {

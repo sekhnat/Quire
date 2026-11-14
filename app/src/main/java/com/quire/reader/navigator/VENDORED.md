@@ -92,6 +92,16 @@ the package and import lines, and blank-line changes.
 - `interceptViewerRequest` serves images to the viewer.
 - `refreshUserFonts` and `setAutoScroll` are also part of this commit.
 
+**Links in fixed-layout books.**
+- `R2FXLLayout` takes every touch before the page sees it, and fixed-layout documents get no `ContentScripts`, so a
+  tapped link was never followed (upstream behaves the same).
+- `R2FXLPageFragment.onPageTap` now places the tap inside the page's WebView and asks the page for a link there
+  (`ContentScripts.linkAtPoint`). A link goes to `onLinkActivated`, the same path as a reflowable link; any other tap
+  stays a tap.
+- `R2FXLLayout.TapInfo.relativeX`/`relativeY` became readable (`internal`, private setters) for this.
+- Swipes in fixed-layout books need no change here: `EpubHost`'s `NavigatorHostLayout` (outside this package) keeps
+  Compose from cancelling the drag the pager takes over.
+
 **Read aloud (8451c22).** `selectionSpeechStart` and `SpeechStart` find where speech starts from a selection.
 
 **Fonts from `res/font` (0e15a52).** `WebViewServer` answers the UI fonts' `fonts/…` paths from resources

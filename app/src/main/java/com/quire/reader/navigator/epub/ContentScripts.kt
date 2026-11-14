@@ -26,6 +26,22 @@ import org.readium.r2.shared.util.Url
 
 internal object ContentScripts {
 
+    /**
+     * For a fixed-layout page, which gets no [injectable] and whose touches the zoomable layout takes before the page sees
+     * them: the absolute URL of the link at ([x], [y]), in device pixels of a WebView [widthPx] wide, or null. The link
+     * rules are [injectable]'s (`a` or `area` with an `href` or `xlink:href`, found from the element up).
+     */
+    fun linkAtPoint(x: Float, y: Float, widthPx: Int): String = """(function () {
+  var v = window.visualViewport, k = (v ? v.width : window.innerWidth) / $widthPx;
+  var n = document.elementFromPoint((v ? v.offsetLeft : 0) + $x * k, (v ? v.offsetTop : 0) + $y * k);
+  for (; n && n !== document; n = n.parentNode) {
+    if (n.nodeType !== 1 || (n.localName !== 'a' && n.localName !== 'area')) { continue; }
+    var h = n.getAttribute('href') || (n.getAttributeNS && n.getAttributeNS('http://www.w3.org/1999/xlink', 'href'));
+    if (h) { try { return new URL(h, document.baseURI).href; } catch (e) { return null; } }
+  }
+  return null;
+})()"""
+
     /** The `<script>` element to inject into a reflowable document's head. */
     val injectable: String = """<script>
 //<![CDATA[
