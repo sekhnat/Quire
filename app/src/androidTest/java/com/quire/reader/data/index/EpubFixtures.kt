@@ -24,8 +24,11 @@ object EpubFixtures {
   fun write(file: File, chapters: List<FixtureChapter>): File =
     write(file, chapters.mapIndexed { i, c -> FixtureResource("c$i.xhtml", c.body) }, chapters.mapIndexed { i, c -> FixtureToc("c$i.xhtml", null, c.title) })
 
-  /** An EPUB of [resources] in reading order whose contents are [toc] (nested as given); the resources named in [corrupt] cannot be read. */
-  fun write(file: File, resources: List<FixtureResource>, toc: List<FixtureToc>, corrupt: Set<String> = emptySet()): File {
+  /**
+   * An EPUB of [resources] in reading order whose contents are [toc] (nested as given); the resources named in [corrupt]
+   * cannot be read. A [fixedLayout] book is pre-paginated: each resource is one page, sized by its own viewport meta.
+   */
+  fun write(file: File, resources: List<FixtureResource>, toc: List<FixtureToc>, corrupt: Set<String> = emptySet(), fixedLayout: Boolean = false): File {
     file.parentFile?.mkdirs()
     ZipOutputStream(file.outputStream()).use { zip ->
       // The mimetype entry must come first and be stored uncompressed.
@@ -45,7 +48,7 @@ object EpubFixtures {
       }
       zip.entry(
         "OEBPS/content.opf",
-        """<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:uuid:fixture</dc:identifier><dc:title>Fixture</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2026-01-01T00:00:00Z</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>$manifest</manifest><spine>$spine</spine></package>""",
+        """<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"${if (fixedLayout) """ prefix="rendition: http://www.idpf.org/vocab/rendition/#"""" else ""}><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">urn:uuid:fixture</dc:identifier><dc:title>Fixture</dc:title><dc:language>en</dc:language><meta property="dcterms:modified">2026-01-01T00:00:00Z</meta>${if (fixedLayout) """<meta property="rendition:layout">pre-paginated</meta>""" else ""}</metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>$manifest</manifest><spine>$spine</spine></package>""",
       )
       zip.entry("OEBPS/nav.xhtml", xhtml("<title>Contents</title>", """<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc">${tocList(toc)}</nav>"""))
       resources.forEach { r ->

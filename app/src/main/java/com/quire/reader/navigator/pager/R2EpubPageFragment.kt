@@ -21,6 +21,7 @@ import android.graphics.PointF
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.view.*
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -127,6 +128,9 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
     private val navigator: EpubNavigatorFragment?
         get() = parentFragment as? EpubNavigatorFragment
 
+    /** The navigator's container generation this page was built in, reported with a renderer loss. */
+    private var containerGeneration = -1
+
     private val shouldApplyInsetsPadding: Boolean
         get() = navigator?.config?.shouldApplyInsetsPadding ?: true
 
@@ -154,13 +158,15 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
         )
     }
 
-    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+    // MissingOnRenderProcessGone: the WebViewClient below implements it; lint also flags any subclass's constructor call.
+    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface", "MissingOnRenderProcessGone")
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
         containerView = inflater.inflate(R.layout.quire_navigator_viewpager_fragment_epub, container, false)
+        containerGeneration = navigator?.containerGeneration ?: -1
 
         val webView = containerView.findViewById<R2WebView>(R.id.webView)
         this.webView = webView
@@ -259,6 +265,13 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 (webView as? R2BasicWebView)?.shouldInterceptRequest(view, request)
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                // Returning false (the default) would take the whole app down with the renderer.
+                // The navigator rebuilds the pager, which destroys this page and its dead WebView.
+                navigator?.onPageRendererGone(containerGeneration, detail.didCrash())
+                return true
+            }
         }
 
         webView.isHapticFeedbackEnabled = false
