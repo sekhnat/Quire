@@ -703,8 +703,11 @@ public class EpubNavigatorFragment internal constructor(
      * surface in scroll mode, the resource pager otherwise. Rebuilds on preference changes.
      */
     private fun resetContainer(root: View) {
-        val parent = root as? ConstraintLayout
+        // A fixed-layout book's root is the layout wrapped in a KeyInterceptorView (onCreateView).
+        val parent = (root as? KeyInterceptorView)?.getChildAt(0) as? ConstraintLayout
+            ?: root as? ConstraintLayout
             ?: error("The EPUB navigator root must be a ConstraintLayout")
+        containerGeneration++
 
         // Tear down whatever container is currently built, including the static pager
         // from the layout. The pager's adapter must be nulled explicitly, otherwise
@@ -739,6 +742,14 @@ public class EpubNavigatorFragment internal constructor(
         continuousBook = null
         book.dispose()
         (book.parent as? ViewGroup)?.removeView(book)
+    }
+
+    /** Removes the resource pager after its renderer was lost twice; its page fragments destroy their WebViews. */
+    private fun disposePager() {
+        if (!::resourcePager.isInitialized) return
+        containerGeneration++
+        resourcePager.adapter = null
+        (resourcePager.parent as? ViewGroup)?.removeView(resourcePager)
     }
 
     /** Builds and installs an empty resource pager (paged mode). */
@@ -924,32 +935,56 @@ public class EpubNavigatorFragment internal constructor(
     private var lastRendererLossAt = 0L
 
     /**
-     * The scroll surface's renderer process died, almost always because the system ran out of
-     * memory. The first loss rebuilds the surface at the current position; a second one within
-     * [RENDERER_LOSS_WINDOW_MS] means the book does not fit even in the bounded live window, and
-     * the reader is told instead of looping.
+     * Bumped whenever the container (pager or scroll surface) is rebuilt or removed. A page fragment
+     * reports a renderer loss with the generation it was built in, so the losses its dead neighbours
+     * report after the rebuild are not mistaken for a second one.
+     */
+    internal var containerGeneration = 0
+        private set
+
+    /**
+     * A paged or fixed-layout page's renderer process died. Every page shares the renderer, so each of
+     * them reports it: the first report of a [generation] rebuilds the pager, and the rest are ignored.
+     */
+    internal fun onPageRendererGone(generation: Int, didCrash: Boolean) {
+        if (generation != containerGeneration) return
+        view?.post { if (generation == containerGeneration) onRendererGone(didCrash) }
+    }
+
+    /**
+     * The reader's renderer process died, almost always because the system ran out of memory. The
+     * first loss rebuilds the container (scroll surface or pager) at the current position; a second
+     * one within [RENDERER_LOSS_WINDOW_MS] means the book does not fit, and the reader is told
+     * instead of looping.
      */
     private fun onRendererGone(didCrash: Boolean) {
         val root = view ?: return
+        val scrollMode = viewModel.isScrollEnabled.value && publication.metadata.layout != Layout.FIXED
         val now = android.os.SystemClock.elapsedRealtime()
         val repeated = lastRendererLossAt != 0L && now - lastRendererLossAt < RENDERER_LOSS_WINDOW_MS
         lastRendererLossAt = now
         val locator = currentLocator.value
-        Log.w("ContinuousBook", "renderer lost (didCrash=$didCrash, repeated=$repeated); locator=${locator.href}")
+        Log.w("ContinuousBook", "renderer lost (scroll=$scrollMode, didCrash=$didCrash, repeated=$repeated); locator=${locator.href}")
         if (repeated) {
             publishReadiness(Readiness.Failed("The reader's renderer was lost twice"))
             android.widget.Toast.makeText(
                 requireContext(),
-                "This book ran out of memory in scroll mode. Switch to pages in Display.",
+                if (scrollMode) "This book ran out of memory in scroll mode. Switch to pages in Display."
+                else "This book ran out of memory. Close it and open it again.",
                 android.widget.Toast.LENGTH_LONG,
             ).show()
-            // The surface died with the renderer: dispose it now instead of holding the
-            // dead WebView until the reader closes.
-            disposeContinuousBook()
+            // The container died with the renderer: dispose it now instead of holding the
+            // dead WebViews until the reader closes.
+            if (scrollMode) disposeContinuousBook() else disposePager()
             return
         }
-        // The rebuilt surface starts with a smaller window, and keeps it: a second loss fails the book.
-        memoryPressure.onRendererLost()
+        if (scrollMode) {
+            // The rebuilt surface starts with a smaller window, and keeps it: a second loss fails the book.
+            memoryPressure.onRendererLost()
+        } else {
+            // The rebuilt pager readies the navigator again when the page at the position has loaded.
+            state = State.Initializing
+        }
         publishReadiness(Readiness.Preparing)
         resetContainer(root)
         go(locator)

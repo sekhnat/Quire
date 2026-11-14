@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -31,6 +32,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,7 +105,7 @@ internal fun MediaViewer(
         if (bitmap != null) ZoomableImage(bitmap, if (filtered) filterFor(imageFilter) else null)
         else if (bytes != null) QText("This image can't be shown", 13f, Modifier.align(Alignment.Center), color = theme.muted)
       }
-      is ReaderMedia.Markup -> MarkupView(media, theme, intercept)
+      is ReaderMedia.Markup -> MarkupView(media, theme, intercept, onClose)
     }
     Row(Modifier.statusBarsPadding().fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
       IconBtn(Ic.X, onClose, tint = theme.fg)
@@ -166,12 +168,15 @@ private fun ZoomableImage(bitmap: ImageBitmap, filter: ColorFilter?) {
 
 /**
  * A table or SVG in a WebView of its own, with the book's stylesheets and the reader's colours. JavaScript stays off: it
- * only draws the fragment. Pinch zoom is the WebView's own.
+ * only draws the fragment. Pinch zoom is the WebView's own. If its renderer is lost the viewer closes ([onRendererGone]).
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun MarkupView(media: ReaderMedia.Markup, theme: ReaderTheme, intercept: (WebResourceRequest) -> WebResourceResponse?) {
+private fun MarkupView(
+  media: ReaderMedia.Markup, theme: ReaderTheme, intercept: (WebResourceRequest) -> WebResourceResponse?, onRendererGone: () -> Unit,
+) {
   val html = remember(media, theme) { markupPage(media, theme) }
+  val rendererGone by rememberUpdatedState(onRendererGone)
   AndroidView(
     modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = 48.dp),
     factory = { ctx ->
@@ -184,15 +189,36 @@ private fun MarkupView(media: ReaderMedia.Markup, theme: ReaderTheme, intercept:
         settings.allowFileAccess = false
         settings.allowContentAccess = false
         setBackgroundColor(android.graphics.Color.TRANSPARENT)
-        webViewClient = object : WebViewClient() {
-          override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? = intercept(request)
-          // Nothing in the viewer navigates.
-          override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
-        }
+        webViewClient = MarkupClient(intercept) { rendererGone() }
       }
     },
-    update = { it.loadDataWithBaseURL(media.baseUrl.toString(), html, "text/html", "utf-8", null) },
+    update = { if (it.tag !== RENDERER_GONE) it.loadDataWithBaseURL(media.baseUrl.toString(), html, "text/html", "utf-8", null) },
+    onRelease = { it.destroy() },
   )
+}
+
+/** Tags a viewer WebView whose renderer is gone. */
+private val RENDERER_GONE = Any()
+
+/** The markup viewer's client: serves the book's resources, navigates nowhere, and closes the viewer if its renderer is lost. */
+// MissingOnRenderProcessGone: implemented below; lint also flags any subclass's constructor call.
+@SuppressLint("MissingOnRenderProcessGone")
+private class MarkupClient(
+  private val intercept: (WebResourceRequest) -> WebResourceResponse?,
+  private val onRendererGone: () -> Unit,
+) : WebViewClient() {
+  override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? = intercept(request)
+
+  // Nothing in the viewer navigates.
+  override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
+
+  // Returning false (the default) would take the whole app down with the renderer. The dead WebView is not used again:
+  // the viewer closes, and the reader underneath recovers from its own loss.
+  override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+    view.tag = RENDERER_GONE
+    view.post(onRendererGone)
+    return true
+  }
 }
 
 /** The page the markup viewer shows: the fragment with the book's stylesheets, in the reader's colours. */

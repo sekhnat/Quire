@@ -99,6 +99,10 @@ the package and import lines, and blank-line changes.
 
 **Robustness.**
 - Recovery from WebView renderer loss (`onRendererGone`, 151368f).
+  - Scroll mode first; paged and fixed-layout pages followed.
+  - `R2EpubPageFragment` and `R2FXLPageFragment` implement `onRenderProcessGone` and report with the
+    `containerGeneration` they were built in, so a dead page that reports after the pager was rebuilt is ignored.
+  - `resetContainer` unwraps the `KeyInterceptorView` that fixed-layout books put around the root.
 - A book closed mid-load (68396cd).
 - A theme change in scroll mode (e095c27).
 - `R2BasicWebView.TapEvent` and `inputModifiers` became `internal` so the surface can parse frame events.

@@ -20,6 +20,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -57,6 +58,9 @@ internal class R2FXLPageFragment : Fragment() {
     private val navigator: EpubNavigatorFragment?
         get() = parentFragment as? EpubNavigatorFragment
 
+    /** The navigator's container generation this page was built in, reported with a renderer loss. */
+    private var containerGeneration = -1
+
     private val viewModel: EpubNavigatorViewModel by viewModels(
         ownerProducer = { requireParentFragment() }
     )
@@ -67,6 +71,7 @@ internal class R2FXLPageFragment : Fragment() {
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
+        containerGeneration = navigator?.containerGeneration ?: -1
         secondResourceUrl?.let {
             val view: View = inflater.inflate(R.layout.quire_navigator_fragment_fxllayout_double, container, false)
             view.setPadding(0, 0, 0, 0)
@@ -130,7 +135,8 @@ internal class R2FXLPageFragment : Fragment() {
         super.onDestroyView()
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
+    // MissingOnRenderProcessGone: the WebViewClient below implements it; lint also flags any subclass's constructor call.
+    @SuppressLint("SetJavaScriptEnabled", "MissingOnRenderProcessGone")
     private fun setupWebView(webView: R2BasicWebView, link: Link?, resourceUrl: Url?) {
         webViews.add(webView)
         navigator?.let {
@@ -168,6 +174,13 @@ internal class R2FXLPageFragment : Fragment() {
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 webView.shouldInterceptRequest(view, request)
+
+            override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+                // Returning false (the default) would take the whole app down with the renderer.
+                // The navigator rebuilds the pager, which destroys this page and its dead WebViews.
+                navigator?.onPageRendererGone(containerGeneration, detail.didCrash())
+                return true
+            }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)

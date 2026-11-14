@@ -293,7 +293,8 @@ internal class ContinuousBookWebView @SuppressLint("SetJavaScriptEnabled", "Java
         setupShell()
     }
 
-    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+    // MissingOnRenderProcessGone: the WebViewClient below implements it; lint also flags any subclass's constructor call.
+    @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface", "MissingOnRenderProcessGone")
     private fun setupShell() {
         val host = navigator.bookHost
         shell.settings.javaScriptEnabled = true
