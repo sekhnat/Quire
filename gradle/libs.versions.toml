@@ -26,7 +26,7 @@ lifecycleViewmodelNav3 = "2.10.0"
 
 [libraries]
 # Only the dictionary converter uses it, to measure XZ against Deflate; nothing ships with it.
-xz = { module = "org.tukaani:xz", version = "1.10" }
+xz = { module = "org.tukaani:xz", version = "1.12" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serializationJson" }
 readium-shared = { module = "org.readium.kotlin-toolkit:readium-shared", version.ref = "readium" }
 readium-streamer = { module = "org.readium.kotlin-toolkit:readium-streamer", version.ref = "readium" }
