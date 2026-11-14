@@ -16,7 +16,7 @@ package com.quire.reader.navigator.pager;
  * limitations under the License.
  */
 //
-// Vendored from the Readium Kotlin Toolkit 3.3.0 (readium-navigator module, official
+// Vendored from the Readium Kotlin Toolkit 3.4.0 (readium-navigator module, official
 // sources jar) into Quire to implement continuous vertical scrolling. The original
 // BSD-style license header above applies to this file and its modifications.
 

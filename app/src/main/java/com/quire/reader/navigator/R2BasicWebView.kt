@@ -4,7 +4,7 @@
  * available in the top-level LICENSE file of the project.
  */
 //
-// Vendored from the Readium Kotlin Toolkit 3.3.0 (readium-navigator module, official
+// Vendored from the Readium Kotlin Toolkit 3.4.0 (readium-navigator module, official
 // sources jar) into Quire to implement continuous vertical scrolling. The original
 // BSD-style license header above applies to this file and its modifications.
 
@@ -78,7 +78,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
         fun onPageLoaded(webView: R2BasicWebView, link: Link) {}
         fun onPageChanged(pageIndex: Int, totalPages: Int, url: String) {}
         fun onPageEnded(end: Boolean) {}
-        fun onTap(point: PointF): Boolean = false
+        fun onTap(point: PointF, targetElement: TargetElementData?): Boolean = false
         fun onDragStart(event: DragEvent): Boolean = false
         fun onDragMove(event: DragEvent): Boolean = false
         fun onDragEnd(event: DragEvent): Boolean = false
@@ -325,7 +325,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
             return handleFootnote(event.interactiveElement)
         }
 
-        return runBlocking(uiScope.coroutineContext) { listener?.onTap(event.point) ?: false }
+        return runBlocking(uiScope.coroutineContext) {
+            listener?.onTap(event.point, event.targetElement) ?: false
+        }
     }
 
     /** Called from ContentScripts on a long press on an image, or a table's expand button; [json] comes from book content. */
@@ -362,7 +364,7 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
     internal data class TapEvent(
         val defaultPrevented: Boolean,
         val point: PointF,
-        val targetElement: String,
+        val targetElement: TargetElementData?,
         val interactiveElement: String?,
     ) {
         companion object {
@@ -375,7 +377,9 @@ internal open class R2BasicWebView(context: Context, attrs: AttributeSet) : WebV
                 return TapEvent(
                     defaultPrevented = obj.optBoolean("defaultPrevented"),
                     point = PointF(x, y),
-                    targetElement = obj.optString("targetElement"),
+                    targetElement = TargetElementData.fromJSONObject(
+                        obj.optJSONObject("targetElement")
+                    ),
                     interactiveElement = obj.optNullableString("interactiveElement")
                 )
             }

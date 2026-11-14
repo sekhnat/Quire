@@ -4,7 +4,7 @@
  * available in the top-level LICENSE file of the project.
  */
 //
-// Vendored from the Readium Kotlin Toolkit 3.3.0 (readium-navigator module, official
+// Vendored from the Readium Kotlin Toolkit 3.4.0 (readium-navigator module, official
 // sources jar) into Quire to implement continuous vertical scrolling. The original
 // BSD-style license header above applies to this file and its modifications.
 
@@ -361,8 +361,7 @@ internal class WebViewServer(
      * from any origin, including the package domain.
      */
     private fun WebResourceResponse.allowCors() {
-        responseHeaders = responseHeaders ?: mutableMapOf()
-        responseHeaders["Access-Control-Allow-Origin"] = "*"
+        responseHeaders = responseHeaders + mapOf("Access-Control-Allow-Origin" to "*")
     }
 
     private fun serveErrorResponse(): WebResourceResponse {

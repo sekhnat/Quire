@@ -7,7 +7,7 @@
  * LICENSE file present in the project repository where this source code is maintained.
  */
 //
-// Vendored from the Readium Kotlin Toolkit 3.3.0 (readium-navigator module, official
+// Vendored from the Readium Kotlin Toolkit 3.4.0 (readium-navigator module, official
 // sources jar) into Quire to implement continuous vertical scrolling. The original
 // BSD-style license header above applies to this file and its modifications.
 
@@ -288,7 +288,7 @@ internal class R2EpubPageFragment : Fragment(), com.quire.reader.navigator.Scrip
         // Forward a tap event when the web view is not ready to propagate the taps. This allows
         // to toggle a navigation UI while a page is loading, for example.
         containerView.setOnClickListenerWithPoint { _, point ->
-            webView.listener?.onTap(point)
+            webView.listener?.onTap(point, targetElement = null)
         }
 
         return containerView

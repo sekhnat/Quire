@@ -6,7 +6,8 @@ This package is a copy of the EPUB navigator from the [Readium Kotlin Toolkit](h
 own container (cfba78a). The copy keeps Readium's BSD 3-Clause licence (`assets/licenses/readium-LICENSE.txt`), and each
 copied file carries a "Vendored from …" note under its original header.
 
-**Baseline: Readium 3.3.0.** The copied files match that version's source apart from the changes listed below.
+**Baseline: Readium 3.4.0** (copied at 3.3.0, brought to 3.4.0 by porting its changes). The copied files match that
+version's source apart from the changes listed below.
 
 The copy is not standalone. The app still depends on the `readium-navigator` AAR **of the same version**, and the copied
 code uses it at run time, so the AAR and the copy must always be upgraded together.
@@ -38,7 +39,7 @@ code uses it at run time, so the AAR and the copy must always be upgraded togeth
 
 ## What Quire changed
 
-`scripts/navigator-upstream-diff.sh local 3.3.0` lists these, with `--full` for the diffs. It ignores the vendored note,
+`scripts/navigator-upstream-diff.sh local 3.4.0` lists these, with `--full` for the diffs. It ignores the vendored note,
 the package and import lines, and blank-line changes.
 
 **Scroll mode: one continuous surface for the whole book.**
@@ -101,6 +102,17 @@ the package and import lines, and blank-line changes.
 - A theme change in scroll mode (e095c27).
 - `R2BasicWebView.TapEvent` and `inputModifiers` became `internal` so the surface can parse frame events.
 
+**Taps in scroll mode carry no target element.**
+- Since 3.4.0, a paged tap passes the image under it as `TapEvent.targetElement` (`TargetElementData`, built in
+  `EpubNavigatorFragment.buildTargetElement`), as upstream.
+- The scroll surface's `Host.onTap` passes only the point. Quire opens images with its own long-press viewer
+  (`ReaderMedia`) and reads no tap's target element.
+
+**Style rewrites not taken.** 3.4.0 changed `EpubNavigatorViewModel.settings` and `R2EpubPageFragment.isLoaded` to
+explicit backing fields (`field =`; upstream compiles with Kotlin language version 2.4). The copy keeps the equivalent
+3.3.0 `_settings`/`_isLoaded` form, so the port carries behaviour changes only. This is the only difference in those
+lines.
+
 **Build plumbing.**
 - Layouts are inflated by id from Quire's own `res/layout/quire_navigator_*` and `R.dimen.quire_navigator_*`, not
   through the AAR's view bindings.
@@ -120,8 +132,10 @@ the package and import lines, and blank-line changes.
 3. **Bump the AAR:** `readium` in `gradle/libs.versions.toml`, and `androidx-media3-session` to the version Readium
    builds against.
 4. **Port the delta into the copy,** keeping Quire's changes above.
-   - Leave out pure style rewrites. For example, 3.4.0 moved to explicit backing fields (`field =`), which needs newer
-     Kotlin language features.
+   - Leave out pure style rewrites, such as 3.4.0's move to explicit backing fields (`field =`), and record them under
+     "Style rewrites not taken".
+   - Bump the declared versions of the AAR's dependencies that the app also declares (webkit, fragment, core,
+     constraintlayout, jsoup, coroutines, lifecycle) to at least what the AAR pulls in.
    - Give a new file a "Vendored from" note.
    - Change the bridge and the facade together.
 5. **Update the version** in every "Vendored from" note and in the baseline above. Then run
