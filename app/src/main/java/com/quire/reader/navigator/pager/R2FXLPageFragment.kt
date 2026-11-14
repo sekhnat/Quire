@@ -7,7 +7,7 @@
  * LICENSE file present in the project repository where this source code is maintained.
  */
 //
-// Vendored from the Readium Kotlin Toolkit 3.3.0 (readium-navigator module, official
+// Vendored from the Readium Kotlin Toolkit 3.4.0 (readium-navigator module, official
 // sources jar) into Quire to implement continuous vertical scrolling. The original
 // BSD-style license header above applies to this file and its modifications.
 
@@ -83,7 +83,7 @@ internal class R2FXLPageFragment : Fragment() {
             r2FXLLayout.addOnDoubleTapListener(R2FXLOnDoubleTapListener(true))
             r2FXLLayout.addOnTapListener(object : R2FXLLayout.OnTapListener {
                 override fun onTap(view: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean {
-                    return left.listener?.onTap(PointF(info.x, info.y)) ?: false
+                    return left.listener?.onTap(PointF(info.x, info.y), targetElement = null) ?: false
                 }
             })
 
@@ -102,7 +102,7 @@ internal class R2FXLPageFragment : Fragment() {
             r2FXLLayout.addOnDoubleTapListener(R2FXLOnDoubleTapListener(true))
             r2FXLLayout.addOnTapListener(object : R2FXLLayout.OnTapListener {
                 override fun onTap(view: R2FXLLayout, info: R2FXLLayout.TapInfo): Boolean {
-                    return webview.listener?.onTap(PointF(info.x, info.y)) ?: false
+                    return webview.listener?.onTap(PointF(info.x, info.y), targetElement = null) ?: false
                 }
             })
 

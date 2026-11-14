@@ -4,7 +4,7 @@
  * available in the top-level LICENSE file of the project.
  */
 //
-// Vendored from the Readium Kotlin Toolkit 3.3.0 (readium-navigator module, official
+// Vendored from the Readium Kotlin Toolkit 3.4.0 (readium-navigator module, official
 // sources jar) into Quire to implement continuous vertical scrolling. The original
 // BSD-style license header above applies to this file and its modifications.
 
@@ -68,6 +68,7 @@ import com.quire.reader.R
 import com.quire.reader.navigator.R2BasicWebView
 import com.quire.reader.navigator.R2WebView
 import com.quire.reader.navigator.RestorationNotSupportedException
+import com.quire.reader.navigator.TargetElementData
 import org.readium.r2.navigator.SelectableNavigator
 import org.readium.r2.navigator.Selection
 import com.quire.reader.navigator.dummyPublication
@@ -88,9 +89,11 @@ import org.readium.r2.navigator.input.Key
 import org.readium.r2.navigator.input.KeyEvent
 import com.quire.reader.navigator.input.KeyInterceptorView
 import org.readium.r2.navigator.input.TapEvent
+import org.readium.r2.navigator.input.TargetElement
 import com.quire.reader.navigator.pager.R2EpubPageFragment
 import com.quire.reader.navigator.pager.R2PagerAdapter
 import com.quire.reader.navigator.pager.R2PagerAdapter.PageResource
+import com.quire.reader.navigator.toTargetElement
 import com.quire.reader.navigator.pager.R2ViewPager
 import org.readium.r2.navigator.preferences.Configurable
 import org.readium.r2.navigator.preferences.FontFamily
@@ -1368,8 +1371,19 @@ public class EpubNavigatorFragment internal constructor(
         override fun javascriptInterfacesForResource(link: Link): Map<String, Any?> =
             config.javascriptInterfaces.mapValues { (_, factory) -> factory(link) }
 
-        override fun onTap(point: PointF): Boolean =
-            inputListener.onTap(TapEvent(point))
+        override fun onTap(point: PointF, targetElement: TargetElementData?): Boolean =
+            inputListener.onTap(
+                TapEvent(point, targetElement?.let { buildTargetElement(it) })
+            )
+
+        private fun buildTargetElement(data: TargetElementData): TargetElement? =
+            currentReflowablePageFragment?.link?.let { resourceLink ->
+                data.toTargetElement(
+                    resourceLink = resourceLink,
+                    adjustRect = { it.adjustedToViewport() },
+                    internalLinkForUrl = viewModel::internalLinkFromUrl
+                )
+            }
 
         override fun onDragStart(event: R2BasicWebView.DragEvent): Boolean =
             onDrag(DragEvent.Type.Start, event)
