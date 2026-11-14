@@ -16,7 +16,7 @@ class BookIdentityTest {
   @get:Rule val tmp = TemporaryFolder()
 
   private fun epub(file: File, chapter: String = "<p>Hello</p>", uid: String? = "urn:uuid:book-1", padding: Int = 0): File {
-    file.parentFile.mkdirs()
+    file.parentFile!!.mkdirs()
     ZipOutputStream(file.outputStream()).use { zip ->
       fun put(name: String, text: String) { zip.putNextEntry(ZipEntry(name)); zip.write(text.toByteArray()); zip.closeEntry() }
       put("mimetype", "application/epub+zip")
@@ -82,7 +82,7 @@ class BookIdentityTest {
 
   @Test fun `a MOBI is known by its ASIN and its whole content`() {
     val book = mobi(tmp.root.resolve("Author/Title (14)/Title - Author.azw3"), "kf8.azw3")
-    calibreOpf(book.parentFile, "m-uuid")
+    calibreOpf(book.parentFile!!, "m-uuid")
     val id = BookIdentity.read(book)
     assertEquals("m-uuid", id.calibreUuid)
     assertEquals("9631128d-203d-4898-9944-5a65084ca7ac", id.epubUid)
@@ -97,7 +97,7 @@ class BookIdentityTest {
   }
 
   private fun mobi(file: File, fixture: String): File {
-    file.parentFile.mkdirs()
+    file.parentFile!!.mkdirs()
     checkNotNull(javaClass.getResourceAsStream("/mobi/$fixture")).use { input -> file.outputStream().use(input::copyTo) }
     return file
   }

@@ -10,7 +10,7 @@ import java.io.File
 class FolderDiscoveryTest {
   @get:Rule val tmp = TemporaryFolder()
 
-  private fun touch(root: File, path: String) = File(root, path).apply { parentFile.mkdirs(); writeText("") }
+  private fun touch(root: File, path: String) = File(root, path).apply { parentFile!!.mkdirs(); writeText("") }
 
   /** Empty, flat Books with 2, Calibre-style nested with 30 (crossing one report step), plus folders discovery skips. */
   private fun storage(): File {
