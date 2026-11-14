@@ -20,6 +20,7 @@ import com.quire.reader.navigator.epub.ScrollTelemetry
 import com.quire.reader.reader.ReaderSession
 import com.quire.reader.ui.reader.ReaderLoad
 import java.io.File
+import kotlin.concurrent.thread
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -314,9 +315,12 @@ class ScrollWindowBenchmark {
   private fun writeAsShell(path: String, text: String) {
     shell("mkdir -p ${path.substringBeforeLast('/')}")
     // The command is split on spaces with no shell in between, so no redirection: tee writes the file.
+    // tee echoes what it writes, so its output is drained while the report goes in: written first, a report larger
+    // than the pipes' buffers fills tee's output, tee stops reading, and the write never finishes.
     val (stdout, stdin) = instrumentation.uiAutomation.executeShellCommandRw("tee $path")
+    val drain = thread(name = "bench-tee-drain") { ParcelFileDescriptor.AutoCloseInputStream(stdout).use { it.readBytes() } }
     ParcelFileDescriptor.AutoCloseOutputStream(stdin).use { it.write(text.toByteArray()) }
-    ParcelFileDescriptor.AutoCloseInputStream(stdout).use { it.readBytes() }
+    drain.join()
   }
 
   // ── input ─────────────────────────────────────────────────────────────────
