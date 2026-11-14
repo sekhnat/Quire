@@ -867,6 +867,8 @@ class ReaderState(
     definitionJob = scope.launch {
       // The selection settles a moment after the menu opens.
       delay(120)
+      // A long press on a link selects its text; that is not a lookup.
+      if (session.selectionInLink()) return@launch
       var shown: String? = null
       var candidate: String? = null
       var since = 0L

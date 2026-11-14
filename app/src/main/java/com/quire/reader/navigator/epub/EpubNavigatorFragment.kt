@@ -1252,6 +1252,15 @@ public class EpubNavigatorFragment internal constructor(
     }
 
     /**
+     * Quire: whether the current selection lies inside a link (a long press on a link selects its text). Asked of the
+     * selection's own document, as [currentSelection] is.
+     */
+    public suspend fun selectionInLink(): Boolean {
+        val runner = continuousBook?.selectionRunner() ?: activeScriptRunner() ?: return false
+        return runner.runJavaScriptSuspend(SELECTION_IN_LINK_JS) == "true"
+    }
+
+    /**
      * Where read aloud should start for the current selection: the block the selection begins in. It is not made from
      * [currentSelection], whose locators are what highlights are saved from and carry no selector.
      */
@@ -1781,3 +1790,11 @@ public class EpubNavigatorFragment internal constructor(
 @ExperimentalReadiumApi
 private val EpubSettings.effectiveBackgroundColor: Int get() =
     backgroundColor?.int ?: theme.backgroundColor
+
+/** True when the selection's start sits inside a link (`a` or `area` with an href, in HTML or SVG). */
+private const val SELECTION_IN_LINK_JS =
+    "(function(){var s=window.getSelection();var n=s&&s.anchorNode;" +
+        "while(n&&n.nodeType!==1)n=n.parentNode;" +
+        "for(;n&&n!==document;n=n.parentNode){if(n.nodeType===1&&(n.localName==='a'||n.localName==='area')&&" +
+        "(n.getAttribute('href')||n.getAttributeNS('http://www.w3.org/1999/xlink','href')))return true;}" +
+        "return false;})()"

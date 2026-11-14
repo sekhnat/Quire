@@ -136,8 +136,10 @@ class Features(private val app: QuireApplication) {
   private val bookEditor = object : BookEditor {
     override fun edits(bookId: Long) = repo.bookEdit(bookId)
     override suspend fun setEdit(bookId: Long, field: com.quire.reader.data.EditField, value: String?) = repo.setBookEdit(bookId, field, value)
-    override suspend fun setCover(bookId: Long, image: android.net.Uri?): Boolean =
-      repo.setBookCover(bookId, image?.let { repo.readPickedImage(it) ?: return false })
+    override suspend fun readImage(image: android.net.Uri) = repo.readPickedImage(image)
+    override suspend fun bookImages(bookId: Long) = repo.bookImages(bookId, app.publicationLoader)
+    override suspend fun setCoverImage(bookId: Long, image: ByteArray, crop: com.quire.reader.data.PixelRect?) = repo.setBookCover(bookId, image, crop)
+    override suspend fun resetCover(bookId: Long) { repo.setBookCover(bookId, null) }
     override suspend fun revertEdits(bookId: Long) = repo.revertBookEdits(bookId)
     override suspend fun setFinished(bookId: Long, finished: Boolean) = repo.setFinished(bookId, finished)
     override suspend fun setUserRating(bookId: Long, rating: Int?) = repo.setUserRating(bookId, rating)

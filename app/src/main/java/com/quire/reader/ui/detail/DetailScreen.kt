@@ -177,6 +177,11 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
       }
     }
     EditSheet(editOpen, book, detail)
+    val bookImages by detail.bookImages.collectAsStateWithLifecycle()
+    val bookImagesLoading by detail.bookImagesLoading.collectAsStateWithLifecycle()
+    BookImagesSheet(bookImages, bookImagesLoading, detail::cropBookImage, detail::closeBookImages)
+    val cropping by detail.cropping.collectAsStateWithLifecycle()
+    cropping?.let { CoverCropScreen(it, detail::cancelCrop, detail::saveCrop) }
   }
 }
 
@@ -189,7 +194,7 @@ private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
     if (uri != null) detail.exportNotes(uri)
   }
   val edit by detail.edits.collectAsStateWithLifecycle(null)
-  val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) detail.setCover(uri) }
+  val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) detail.cropPicked(uri) }
   SheetHost(open, { detail.openEdit(false) }, Modifier.padding(start = 20.dp, end = 20.dp, bottom = 24.dp).heightIn(max = (LocalConfiguration.current.screenHeightDp * 0.9f).dp)) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 14.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       QText("Edit in Quire", 17f, weight = 500)
@@ -202,10 +207,16 @@ private fun EditSheet(open: Boolean, book: Book, detail: DetailState) {
           hint = "Leave empty for no series")
         EditRow("Number in series", book.seriesNo?.let(::seriesNumber).orEmpty(), BookEdits.isEdited(edit, EditField.SeriesIndex), { detail.setEdit(EditField.SeriesIndex, it.ifBlank { null }) },
           { detail.resetEdit(EditField.SeriesIndex) }, hint = "2, or 2.5")
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          QText("Cover" + if (edit?.coverPath != null) "  · Edited" else "", 13f, Modifier.weight(1f), color = Nq.neutral300)
-          QButton("Choose image", { coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, size = 12f, height = 36.dp)
-          if (edit?.coverPath != null) QButton("Original", { detail.setCover(null) }, size = 12f, height = 36.dp)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          QText("Cover", 12f, Modifier.weight(1f), color = Nq.neutral400)
+          if (edit?.coverPath != null) {
+            QText("Edited", 11f, color = Nq.accent200)
+            QText("Original", 11.5f, Modifier.padding(start = 10.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = detail::resetCover).padding(horizontal = 4.dp, vertical = 2.dp), color = Nq.accent)
+          }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+          QButton("Choose image", { coverPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, Modifier.weight(1f), size = 12f, height = 38.dp)
+          QButton("From the book", detail::openBookImages, Modifier.weight(1f), size = 12f, height = 38.dp)
         }
         if (edit != null) QButton("Revert all", detail::revertAll, Modifier.fillMaxWidth(), icon = Ic.Refresh, size = 12.5f)
         QText("These stay in Quire: the book file and Calibre's metadata are never changed.", 11.5f, color = Nq.neutral500, lh = 1.4f)
