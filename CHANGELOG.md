@@ -6,7 +6,9 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.15.1] - 2026-11-14
+
+Choose a cover from the book's own pictures, and frame it yourself.
 
 ### Added
 
