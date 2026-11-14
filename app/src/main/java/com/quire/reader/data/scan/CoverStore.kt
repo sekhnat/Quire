@@ -43,10 +43,11 @@ class CoverStore(context: Context) {
   }.getOrNull()
 
   /**
-   * Saves a cover the user chose for book [bookId], cropped to the 2:3 shape of a book cover around its centre, under a
-   * new name each time (`user-<id>-<time>.webp`) so no image cache shows the old one. Null when [bytes] is no image.
+   * Saves a cover the user chose for book [bookId]: the part [crop] marks (in the image's own pixels), or else the
+   * largest 2:3 area around its centre, under a new name each time (`user-<id>-<time>.webp`) so no image cache shows the
+   * old one. Null when [bytes] is no image.
    */
-  fun saveUserCover(bytes: ByteArray, bookId: Long, now: Long): String? = runCatching {
+  fun saveUserCover(bytes: ByteArray, bookId: Long, now: Long, crop: com.quire.reader.data.PixelRect? = null): String? = runCatching {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -54,9 +55,14 @@ class CoverStore(context: Context) {
     var sample = 1
     while (bounds.outWidth / (sample * 2) >= USER_COVER_WIDTH) sample *= 2
     val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
-    val (x, y, w, h) = coverCrop(bmp.width, bmp.height)
+    // The crop was chosen on the full image; the decoded one may be smaller by [sample].
+    val (x, y, w, h) = crop?.let { c ->
+      val left = (c.left / sample).coerceIn(0, bmp.width - 1)
+      val top = (c.top / sample).coerceIn(0, bmp.height - 1)
+      listOf(left, top, (c.width / sample).coerceIn(1, bmp.width - left), (c.height / sample).coerceIn(1, bmp.height - top))
+    } ?: coverCrop(bmp.width, bmp.height)
     val cropped = Bitmap.createBitmap(bmp, x, y, w, h)
-    val scaled = if (cropped.width > USER_COVER_WIDTH) cropped.scale(USER_COVER_WIDTH, USER_COVER_WIDTH * 3 / 2) else cropped
+    val scaled = if (cropped.width > USER_COVER_WIDTH) cropped.scale(USER_COVER_WIDTH, (cropped.height * USER_COVER_WIDTH.toFloat() / cropped.width).toInt().coerceAtLeast(1)) else cropped
     val out = File(dir, "user-$bookId-$now.webp")
     val tmp = File(out.path + ".tmp")
     tmp.outputStream().use { scaled.compress(Bitmap.CompressFormat.WEBP_LOSSY, 85, it) }

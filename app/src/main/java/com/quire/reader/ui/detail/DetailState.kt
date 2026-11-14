@@ -8,6 +8,7 @@ import com.quire.reader.ui.Scope
 import com.quire.reader.ui.Toasts
 import com.quire.reader.data.EditField
 import com.quire.reader.data.EditRejected
+import com.quire.reader.data.PixelRect
 import com.quire.reader.data.db.BookEditEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -26,8 +27,14 @@ interface BookEditor {
   fun edits(bookId: Long): Flow<BookEditEntity?> = flowOf(null)
   /** Sets one field, or resets it with null; throws [EditRejected] for a value that cannot be saved. */
   suspend fun setEdit(bookId: Long, field: EditField, value: String?) {}
-  /** Gives the book the picked image as its cover, or its own cover back with null; false when the image is unreadable. */
-  suspend fun setCover(bookId: Long, image: Uri?): Boolean = false
+  /** The bytes of an image picked with the photo picker; null when it cannot be read. */
+  suspend fun readImage(image: Uri): ByteArray? = null
+  /** The pictures inside the book, to choose a cover from. */
+  suspend fun bookImages(bookId: Long): List<ByteArray> = emptyList()
+  /** Gives the book [image] as its cover, the part [crop] marks; false when the image is unreadable. */
+  suspend fun setCoverImage(bookId: Long, image: ByteArray, crop: PixelRect?): Boolean = false
+  /** Goes back to the book's own cover. */
+  suspend fun resetCover(bookId: Long) {}
   suspend fun revertEdits(bookId: Long) {}
 }
 
@@ -80,9 +87,48 @@ class DetailState(
 
   fun resetEdit(field: EditField) = setEdit(field, null)
 
-  fun setCover(image: Uri?) = persist.launch {
-    if (!editor.setCover(bookId, image)) toasts.show(if (image == null) "Couldn't restore the cover" else "That image can't be used as a cover")
+  private val _cropping = MutableStateFlow<ByteArray?>(null)
+  /** The image being framed on the crop screen, if it is open. */
+  val cropping: StateFlow<ByteArray?> = _cropping
+
+  private val _bookImages = MutableStateFlow<List<ByteArray>?>(null)
+  /** The book's own pictures while the picker is open: null when closed, empty while (or after) finding none. */
+  val bookImages: StateFlow<List<ByteArray>?> = _bookImages
+  private val _bookImagesLoading = MutableStateFlow(false)
+  val bookImagesLoading: StateFlow<Boolean> = _bookImagesLoading
+
+  /** A photo was picked: frame it. */
+  fun cropPicked(image: Uri) = persist.launch {
+    val bytes = editor.readImage(image)
+    if (bytes == null) toasts.show("That image can't be used as a cover") else _cropping.value = bytes
   }
+
+  /** Shows the book's own pictures to choose from. */
+  fun openBookImages() {
+    _bookImages.value = emptyList()
+    _bookImagesLoading.value = true
+    persist.launch {
+      val images = editor.bookImages(bookId)
+      _bookImagesLoading.value = false
+      if (_bookImages.value != null) _bookImages.value = images
+    }
+  }
+
+  fun closeBookImages() { _bookImages.value = null; _bookImagesLoading.value = false }
+
+  /** One of the book's pictures was chosen: frame it. */
+  fun cropBookImage(bytes: ByteArray) { closeBookImages(); _cropping.value = bytes }
+
+  fun cancelCrop() { _cropping.value = null }
+
+  /** Saves the framed part of the image as the cover. */
+  fun saveCrop(crop: PixelRect?) {
+    val bytes = _cropping.value ?: return
+    _cropping.value = null
+    persist.launch { if (!editor.setCoverImage(bookId, bytes, crop)) toasts.show("That image can't be used as a cover") }
+  }
+
+  fun resetCover() = persist.launch { editor.resetCover(bookId) }
 
   fun revertAll() = persist.launch { editor.revertEdits(bookId); toasts.show("Back to the book's own details") }
 }

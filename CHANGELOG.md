@@ -6,6 +6,19 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- *From the book* in the cover options of *Edit in Quire* shows the pictures inside the book (for MOBI and AZW3 too),
+  to use one as its cover.
+- Frame the cover yourself: a chosen photo or picture opens under a 2:3 frame, to move with a finger and zoom with
+  two; what lies in the frame becomes the cover. Before, the middle of the picture was taken.
+
+### Fixed
+
+- A long press on a link no longer opens the dictionary card.
+
 ## [1.15.0] - 2026-11-14
 
 A built-in dictionary, auto-scroll, your own fonts, quote images, zoomable images and tables, a configurable status line,

@@ -296,12 +296,12 @@ class LibraryRepository(
   }
 
   /**
-   * Gives a book a cover from an image the user picked (cropped to 2:3), from [bytes]; null [bytes] goes back to the
-   * book's own cover. The previous chosen cover's file is deleted. Returns false when the image could not be read.
+   * Gives a book a cover from an image the user picked, from [bytes]: the part [crop] marks, or else a centred 2:3 area.
+   * Null [bytes] goes back to the book's own cover. The previous chosen cover's file is deleted. Returns false when the image could not be read.
    */
-  suspend fun setBookCover(bookId: Long, bytes: ByteArray?): Boolean = withContext(Dispatchers.IO) {
+  suspend fun setBookCover(bookId: Long, bytes: ByteArray?, crop: PixelRect? = null): Boolean = withContext(Dispatchers.IO) {
     val current = db.edits().get(bookId) ?: BookEditEntity(bookId)
-    val path = if (bytes == null) null else covers.saveUserCover(bytes, bookId, System.currentTimeMillis()) ?: return@withContext false
+    val path = if (bytes == null) null else covers.saveUserCover(bytes, bookId, System.currentTimeMillis(), crop) ?: return@withContext false
     db.edits().save(current.copy(coverPath = path, updatedAt = System.currentTimeMillis()))
     current.coverPath?.takeIf { it != path }?.let(covers::delete)
     true
@@ -317,6 +317,13 @@ class LibraryRepository(
         out.toByteArray()
       }
     }.getOrNull()
+  }
+
+  /** The pictures inside the book, to choose a cover from (see [BookImages]); empty when it cannot be read. */
+  suspend fun bookImages(bookId: Long, loader: com.quire.reader.reader.PublicationLoader): List<ByteArray> {
+    val book = db.books().byId(bookId) ?: return emptyList()
+    if (book.missingSince != null) return emptyList()
+    return BookImages.read(loader, File(book.path))
   }
 
   /** Resets every edit of a book (*Revert all*), its chosen cover included. */

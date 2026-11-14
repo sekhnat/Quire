@@ -251,6 +251,9 @@ class ReaderSession(
 
   suspend fun currentSelection(): Locator? = (navigator as? SelectableNavigator)?.currentSelection()?.locator
 
+  /** Whether the selection lies inside a link. */
+  suspend fun selectionInLink(): Boolean = navigator?.selectionInLink() ?: false
+
   /** The selected text, or null with no selection. */
   suspend fun selectedText(): String? = (navigator as? SelectableNavigator)?.currentSelection()?.locator?.text?.highlight
   fun clearSelection() { (navigator as? SelectableNavigator)?.clearSelection() }
