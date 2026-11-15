@@ -6,13 +6,19 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.16.1] - 2026-11-15
+
+No more white flash when a book opens in scroll mode.
 
 ### Fixed
 
 - In scroll mode, a white box no longer flashes at the top of the page while a book or chapter opens. Newer Android
   System WebView versions (157 on) draw a chapter that is still loading as a white box, which showed for a moment
   over dark themes.
+
+### Upgrading
+
+- No database migration and no new permissions.
 
 ## [1.16.0] - 2026-11-15
 
