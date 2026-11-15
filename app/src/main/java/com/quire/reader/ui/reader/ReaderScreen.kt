@@ -3,6 +3,7 @@ package com.quire.reader.ui.reader
 import android.app.Activity
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.os.SystemClock
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -46,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,6 +90,7 @@ import com.quire.reader.ui.Sheet
 import com.quire.reader.ui.TocTab
 import com.quire.reader.ui.dashedBorder
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /** The room the read-aloud controls take from the bottom of the page. */
 private val READ_ALOUD_BAR_SPACE = 56.dp
@@ -303,11 +306,24 @@ private fun ReaderControlsEffects(session: ReaderSession, controls: ReaderContro
   val view = LocalView.current
   val activity = LocalActivity.current
 
-  // Auto-scroll keeps the screen on while it runs, whatever *Keep screen on* is set to.
-  DisposableEffect(view, controls.keepScreenOn, keepAwake) {
-    view.keepScreenOn = controls.keepScreenOn || keepAwake
-    onDispose { view.keepScreenOn = false }
+  val host = activity as? ReaderKeyHost
+  // The screen stays on for a while after each touch or key press (or always), then the system's timeout takes over.
+  // Opening or closing a sheet counts as a touch too.
+  val hold = screenOnHold(controls, keepAwake)
+  var lastInput by remember { mutableLongStateOf(0L) }
+  DisposableEffect(host) {
+    val onInput = { lastInput = SystemClock.uptimeMillis() }
+    host?.readerInteraction = onInput
+    onDispose { if (host?.readerInteraction === onInput) host?.readerInteraction = null }
   }
+  LaunchedEffect(view, hold, lastInput, overlaysOpen) {
+    view.keepScreenOn = hold != null
+    if (hold != null && hold.isFinite()) {
+      delay(hold)
+      view.keepScreenOn = false
+    }
+  }
+  DisposableEffect(view) { onDispose { view.keepScreenOn = false } }
 
   DisposableEffect(activity, controls.orientation) {
     activity?.requestedOrientation = when (controls.orientation) {
@@ -319,7 +335,6 @@ private fun ReaderControlsEffects(session: ReaderSession, controls: ReaderContro
     onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
   }
 
-  val host = activity as? ReaderKeyHost
   DisposableEffect(host, session, controls.volumeKeys, overlaysOpen) {
     val listener: ((KeyEvent) -> Boolean)? = if (!controls.volumeKeys) null else { event ->
       when (volumeKeyFor(event.keyCode, event.action, event.repeatCount, overlaysOpen)) {

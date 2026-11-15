@@ -41,6 +41,7 @@ import com.quire.reader.BuildConfig
 import com.quire.reader.data.ReadMode
 import com.quire.reader.data.db.IndexCoverage
 import com.quire.reader.data.db.MissingBookRow
+import com.quire.reader.data.ReaderControls
 import com.quire.reader.data.ReaderOrientation
 import com.quire.reader.data.ReaderPrefs
 import com.quire.reader.data.TextAlignPref
@@ -192,7 +193,16 @@ fun SettingsScreen(settings: SettingsState) {
         val controls by settings.readerControls.collectAsStateWithLifecycle()
         Kicker("Reading controls")
         Toggle("Volume keys turn pages", "Volume down for the next page, volume up for the previous one.", controls.volumeKeys) { settings.updateControls { it.copy(volumeKeys = !it.volumeKeys) } }
-        Toggle("Keep screen on", "Stops the screen from timing out while a book is open.", controls.keepScreenOn) { settings.updateControls { it.copy(keepScreenOn = !it.keepScreenOn) } }
+        Toggle("Keep screen on", "Stops the screen from timing out while you read.", controls.keepScreenOn) { settings.updateControls { it.copy(keepScreenOn = !it.keepScreenOn) } }
+        if (controls.keepScreenOn) {
+          Box(Modifier.padding(bottom = 6.dp)) {
+            SettingRow("Stay on for") {
+              Segmented(ReaderControls.SCREEN_ON_MINUTES.map { m ->
+                SegOption(if (m == 0) "Always" else "$m min", controls.keepScreenOnMinutes == m, { settings.updateControls { it.copy(keepScreenOnMinutes = m) } })
+              })
+            }
+          }
+        }
         Toggle("Look up words on long press", "Shows a word's meaning from the built-in English dictionary, offline.", controls.lookUpOnLongPress) { settings.updateControls { it.copy(lookUpOnLongPress = !it.lookUpOnLongPress) } }
         Box(Modifier.padding(top = 10.dp)) {
           SettingRow("Orientation") {

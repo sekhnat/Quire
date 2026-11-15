@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- *Keep screen on* can let the screen sleep after 5, 10 or 30 minutes without a touch, so a book left open no
+  longer keeps the phone awake. *Always* keeps the old behaviour.
+
 ### Changed
 
 - Built on Readium 3.4.0 and Coil 3.6.3 (compileSdk 37, Kotlin 2.4). Reading, the library and search work as

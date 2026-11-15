@@ -17,14 +17,22 @@ import com.quire.reader.reader.WebViewWarmup
 import com.quire.reader.theme.QuireTheme
 import com.quire.reader.ui.QuireApp
 
-/** Lets the open reader see the hardware keys the page leaves unused. */
+/** Lets the open reader see the hardware keys the page leaves unused, and know of every touch or key press. */
 interface ReaderKeyHost {
   /** Returns true to consume the event; null while no reader is listening. */
   var readerKeys: ((KeyEvent) -> Boolean)?
+  /** Called on every touch-down and key event, wherever in the window it lands; null while no reader is listening. */
+  var readerInteraction: (() -> Unit)?
 }
 
 class MainActivity : FragmentActivity(), ReaderKeyHost {
   override var readerKeys: ((KeyEvent) -> Boolean)? = null
+  override var readerInteraction: (() -> Unit)? = null
+
+  override fun onUserInteraction() {
+    super.onUserInteraction()
+    readerInteraction?.invoke()
+  }
 
   // The volume keys reach the activity only when the page has not used them, which it never does.
   override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean = readerKeys?.invoke(event) == true || super.onKeyDown(keyCode, event)
