@@ -301,6 +301,9 @@ var QuireShellHost = (function () {
     // shorter than the frame it is laid out in, so a tall box would stop a short chapter from ever
     // reporting its real height. A chapter that was measured before is shown at that height at once.
     el.style.height = (s.measured && !s.stale ? s.height : LOADING_FRAME_PX) + 'px';
+    // Hidden until its document has drawn: newer WebViews (157 on) paint a frame that has not drawn
+    // yet as an opaque white box, which flashes over a dark theme while a chapter opens.
+    el.style.visibility = 'hidden';
     s.frame = el;
     var alive = function () { return s.frame === el && s.state === 'loading'; };
     var fail = function (message) {
@@ -319,6 +322,8 @@ var QuireShellHost = (function () {
         s.docLoaded = true;
         var afterFonts = function () {
           if (!alive()) return;
+          // Styled and its text laid out: show it now rather than after its images, which may take up to 10s.
+          el.style.visibility = '';
           var imgs = Array.prototype.slice.call(doc.images || []);
           var remaining = imgs.filter(function (img) { return !img.complete; });
           var done = function () {
