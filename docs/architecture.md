@@ -28,6 +28,20 @@ app/src/main/java/com/quire/reader/
 - Locator and position formats are the same in both modes: scroll mode reports original EPUB hrefs and resource-local progression, so old bookmarks, highlights and saved positions reopen as they did.
 - The scanner skips unchanged files by size and modified time, reads the rest four at a time, and never lets one broken file stop the run. A folder that has gone missing (an unmounted SD card) never removes its books from the library.
 
+## Benchmarking scroll mode
+
+Scroll mode's live window is decided in `assets/quire/continuous-scroll.js` by `planWindow`, a pure function tested by `ShellWindowPolicyTest`. It leans into the fling direction and predicted stop, evicts by estimated document weight, and shrinks with the memory-pressure tier from `navigator/epub/ScrollMemoryPressure.kt`.
+
+Scroll telemetry exists only in the `benchmark` build type (app id `com.quire.reader.bench`, `BuildConfig.SCROLL_TELEMETRY`). To measure on the emulator (a Pixel 7 profile, x86_64, 4 cores, 4 GB):
+
+```sh
+adb push ORV.epub /data/local/tmp/quire-bench/
+./gradlew connectedBenchmarkAndroidTest -PtestBuildType=benchmark \
+  -Pandroid.testInstrumentationRunnerArguments.class=com.quire.reader.ui.ScrollWindowBenchmark
+```
+
+Reports land in `/data/local/tmp/quire-bench/results`. The fling and long tests run the fixed (`static`) and `adaptive` policies side by side and take about 20 and 35 minutes; keep the host otherwise idle while they run.
+
 ## Library text search: limits and cost
 
 - Latin-script words match as whole indexed tokens; a prefix of a very common word falls back to the exact word, with a note.

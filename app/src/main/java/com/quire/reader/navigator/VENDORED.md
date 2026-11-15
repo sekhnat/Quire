@@ -158,4 +158,4 @@ lines.
 6. **Test on a device.**
    - In paged and scroll mode: taps, links, selection, highlights, the dictionary card, the media viewer, search
      jumps, theme and font changes, and read aloud.
-   - Run `ScrollWindowBenchmark` before and after the upgrade.
+   - Run `ScrollWindowBenchmark` before and after the upgrade (see "Benchmarking scroll mode" in `docs/architecture.md`).
