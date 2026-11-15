@@ -6,7 +6,10 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.16.0] - 2026-11-15
+
+A time limit for *Keep screen on*, read aloud in the book's language, links and swipes in fixed-layout books, and a
+reader that survives a lost page renderer.
 
 ### Added
 
