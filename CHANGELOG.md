@@ -6,7 +6,7 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.17.0] - 2026-11-16
 
 Archive of Our Own tags keep their type.
 
