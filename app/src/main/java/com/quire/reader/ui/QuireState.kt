@@ -191,7 +191,9 @@ val LibraryUiState.bookQuery: BookQuery get() = BookQuery(sort, sortAscending, f
 fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.visibleBooks") {
   val scope = q.scope
   val words = q.words
-  val text = q.query.takeIf { it.isNotBlank() }?.lowercase()
+  // Typed terms (`fandom:…`, `ship:…`) narrow by tag kind; the rest of the query is searched as text.
+  val typed = parseTagQuery(q.query).takeIf { it.terms.isNotEmpty() }
+  val text = (typed?.text ?: q.query).takeIf { it.isNotBlank() }?.lowercase()
   val searchText = if (text != null) lib.searchText else null
   val kept = ArrayList<Book>()
   lib.books.forEachIndexed { i, b ->
@@ -206,7 +208,7 @@ fun visibleBooks(q: BookQuery, lib: LibraryData): List<Book> = trace("Library.vi
       LibFilter.Unread -> b.status == BookStatus.Unread
       LibFilter.Finished -> b.status == BookStatus.Finished
     }
-    if (inView && (words == null || words.matches(b.words)) && (text == null || searchText!![i].contains(text))) kept += b
+    if (inView && (words == null || words.matches(b.words)) && (typed == null || typed.matches(b)) && (text == null || searchText!![i].contains(text))) kept += b
   }
   var order = compareBy<Book> { q.sort.value(it) }.thenBy { it.addedAt }.thenBy { it.sortTitle }
   if (!q.ascending) order = order.reversed()

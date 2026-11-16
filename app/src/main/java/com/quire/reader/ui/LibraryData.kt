@@ -3,6 +3,7 @@ package com.quire.reader.ui
 import androidx.tracing.trace
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.TagKind
 import com.quire.reader.data.db.FolderEntity
 
 data class AuthorEntry(val name: String, val books: List<Book>)
@@ -72,6 +73,13 @@ class LibraryData(
     count.entries.map { Triple(it.key, it.value, it.key.lowercase()) }
       .sortedWith(compareByDescending<Triple<String, Int, String>> { it.second }.thenBy { it.third })
       .map { it.first to it.second }
+  }
+
+  /** The kind of each tag some book gives one; a tag one book types and another doesn't counts as typed. */
+  val tagKinds: Map<String, TagKind> by traced("tagKinds") {
+    val kinds = HashMap<String, TagKind>()
+    books.forEach { b -> b.tagKinds.forEach { (tag, kind) -> kinds.putIfAbsent(tag, kind) } }
+    kinds
   }
 
   val ratedFive: Int by traced("ratedFive") { books.count { it.rating == 5 } }

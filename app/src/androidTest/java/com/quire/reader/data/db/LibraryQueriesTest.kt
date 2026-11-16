@@ -1,5 +1,7 @@
 package com.quire.reader.data.db
 
+import com.quire.reader.data.ScannedTag
+import com.quire.reader.data.TagKind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -8,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -72,6 +75,40 @@ class LibraryQueriesTest : DbTestCase() {
     val after = db.books().observeCatalog().first().associateBy { it.id }
     assertEquals(null, after.getValue(a).folderTag)
     assertEquals(setOf("Other", "Private"), after.getValue(b).tagList.toSet())
+  }
+
+  @Test fun `scanned tags keep their kind and AO3 stats are replaced on rescan`() = runBlocking {
+    val db = open()
+    val folderId = folder(db)
+    val book = bookEntity(folderId, "Lanterns").copy(path = "/lib/lanterns.epub")
+    val tags = listOf(ScannedTag("Fanworks"), ScannedTag("Starlight Harbor", TagKind.Fandom), ScannedTag("Mira/June", TagKind.Relationship))
+    val id = db.books().saveScanned(book, tags, "lib", Ao3WorkEntity(0, published = "2021-01-02", words = 12345, chaptersPosted = 3, chaptersTotal = null))
+    db.books().insertTags(listOf(BookTagEntity(id, "to read", BookTagEntity.ORIGIN_USER)))
+
+    val row = db.books().catalogByIds(listOf(id)).single()
+    assertEquals(mapOf("Starlight Harbor" to TagKind.Fandom, "Mira/June" to TagKind.Relationship), row.tagKinds)
+    assertEquals(setOf("Fanworks", "Starlight Harbor", "Mira/June", "lib", "to read"), row.tagList.toSet())
+    assertEquals("lib", row.folderTag)
+    assertEquals(listOf("to read"), row.userTagList)
+    assertEquals(Ao3WorkEntity(id, published = "2021-01-02", words = 12345, chaptersPosted = 3, chaptersTotal = null), row.ao3Work)
+
+    // A rescan of a book that is no longer from AO3 drops the kinds and the stats, and keeps the user's tag.
+    db.books().saveScanned(book.copy(id = id), listOf(ScannedTag("Fanworks")), "lib", null)
+    val after = db.books().catalogByIds(listOf(id)).single()
+    assertEquals(emptyMap<String, TagKind>(), after.tagKinds)
+    assertEquals(setOf("Fanworks", "lib", "to read"), after.tagList.toSet())
+    assertNull(after.ao3Work)
+    assertNull(db.books().ao3(id))
+  }
+
+  @Test fun `the AO3 re-read queues only books with an archive warning`() = runBlocking {
+    val db = open()
+    val folderId = folder(db)
+    val ao3 = db.books().save(bookEntity(folderId, "Lanterns").copy(path = "/lib/a.epub", mtime = 7), listOf("Fanworks", "No Archive Warnings Apply"))
+    val other = db.books().save(bookEntity(folderId, "Field Guide").copy(path = "/lib/b.epub", mtime = 7), listOf("Mature"))
+    db.books().queueAo3Reread()
+    assertEquals(-1L, db.books().byId(ao3)!!.mtime)
+    assertEquals(7L, db.books().byId(other)!!.mtime)
   }
 
   @Test fun `removing books keeps those with history as missing and forgetting them deletes it all`() = runBlocking {

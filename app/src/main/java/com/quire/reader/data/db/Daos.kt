@@ -7,6 +7,9 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import com.quire.reader.data.Ao3Vocabulary
+import com.quire.reader.data.ScannedTag
+import com.quire.reader.data.TagKind
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -35,17 +38,29 @@ data class CatalogRow(
   val source: String,
   val readable: Boolean,
   /**
-   * Tags separated by the ASCII unit separator (U+001F), each prefixed `c` (from the book), `f` (the folder it is in) or
-   * `u` (added in Quire).
+   * Tags separated by the ASCII unit separator (U+001F), each prefixed by two letters: `c` (from the book), `f` (the
+   * folder it is in) or `u` (added in Quire), then the [TagKind.letter] of its kind, or `-` for a plain tag.
    */
   val tags: String?,
   /** Words counted in the book's text; null when not counted yet, 0 when it could not be read. */
   val wordCount: Int? = null,
+  /** The book's AO3 stats (see [Ao3WorkEntity]); all null for a book that is not from AO3. */
+  val ao3Published: String? = null,
+  val ao3Updated: String? = null,
+  val ao3Completed: String? = null,
+  val ao3Words: Int? = null,
+  val ao3ChaptersPosted: Int? = null,
+  val ao3ChaptersTotal: Int? = null,
+  /** 1 when the book has an `ao3_work` row. */
+  val ao3: Boolean = false,
 ) {
-  private val tagEntries: List<String> get() = tags?.split('\u001F')?.filter { it.length > 1 }.orEmpty()
-  val tagList: List<String> get() = tagEntries.map { it.substring(1) }
-  val userTagList: List<String> get() = tagEntries.filter { it[0] == 'u' }.map { it.substring(1) }
-  val folderTag: String? get() = tagEntries.firstOrNull { it[0] == 'f' }?.substring(1)
+  private val tagEntries: List<String> get() = tags?.split('\u001F')?.filter { it.length > 2 }.orEmpty()
+  val tagList: List<String> get() = tagEntries.map { it.substring(2) }
+  val userTagList: List<String> get() = tagEntries.filter { it[0] == 'u' }.map { it.substring(2) }
+  val folderTag: String? get() = tagEntries.firstOrNull { it[0] == 'f' }?.substring(2)
+  /** The kind of each tag that has one. */
+  val tagKinds: Map<String, TagKind> get() = tagEntries.mapNotNull { e -> TagKind.ofLetter(e[1])?.let { e.substring(2) to it } }.toMap()
+  val ao3Work: Ao3WorkEntity? get() = if (!ao3) null else Ao3WorkEntity(id, ao3Published, ao3Updated, ao3Completed, ao3Words, ao3ChaptersPosted, ao3ChaptersTotal)
 }
 
 /** The part of a book's reading state the library shows; a book without a `book_state` row has none yet. */
@@ -160,8 +175,11 @@ private const val CATALOG_SQL = """
     SELECT b.id, b.path, b.folderId, $EDITED_COLUMNS,
            b.pubYear, b.language, b.description, b.calibreRating, b.sizeBytes, b.addedAt, b.pageEstimate, b.source,
            b.readable, b.wordCount,
-           (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' WHEN 'folder' THEN 'f' ELSE 'c' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags
-    FROM book b LEFT JOIN book_edit e ON e.bookId = b.id
+           (SELECT GROUP_CONCAT((CASE t.origin WHEN 'user' THEN 'u' WHEN 'folder' THEN 'f' ELSE 'c' END)
+              || (CASE t.kind WHEN 'rating' THEN 'r' WHEN 'warning' THEN 'w' WHEN 'category' THEN 'g' WHEN 'fandom' THEN 'd' WHEN 'relationship' THEN 'p' WHEN 'character' THEN 'h' WHEN 'freeform' THEN 't' WHEN 'collection' THEN 'l' ELSE '-' END) || t.tag, char(31)) FROM book_tag t WHERE t.bookId = b.id) AS tags,
+           w.published AS ao3Published, w.updated AS ao3Updated, w.completed AS ao3Completed, w.words AS ao3Words,
+           w.chaptersPosted AS ao3ChaptersPosted, w.chaptersTotal AS ao3ChaptersTotal, w.bookId IS NOT NULL AS ao3
+    FROM book b LEFT JOIN book_edit e ON e.bookId = b.id LEFT JOIN ao3_work w ON w.bookId = b.id
     WHERE b.missingSince IS NULL
     """
 
@@ -252,16 +270,26 @@ abstract class BookDao {
   )
   abstract fun observeTagNames(): Flow<List<String>>
 
+  @Insert(onConflict = OnConflictStrategy.REPLACE) protected abstract suspend fun putAo3(work: Ao3WorkEntity)
+  @Query("DELETE FROM ao3_work WHERE bookId = :bookId") protected abstract suspend fun deleteAo3(bookId: Long)
+  @Query("SELECT * FROM ao3_work WHERE bookId = :bookId") abstract suspend fun ao3(bookId: Long): Ao3WorkEntity?
+
   /**
-   * Writes a scanned book and replaces its Calibre tags and its folder tag in one transaction. The row id is kept when
-   * the file was already known so reading state, bookmarks and highlights stay attached.
+   * Writes a scanned book and replaces its Calibre tags, its folder tag and its AO3 stats in one transaction. The row id
+   * is kept when the file was already known so reading state, bookmarks and highlights stay attached.
    */
+  open suspend fun save(book: BookEntity, tags: List<String>, folderTag: String? = null): Long =
+    saveScanned(book, tags.map { ScannedTag(it) }, folderTag, null)
+
+  /** [save] with each tag's kind, and the AO3 stats [ao3] (its book id is filled in; null: the book has none). */
   @Transaction
-  open suspend fun save(book: BookEntity, tags: List<String>, folderTag: String? = null): Long {
+  open suspend fun saveScanned(book: BookEntity, tags: List<ScannedTag>, folderTag: String?, ao3: Ao3WorkEntity?): Long {
     val id = upsertKeepingId(book)
     deleteTags(id, BookTagEntity.ORIGIN_CALIBRE)
-    insertTags(tags.distinct().map { BookTagEntity(id, it, BookTagEntity.ORIGIN_CALIBRE) })
+    insertTags(tags.distinctBy { it.tag }.map { BookTagEntity(id, it.tag, BookTagEntity.ORIGIN_CALIBRE, it.kind?.key) })
     replaceFolderTag(id, folderTag)
+    deleteAo3(id)
+    if (ao3 != null) putAo3(ao3.copy(bookId = id))
     return id
   }
 
@@ -314,6 +342,14 @@ abstract class BookDao {
   )
   abstract suspend fun queueMetadataReread()
 
+  /**
+   * One-time re-read, the same way as [queueCoverBackfill], of books stored before tags had kinds whose tags show they
+   * come from AO3 (one of its archive warnings, see [Ao3Vocabulary]), so their tags get typed and their stats read.
+   */
+  @Query("UPDATE book SET mtime = -1 WHERE id IN (SELECT bookId FROM book_tag WHERE origin = 'calibre' AND LOWER(tag) IN (:warnings))")
+  protected abstract suspend fun queueRereadOf(warnings: List<String>)
+  open suspend fun queueAo3Reread() = queueRereadOf(Ao3Vocabulary.warningKeys)
+
   /** Books that point at a cover file; a full restore without covers checks which of those files exist. */
   @Query("SELECT id, coverPath FROM book WHERE coverPath IS NOT NULL") abstract suspend fun withCovers(): List<BookCover>
   @Query("UPDATE book SET coverPath = NULL WHERE id IN (:ids)") abstract suspend fun clearCovers(ids: List<Long>)
@@ -335,6 +371,7 @@ abstract class BookDao {
     val old = byId(missingId)?.takeIf { it.missingSince != null } ?: return null
     val new = byId(liveId)?.takeIf { it.missingSince == null } ?: return null
     val tags = scannedTags(liveId)
+    val ao3 = ao3(liveId)
     delete(listOf(liveId))
     // Readium's real page count replaced the estimate on the old row; it still holds for the same file.
     val sameFile = old.fingerprint != null && old.fingerprint == new.fingerprint
@@ -347,6 +384,8 @@ abstract class BookDao {
     deleteTags(old.id, BookTagEntity.ORIGIN_CALIBRE)
     deleteTags(old.id, BookTagEntity.ORIGIN_FOLDER)
     insertTags(tags.map { it.copy(bookId = old.id) })
+    deleteAo3(old.id)
+    if (ao3 != null) putAo3(ao3.copy(bookId = old.id))
     return Adoption(staleCover = old.coverPath?.takeIf { it != new.coverPath })
   }
 

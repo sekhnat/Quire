@@ -32,10 +32,31 @@ class BookModelTest {
   }
 
   @Test fun `tags carry their origin so only Quire's own can be removed`() {
-    val r = catalog(tags = "cMystery\u001FuFavourite\u001FcClassics")
-    assertEquals(listOf("Mystery", "Favourite", "Classics"), r.tagList)
+    val r = catalog(tags = "c-Mystery\u001Fu-Favourite\u001Fc-Classics\u001Ff-Shelf")
+    assertEquals(listOf("Mystery", "Favourite", "Classics", "Shelf"), r.tagList)
     assertEquals(listOf("Favourite"), r.userTagList)
+    assertEquals("Shelf", r.folderTag)
     assertEquals(emptyList<String>(), catalog(tags = null).tagList)
+  }
+
+  @Test fun `tags carry their kind`() {
+    val b = catalog(tags = "cdStarlight Harbor\u001FcpMira/June\u001Fc-Fanworks\u001FcwNo Archive Warnings Apply\u001Fu-to read").toBook(now)
+    assertEquals(listOf("Starlight Harbor", "Mira/June", "Fanworks", "No Archive Warnings Apply", "to read"), b.tags)
+    assertEquals(mapOf("Starlight Harbor" to TagKind.Fandom, "Mira/June" to TagKind.Relationship, "No Archive Warnings Apply" to TagKind.Warning), b.tagKinds)
+    assertEquals(listOf("Mira/June"), b.tagsOf(TagKind.Relationship))
+    assertEquals(listOf("Fanworks", "to read"), b.plainTags)
+    assertEquals(listOf("to read"), b.userTags)
+  }
+
+  @Test fun `AO3 stats read as one line`() {
+    assertEquals(null, book().ao3)
+    val done = Ao3Stats(published = "2020-07-11", completed = "2020-08-17", words = 59904, chaptersPosted = 6, chaptersTotal = 6)
+    assertTrue(done.complete)
+    assertEquals("Chapters 6/6 · Complete · Published Jul 11, 2020 · Completed Aug 17, 2020 · 59,904 words", done.label)
+    val wip = Ao3Stats(updated = "2022-07-08", chaptersPosted = 3, chaptersTotal = null)
+    assertFalse(wip.complete)
+    assertEquals("Chapters 3/? · In progress · Updated Jul 8, 2022", wip.label)
+    assertEquals(null, Ao3Stats().label)
   }
 
   @Test fun `the user's rating beats Calibre's`() {

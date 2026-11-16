@@ -3,6 +3,8 @@ package com.quire.reader.data.scan
 import android.util.Log
 import com.quire.reader.data.SettingsStore
 import com.quire.reader.data.runCatchingCancellable
+import com.quire.reader.data.scannedTags
+import com.quire.reader.data.db.Ao3WorkEntity
 import com.quire.reader.data.db.BookEntity
 import com.quire.reader.data.db.FolderEntity
 import com.quire.reader.data.db.KnownFile
@@ -86,6 +88,12 @@ class LibraryScanner(
       db.books().queueMetadataReread()
       settings.setMetadataTidied(true)
       Log.i(TAG, "queued re-read of books with untidied metadata")
+    }
+    // AO3 books stored before tags had kinds: read them once more to type their tags and read their stats.
+    if (!settings.ao3TagsRead.first()) {
+      db.books().queueAo3Reread()
+      settings.setAo3TagsRead(true)
+      Log.i(TAG, "queued re-read of AO3 books for typed tags")
     }
     val folders = db.folders().watched()
     val folderById = folders.associateBy { it.id }
@@ -246,11 +254,15 @@ class LibraryScanner(
     // extraction regression is visible in logcat instead of just an empty card in the library.
     if (coverPath == null) Log.i(TAG, "no cover extracted for ${file.path}")
 
-    val m = meta ?: OpfMetadata(
+    val fallback = meta ?: OpfMetadata(
       title = epub.nameWithoutExtension.replace('_', ' ').trim().ifEmpty { "Untitled" },
       titleSort = null, authors = emptyList(), authorSort = null, series = null, seriesIndex = null, tags = emptyList(),
       rating = 0, description = null, year = null, language = null, addedAtMillis = null,
     )
+    // An AO3 download's preface says what kind each of its tags is; Calibre's metadata.opf keeps only the flat list.
+    val ao3 = if (mobi || !readable) null else Ao3Preface.read(epub)
+    val m = if (fallback.series == null && ao3?.series != null) fallback.copy(series = ao3.series, seriesIndex = ao3.seriesPart) else fallback
+    val tags = scannedTags(m.tags, ao3)
     val identity = BookIdentity.read(epub)
     val author = m.authors.joinToString(" & ").ifEmpty { UNKNOWN_AUTHOR }
     val primary = m.authors.firstOrNull() ?: UNKNOWN_AUTHOR
@@ -280,7 +292,10 @@ class LibraryScanner(
       epubUid = identity.epubUid,
       fingerprint = identity.fingerprint,
     )
-    return Stored(db.books().save(entity, m.tags, folderTag), readable)
+    val ao3Stats = ao3?.takeIf { it.hasStats }?.let {
+      Ao3WorkEntity(0, it.published, it.updated, it.completed, it.words, it.chaptersPosted, it.chaptersTotal)
+    }
+    return Stored(db.books().saveScanned(entity, tags, folderTag, ao3Stats), readable)
   }
 
   /**

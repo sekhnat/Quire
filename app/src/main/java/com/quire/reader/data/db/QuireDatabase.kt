@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
   entities = [
     FolderEntity::class, BookEntity::class, BookTagEntity::class, BookStateEntity::class, BookmarkEntity::class, HighlightEntity::class, ReadingSessionEntity::class,
-    BookEditEntity::class,
+    BookEditEntity::class, Ao3WorkEntity::class,
   ],
   version = QuireDatabase.VERSION,
   // Exported to app/schemas so a schema change shows up in review; commit the new file with every VERSION bump.
@@ -126,16 +126,31 @@ abstract class QuireDatabase : RoomDatabase() {
       }
     }
 
+    /**
+     * Gives tags a kind (AO3's fandom, relationship, warning…; null for the tags already stored) and adds the AO3 work
+     * stats. Both only add, so nothing attached to a book is touched.
+     */
+    val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `book_tag` ADD COLUMN `kind` TEXT")
+        db.execSQL(
+          "CREATE TABLE IF NOT EXISTS `ao3_work` (`bookId` INTEGER NOT NULL, `published` TEXT, `updated` TEXT, `completed` TEXT, `words` INTEGER, " +
+            "`chaptersPosted` INTEGER, `chaptersTotal` INTEGER, PRIMARY KEY(`bookId`), " +
+            "FOREIGN KEY(`bookId`) REFERENCES `book`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+      }
+    }
+
     /** The tables of the index as it was before [MIGRATION_4_5], in the order they can be dropped. */
     val LEGACY_INDEX_TABLES = listOf("text_chunk_fts_terms", "text_chunk_fts", "text_chunk", "index_state")
 
     const val FILE_NAME = "quire.db"
     /** The schema version; a full backup from a newer one cannot be restored. */
-    const val VERSION = 9
+    const val VERSION = 10
 
     /** [name] exists so tests can open throwaway files with the production migrations; the app uses the default. */
     fun create(context: Context, name: String = FILE_NAME): QuireDatabase =
-      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+      Room.databaseBuilder(context.applicationContext, QuireDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
         .build()
   }
 }

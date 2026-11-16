@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.TagKind
 import com.quire.reader.theme.Nq
 import com.quire.reader.ui.BtnKind
 import com.quire.reader.ui.DetailCover
@@ -129,12 +130,22 @@ fun DetailScreen(detail: DetailState, lib: LibraryData) {
 
         if (!book.desc.isNullOrBlank()) QText(book.desc, 14f, color = Nq.neutral300, lh = 1.6f)
 
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-          // The folder tag first, marked with a folder, then the book's own and the user's.
-          (listOfNotNull(book.folderTag) + book.tags.filter { it != book.folderTag }).take(12).forEach { t ->
-            Tag(t, { detail.showScope(Scope(ScopeKind.Tag, t)) }, size = 12f, icon = if (t == book.folderTag) Ic.FolderSimple else null, vPad = 3.dp)
+        if (book.tagKinds.isEmpty()) {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // The folder tag first, marked with a folder, then the book's own and the user's.
+            (listOfNotNull(book.folderTag) + book.tags.filter { it != book.folderTag }).take(12).forEach { t ->
+              Tag(t, { detail.showScope(Scope(ScopeKind.Tag, t)) }, size = 12f, icon = if (t == book.folderTag) Ic.FolderSimple else null, vPad = 3.dp)
+            }
+            Tag("Tag", { detail.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
           }
-          Tag("Tag", { detail.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
+        } else {
+          TypedTags(book) { detail.showScope(Scope(ScopeKind.Tag, it)) }
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            (listOfNotNull(book.folderTag) + book.plainTags.filter { it != book.folderTag }).forEach { t ->
+              Tag(t, { detail.showScope(Scope(ScopeKind.Tag, t)) }, size = 12f, icon = if (t == book.folderTag) Ic.FolderSimple else null, vPad = 3.dp)
+            }
+            Tag("Tag", { detail.openEdit(true) }, outline = true, size = 12f, icon = Ic.Plus, vPad = 3.dp)
+          }
         }
 
         if (siblings.size > 1) {
@@ -270,3 +281,29 @@ private fun EditRow(label: String, value: String, edited: Boolean, onSave: (Stri
 
 /** 2.0 → "2", 2.5 → "2.5". */
 private fun seriesNumber(n: Double): String = if (n == Math.floor(n)) n.toLong().toString() else n.toString()
+
+/** AO3's labels on one line, then fandoms, relationships, characters, additional tags and collections, each under a heading. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TypedTags(book: Book, onTag: (String) -> Unit) {
+  Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    book.ao3?.label?.let { QText(it, 11.5f, color = Nq.neutral500, lh = 1.4f) }
+    val labels = listOf(TagKind.Rating, TagKind.Warning, TagKind.Category).flatMap(book::tagsOf)
+    if (labels.isNotEmpty()) {
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        labels.forEach { t -> Tag(t, { onTag(t) }, size = 12f, accent = book.tagKinds[t] == TagKind.Warning, vPad = 3.dp) }
+      }
+    }
+    listOf(TagKind.Fandom, TagKind.Relationship, TagKind.Character, TagKind.Freeform, TagKind.Collection).forEach { kind ->
+      val tags = book.tagsOf(kind)
+      if (tags.isNotEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Kicker(if (tags.size == 1) kind.label else kind.plural)
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            tags.forEach { t -> Tag(t, { onTag(t) }, size = 12f, vPad = 3.dp) }
+          }
+        }
+      }
+    }
+  }
+}

@@ -67,7 +67,17 @@ data class Book(
   val isNew: Boolean,
   /** Words in the book's text; null until counted, 0 when its text could not be read. */
   val words: Int? = null,
+  /** The kind of each of [tags] the book says the kind of (AO3's fandoms, relationships…); plain tags are not in it. */
+  val tagKinds: Map<String, TagKind> = emptyMap(),
+  /** The work's AO3 status and stats; null for a book that is not from AO3. */
+  val ao3: Ao3Stats? = null,
 ) {
+  /** The tags of [kind], in the book's order. */
+  fun tagsOf(kind: TagKind): List<String> = tags.filter { tagKinds[it] == kind }
+
+  /** The tags without a kind: the folder tag, plain tags from the book and the user's own. */
+  val plainTags: List<String> get() = tags.filter { it !in tagKinds }
+
   val pct: Int get() = (progress * 100).roundToInt().coerceIn(0, 100)
   val authorLast: String get() = if (primaryAuthor == "Unknown author") "Unknown" else primaryAuthor.lastWord()
   val ground: Ground = Ground.forTitle(title)
@@ -132,8 +142,38 @@ fun CatalogRow.toBook(now: Long): Book = Book(
   authorSort = authorSort, series = series, seriesNo = seriesIndex, year = pubYear, pages = pageEstimate, tags = tagList, userTags = userTagList, folderTag = folderTag, language = language,
   rating = calibreRating, status = BookStatus.Unread, progress = 0f, lastOpened = 0L, addedAt = addedAt,
   sizeBytes = sizeBytes, desc = description, coverPath = coverPath, fromCalibre = source == "calibre", readable = readable,
-  isNew = isNew(BookStatus.Unread, addedAt, now), words = wordCount,
+  isNew = isNew(BookStatus.Unread, addedAt, now), words = wordCount, tagKinds = tagKinds,
+  ao3 = ao3Work?.let { Ao3Stats(it.published, it.updated, it.completed, it.words, it.chaptersPosted, it.chaptersTotal) },
 )
+
+/** An AO3 work's status and stats as its download printed them; see [com.quire.reader.data.scan.Ao3Preface]. */
+data class Ao3Stats(
+  val published: String? = null,
+  val updated: String? = null,
+  val completed: String? = null,
+  val words: Int? = null,
+  val chaptersPosted: Int? = null,
+  val chaptersTotal: Int? = null,
+) {
+  /** All chapters are posted: the author gave a total and it is reached. */
+  val complete: Boolean get() = chaptersTotal != null && chaptersPosted != null && chaptersPosted >= chaptersTotal
+
+  /**
+   * "Chapters 6/6 · Complete · Published Jul 11, 2020 · Completed Aug 17, 2020 · 59,904 words", leaving out what the
+   * download did not say; null when it said nothing.
+   */
+  val label: String? get() = listOfNotNull(
+    chaptersPosted?.let { "Chapters $it/${chaptersTotal ?: "?"}" },
+    if (chaptersPosted == null) null else if (complete) "Complete" else "In progress",
+    published?.let { "Published ${dateLabel(it)}" },
+    updated?.let { "Updated ${dateLabel(it)}" },
+    completed?.let { "Completed ${dateLabel(it)}" },
+    words?.takeIf { it > 0 }?.let { "${NumberFormat.getIntegerInstance(Locale.US).format(it)} ${if (it == 1) "word" else "words"}" },
+  ).joinToString(" · ").ifEmpty { null }
+
+  private fun dateLabel(iso: String): String =
+    runCatching { DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US).format(java.time.LocalDate.parse(iso)) }.getOrDefault(iso)
+}
 
 /**
  * This book with its reading state [state] (none: never opened). Only for a book straight from [CatalogRow.toBook]:

@@ -2,6 +2,7 @@ package com.quire.reader.ui
 
 import com.quire.reader.data.Book
 import com.quire.reader.data.BookStatus
+import com.quire.reader.data.TagKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -129,6 +130,25 @@ class LibraryLogicTest {
     assertEquals(setOf(3L, 4L), visible(LibraryUiState(query = "holmes"), books).map { it.id }.toSet())
     assertEquals(setOf(5L), visible(LibraryUiState(query = "GOTHIC"), books).map { it.id }.toSet())
     assertEquals(setOf(1L, 2L), visible(LibraryUiState(query = "austen"), books).map { it.id }.toSet())
+  }
+
+  @Test fun `typed terms narrow the search by tag kind`() {
+    val ao3 = books + listOf(
+      testBook(6, "Lanterns", "quill", tags = listOf("Starlight Harbor", "Mira/June", "Slow Burn"),
+        tagKinds = mapOf("Starlight Harbor" to TagKind.Fandom, "Mira/June" to TagKind.Relationship, "Slow Burn" to TagKind.Freeform)),
+      testBook(7, "Static", "quill", tags = listOf("Starlight Harbor", "Found Family"),
+        tagKinds = mapOf("Starlight Harbor" to TagKind.Fandom, "Found Family" to TagKind.Freeform)),
+    )
+    assertEquals(setOf(6L, 7L), visible(LibraryUiState(query = "fandom:starlight"), ao3).map { it.id }.toSet())
+    assertEquals(setOf(6L), visible(LibraryUiState(query = "fandom:starlight ship:june"), ao3).map { it.id }.toSet())
+    assertEquals(setOf(7L), visible(LibraryUiState(query = "fandom:starlight static"), ao3).map { it.id }.toSet())
+    // A plain tag is no fandom.
+    assertEquals(emptySet<Long>(), visible(LibraryUiState(query = "fandom:mystery"), ao3).map { it.id }.toSet())
+  }
+
+  @Test fun `tag kinds are gathered across the library`() {
+    val lib = LibraryData(listOf(testBook(1, "A", tags = listOf("Gen", "Mystery"), tagKinds = mapOf("Gen" to TagKind.Category)), testBook(2, "B", tags = listOf("Gen"))), emptyList())
+    assertEquals(mapOf("Gen" to TagKind.Category), lib.tagKinds)
   }
 
   @Test fun `sorting by words puts the longest first and books not counted yet last`() {

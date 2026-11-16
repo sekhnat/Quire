@@ -6,6 +6,28 @@ Every release of Quire, newest first. Each version installs over any earlier one
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Archive of Our Own tags keep their type.
+
+### Added
+
+- AO3 downloads keep each tag's type, read from the tag list on the book's first page: rating, archive warnings,
+  category, fandoms, relationships, characters, additional tags and collections. The book page shows them under those
+  headings, with the work's chapters (6/6, or 3/? while in progress), whether it is complete, its dates and AO3's word
+  count. A series named only in the preface ("Part 2 of …") fills the book's series and number.
+- The Tags tab groups tags by type, fandoms first.
+- Library search can narrow by type: `fandom:`, `ship:` (or `relationship:`), `character:`, `tag:` (additional tags),
+  `rating:`, `warning:`, `category:` and `collection:`, combined with each other and with ordinary words. Quote a value
+  with spaces: `fandom:"Supergirl (TV 2015)"`.
+- AO3 books whose first page has no tag list (Calibre-edited copies, MOBI and AZW3) still get their rating, archive
+  warnings and category typed.
+
+### Upgrading
+
+- Database migration 9 → 10 adds a tag type and a table for AO3 stats; nothing already stored changes. The first scan
+  after updating reads the books that look like AO3 works (one of their tags is an archive warning) once more.
+
 ## [1.16.1] - 2026-11-15
 
 No more white flash when a book opens in scroll mode.

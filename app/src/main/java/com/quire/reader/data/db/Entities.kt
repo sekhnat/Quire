@@ -87,6 +87,11 @@ data class BookTagEntity(
    * are Quire's own and survive.
    */
   val origin: String,
+  /**
+   * The [com.quire.reader.data.TagKind.key] of a tag the book says the kind of (an AO3 fandom, relationship, warning…);
+   * null for a plain tag.
+   */
+  val kind: String? = null,
 ) {
   companion object {
     const val ORIGIN_CALIBRE = "calibre"
@@ -94,6 +99,27 @@ data class BookTagEntity(
     const val ORIGIN_USER = "user"
   }
 }
+
+/**
+ * An Archive of Our Own work's status and stats, read from its EPUB's preface (see
+ * [com.quire.reader.data.scan.Ao3Preface]) and replaced on every rescan. Only AO3 books have a row.
+ */
+@Entity(
+  tableName = "ao3_work",
+  foreignKeys = [ForeignKey(BookEntity::class, parentColumns = ["id"], childColumns = ["bookId"], onDelete = ForeignKey.CASCADE)],
+)
+data class Ao3WorkEntity(
+  @PrimaryKey val bookId: Long,
+  /** ISO dates (`2020-07-11`) as AO3 prints them. */
+  val published: String? = null,
+  val updated: String? = null,
+  val completed: String? = null,
+  /** AO3's own word count. */
+  val words: Int? = null,
+  val chaptersPosted: Int? = null,
+  /** Null when the author has not said how many chapters there will be. */
+  val chaptersTotal: Int? = null,
+)
 
 /** Everything Quire itself knows about a book: reading position, status and the user's own edits. */
 @Entity(

@@ -9,7 +9,9 @@ import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.quire.reader.data.TagKind
 import com.quire.reader.theme.QuireFonts
+import com.quire.reader.ui.parseTagQuery
 import kotlin.math.ceil
 
 /** One row of the tag cloud: the tags that fit side by side at the current width. */
@@ -66,9 +68,28 @@ internal fun tagChipWidths(tags: List<Pair<String, Int>>, m: TagChipMetrics): In
  * The [tags] whose name contains [query] (trimmed, ignoring case), in their order; all of them for a blank query. The
  * same rule as the hidden-tags sheet's search.
  */
-internal fun matchingTags(tags: List<Pair<String, Int>>, query: String): List<Pair<String, Int>> {
-  val q = query.trim().lowercase()
-  return if (q.isEmpty()) tags else tags.filter { it.first.lowercase().contains(q) }
+internal fun matchingTags(tags: List<Pair<String, Int>>, query: String, kinds: Map<String, TagKind> = emptyMap()): List<Pair<String, Int>> {
+  val typed = parseTagQuery(query)
+  val q = typed.text.lowercase()
+  if (q.isEmpty() && typed.terms.isEmpty()) return tags
+  return tags.filter { (tag, _) ->
+    (q.isEmpty() || tag.lowercase().contains(q)) && (typed.terms.isEmpty() || typed.terms.any { it.matches(tag, kinds[tag]) })
+  }
+}
+
+/** A heading of the Tags tab and the tags under it; [kind] is null for the plain tags. */
+internal data class TagSection(val kind: TagKind?, val tags: List<Pair<String, Int>>) {
+  val title: String get() = kind?.plural ?: "Other tags"
+}
+
+/**
+ * [tags] grouped by kind in [TagKind.displayOrder], plain tags last, each keeping the order it had; empty groups are
+ * left out. A library without typed tags gets one section of plain tags.
+ */
+internal fun tagSections(tags: List<Pair<String, Int>>, kinds: Map<String, TagKind>): List<TagSection> {
+  if (kinds.isEmpty()) return if (tags.isEmpty()) emptyList() else listOf(TagSection(null, tags))
+  val grouped = tags.groupBy { kinds[it.first] }
+  return (TagKind.displayOrder + listOf(null)).mapNotNull { k -> grouped[k]?.let { TagSection(k, it) } }
 }
 
 /** Lays [tags] out as chip lines [available] pixels wide. */

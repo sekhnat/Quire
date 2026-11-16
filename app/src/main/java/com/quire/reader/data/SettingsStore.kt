@@ -39,6 +39,8 @@ class SettingsStore(context: Context) {
   val coversBackfilled: Flow<Boolean> = flow(COVERS_BACKFILLED, false)
   /** Whether books stored before metadata was tidied have been queued for one re-read (see `BookDao.queueMetadataReread`). */
   val metadataTidied: Flow<Boolean> = flow(METADATA_TIDIED, false)
+  /** True once books scanned before tags had kinds were queued to have their AO3 tags typed; see [com.quire.reader.data.db.BookDao.queueAo3Reread]. */
+  val ao3TagsRead: Flow<Boolean> = flow(AO3_TAGS_READ, false)
   suspend fun setOnboardingDone(v: Boolean) = store.edit { it[ONBOARDING_DONE] = v }
   suspend fun setUseCalibre(v: Boolean) = store.edit { it[USE_CALIBRE] = v }
   suspend fun setWatchNewBooks(v: Boolean) = store.edit { it[WATCH_NEW] = v }
@@ -46,6 +48,7 @@ class SettingsStore(context: Context) {
   suspend fun setIndexChargingOnly(v: Boolean) = store.edit { it[INDEX_CHARGING_ONLY] = v }
   suspend fun setCoversBackfilled(v: Boolean) = store.edit { it[COVERS_BACKFILLED] = v }
   suspend fun setMetadataTidied(v: Boolean) = store.edit { it[METADATA_TIDIED] = v }
+  suspend fun setAo3TagsRead(v: Boolean) = store.edit { it[AO3_TAGS_READ] = v }
 
   /** Whether Quire has asked for the notification permission indexing shows its progress with (Android 13+); asked once. */
   val notificationsAsked: Flow<Boolean> = flow(NOTIFICATIONS_ASKED, false)
@@ -212,6 +215,7 @@ class SettingsStore(context: Context) {
     private val WATCH_NEW = booleanPreferencesKey("watch_new_books")
     private val COVERS_BACKFILLED = booleanPreferencesKey("covers_backfilled")
     private val METADATA_TIDIED = booleanPreferencesKey("metadata_tidied")
+    private val AO3_TAGS_READ = booleanPreferencesKey("ao3_tags_read")
     private val INDEXING_ENABLED = booleanPreferencesKey("indexing_enabled")
     private val INDEX_CHARGING_ONLY = booleanPreferencesKey("index_charging_only")
     private val READER_DEFAULTS = stringPreferencesKey("reader_defaults")

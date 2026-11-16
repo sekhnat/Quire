@@ -1,5 +1,6 @@
 package com.quire.reader.ui.library
 
+import com.quire.reader.data.TagKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -41,5 +42,27 @@ class TagLinesTest {
 
   @Test fun `a search nothing contains keeps no tags`() {
     assertEquals(emptyList<Pair<String, Int>>(), matchingTags(tags, "history"))
+  }
+
+  private val kinds = mapOf("Starlight Harbor" to TagKind.Fandom, "Night Ferry" to TagKind.Fandom, "Mira/June" to TagKind.Relationship, "Mature" to TagKind.Rating)
+  private val typed = listOf("Mature" to 9, "Starlight Harbor" to 7, "Fantasy" to 5, "Mira/June" to 4, "Night Ferry" to 2)
+
+  @Test fun `a typed search matches only tags of that kind`() {
+    assertEquals(listOf("Starlight Harbor" to 7, "Night Ferry" to 2), matchingTags(typed, "fandom:", kinds))
+    assertEquals(listOf("Night Ferry" to 2), matchingTags(typed, "fandom:ferry", kinds))
+    assertEquals(emptyList<Pair<String, Int>>(), matchingTags(typed, "ship:harbor", kinds))
+  }
+
+  @Test fun `sections follow the kinds' display order, plain tags last`() {
+    val sections = tagSections(typed, kinds)
+    assertEquals(listOf(TagKind.Fandom, TagKind.Relationship, TagKind.Rating, null), sections.map { it.kind })
+    assertEquals(listOf("Starlight Harbor" to 7, "Night Ferry" to 2), sections.first().tags)
+    assertEquals("Other tags", sections.last().title)
+    assertEquals("Fandoms", sections.first().title)
+  }
+
+  @Test fun `a library without typed tags has one plain section`() {
+    assertEquals(listOf(TagSection(null, tags)), tagSections(tags, emptyMap()))
+    assertEquals(emptyList<TagSection>(), tagSections(emptyList(), kinds))
   }
 }
